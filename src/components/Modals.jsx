@@ -98,6 +98,12 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
           </div>
           <span className="combobox__selected-name">{selected.name}</span>
           <span className="combobox__selected-change">change ▾</span>
+          <button
+            type="button"
+            className="combobox__selected-clear"
+            title="Remove"
+            onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false) }}
+          >×</button>
         </div>
       ) : (
         <div className="combobox__input-wrap">

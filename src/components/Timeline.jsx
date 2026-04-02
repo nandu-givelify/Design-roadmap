@@ -9,7 +9,7 @@ import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 const PERSON_COL_W = 200
-const LANE_H       = 34
+const LANE_H       = 50
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
