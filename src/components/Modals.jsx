@@ -244,9 +244,10 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, on
 }
 
 // ── Task Modal (Add) ──────────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, onCreatePerson, onCreateTeam }) {
+export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreateTeam }) {
   const today     = new Date()
-  const startDate = isWeekend(today) ? nextWorkday(today) : today
+  const baseStart = defaultStartDate ? new Date(defaultStartDate) : today
+  const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
   const endDate   = addMonths(startDate, 1)
 
   const [form, setForm] = useState({

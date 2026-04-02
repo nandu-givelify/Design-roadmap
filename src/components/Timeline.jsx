@@ -3,7 +3,7 @@ import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
   MONTHS_SHORT, getQuarterForMonth,
-  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS, formatDateShort,
+  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS, formatDateWithDay,
 } from '../utils/dateUtils'
 import TaskBar from './TaskBar'
 
@@ -189,6 +189,22 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('mouseup', onUp)
   }, [dayWidth, readOnly, onUpdateTask]) // eslint-disable-line
 
+  // ── Double-click on empty grid → add task at that date for that person ──────
+  const handleGridDoubleClick = useCallback((personId, e) => {
+    if (readOnly || !onAddTaskForPerson) return
+    // Don't trigger if click landed on an existing task bar
+    if (e.target.closest('.task-bar')) return
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return
+    const containerLeft = scrollEl.getBoundingClientRect().left
+    const clickXInGrid  = (e.clientX - containerLeft + scrollEl.scrollLeft) - PERSON_COL_W
+    const dayIdx = Math.floor(clickXInGrid / dayWidth)
+    if (dayIdx < 0 || dayIdx >= allDays.length) return
+    const clicked = allDays[dayIdx]
+    const snapped = isWeekend(clicked) ? nextWorkday(clicked) : clicked
+    onAddTaskForPerson(personId === '__unassigned__' ? null : personId, toDateString(snapped))
+  }, [readOnly, dayWidth, allDays, onAddTaskForPerson]) // eslint-disable-line
+
   // ── Filter logic (PM = task-based filter) ────────────────────────────────
   // PM filter: show persons who have tasks with matching PM; filter tasks in row
   // Person filter: show only selected persons; show all their tasks
@@ -287,7 +303,11 @@ const Timeline = forwardRef(function Timeline({
         </div>
 
         {/* Grid area */}
-        <div className="timeline__grid-area" style={{ minHeight: rowH }}>
+        <div
+          className="timeline__grid-area"
+          style={{ minHeight: rowH }}
+          onDoubleClick={(e) => handleGridDoubleClick(personId, e)}
+        >
           {lanedTasks.map((task) => {
             const isGhost = activeDrag?.task?.id === task.id
             return (
@@ -333,7 +353,6 @@ const Timeline = forwardRef(function Timeline({
                   left: isOffLeft
                     ? Math.max(0, visLeft + 4)
                     : Math.min(totalW - 164, visRight - 164),
-                  background: taskColor,
                 }}
               >
                 {isOffLeft ? '←' : '→'} {task.title}
@@ -388,15 +407,15 @@ const Timeline = forwardRef(function Timeline({
     const dragStart = snapWeekday(addDays(new Date(task.startDate), daysDelta), daysDelta >= 0)
     const dragEnd   = snapWeekday(addDays(new Date(task.endDate),   daysDelta), daysDelta >= 0)
 
+    const overlayW = barRect.width
     return (
       <div
         className="task-drag-overlay"
         style={{
           left:   barRect.left + dx,
           top:    barRect.top  + dy,
-          width:  barRect.width,
+          width:  overlayW,
           height: barRect.height,
-          background: taskColor,
         }}
       >
         {(assignee || pmTeam) && (
@@ -414,9 +433,17 @@ const Timeline = forwardRef(function Timeline({
           </div>
         )}
         <span className="task-drag-overlay__title">{task.title}</span>
-        {/* Date tooltips */}
-        <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateShort(dragStart)}</div>
-        <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateShort(dragEnd)}</div>
+        {/* Date tooltips — combined when bar is too narrow for both */}
+        {overlayW < 260 ? (
+          <div className="task-bar__tooltip task-bar__tooltip--center">
+            {formatDateWithDay(dragStart)} → {formatDateWithDay(dragEnd)}
+          </div>
+        ) : (
+          <>
+            <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateWithDay(dragStart)}</div>
+            <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateWithDay(dragEnd)}</div>
+          </>
+        )}
       </div>
     )
   }
@@ -463,12 +490,20 @@ const Timeline = forwardRef(function Timeline({
                 />
               ) : null)}
 
-              {/* Month boundary lines */}
+              {/* Month boundary lines — dashed for regular months, solid for quarter starts */}
               {monthGroups.map((mg, i) => {
                 const x = allDays.findIndex(
                   (d) => d.getMonth() === mg.month && d.getFullYear() === mg.year
                 ) * dayWidth
-                return <div key={`ml-${i}`} className="timeline__month-line" style={{ left: PERSON_COL_W + x }} />
+                // Quarter boundaries: Jan(0), Apr(3), Jul(6), Oct(9)
+                const isQBoundary = mg.month === 0 || mg.month === 3 || mg.month === 6 || mg.month === 9
+                return (
+                  <div
+                    key={`ml-${i}`}
+                    className={`timeline__month-line${isQBoundary ? ' timeline__month-line--quarter' : ''}`}
+                    style={{ left: PERSON_COL_W + x - 1 }}
+                  />
+                )
               })}
 
               {/* Today line */}

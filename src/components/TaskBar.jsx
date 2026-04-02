@@ -1,8 +1,7 @@
-import { useRef, useState } from 'react'
-import { startOfDay, addDays, diffDays, formatDateShort, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor } from '../utils/dateUtils'
+import { useRef, useState, useLayoutEffect } from 'react'
+import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor } from '../utils/dateUtils'
 
 const BAR_H = 34
-const NARROW_W = 180 // below this, move avatars + text outside the bar
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
@@ -15,8 +14,12 @@ export default function TaskBar({
   const [resizing, setResizing]   = useState(false)
   const [visual,   setVisual]     = useState(null)
   const [showMenu, setShowMenu]   = useState(false)
-  const barRef  = useRef(null)
-  const dragRef = useRef(null)
+  // isNarrow = title is clipped >50% → move avatars + title outside
+  const [isNarrow, setIsNarrow]   = useState(false)
+
+  const barRef        = useRef(null)
+  const dragRef       = useRef(null)
+  const hiddenTitleRef = useRef(null)  // used only to measure natural text width
 
   const snapWorkday = (date, forward = true) =>
     !isWeekend(date) ? date : forward ? nextWorkday(date) : prevWorkday(date)
@@ -24,7 +27,28 @@ export default function TaskBar({
   const dateToX = (date) =>
     diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth
 
-  // ── Resize drag (left/right handles) — stays internal ─────────────────────
+  // ── Clipping detection: move outside when >50% of title is hidden ──────────
+  const assignee  = people.find((p) => p.id === task.assigneeId)
+  const pmTeam    = teams.find((t)  => t.id === task.teamId)
+  const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
+
+  const dispStart = visual ? visual.startDate : new Date(task.startDate)
+  const dispEnd   = visual ? visual.endDate   : new Date(task.endDate)
+  const x = dateToX(dispStart)
+  const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
+  const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
+
+  useLayoutEffect(() => {
+    if (!hiddenTitleRef.current) return
+    const naturalW = hiddenTitleRef.current.offsetWidth
+    // Available width inside bar: total width minus 8px padding each side minus avatar stack
+    const avatarW = (assignee ? 22 : 0) + (pmTeam ? 14 : 0) + ((assignee || pmTeam) ? 9 : 0) // 22px + 8px overlap + 5px margin
+    const availW = w - 16 - avatarW
+    // Move outside when less than 50% of text is visible
+    setIsNarrow(availW < naturalW / 2)
+  }, [task.title, w, assignee, pmTeam]) // eslint-disable-line
+
+  // ── Resize drag (left/right handles) ──────────────────────────────────────
   const startResize = (e, type) => {
     if (readOnly) return
     e.preventDefault(); e.stopPropagation()
@@ -79,18 +103,6 @@ export default function TaskBar({
     }
   }
 
-  const dispStart = visual ? visual.startDate : new Date(task.startDate)
-  const dispEnd   = visual ? visual.endDate   : new Date(task.endDate)
-  const x = dateToX(dispStart)
-  const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
-  const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
-
-  const taskColor  = task.color || '#6366f1'
-  const assignee   = people.find((p) => p.id === task.assigneeId)
-  const pmTeam     = teams.find((t)  => t.id === task.teamId)
-  const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
-  const isNarrow   = w < NARROW_W
-
   return (
     <div
       ref={barRef}
@@ -101,6 +113,9 @@ export default function TaskBar({
       ].filter(Boolean).join(' ')}
       style={{ left: x, top: y, width: w, height: BAR_H }}
     >
+      {/* Hidden span for measuring natural text width */}
+      <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
+
       {/* Left resize handle */}
       {!readOnly && !isGhost && (
         <div className="task-bar__handle task-bar__handle--left" onMouseDown={(e) => startResize(e, 'left')}>
@@ -108,14 +123,12 @@ export default function TaskBar({
         </div>
       )}
 
-      {/* Main bar */}
+      {/* Main bar — white background, avatars+title inside only when wide enough */}
       <div
         className="task-bar__inner"
-        style={{ background: taskColor }}
         onMouseDown={handleMoveDown}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
-        {/* Avatar stack + title inside bar (only when wide enough) */}
         {!isNarrow && (assignee || pmTeam) && (
           <div className="task-bar__avatars">
             {assignee && (
@@ -135,7 +148,7 @@ export default function TaskBar({
         )}
       </div>
 
-      {/* Avatars + title outside bar (when too narrow) */}
+      {/* Avatars + title outside bar when >50% clipped */}
       {isNarrow && (
         <div className="task-bar__outside-content" style={{ left: w + 5 }}>
           {(assignee || pmTeam) && (
@@ -152,7 +165,7 @@ export default function TaskBar({
               )}
             </div>
           )}
-          <span className="task-bar__outside-title" style={{ color: taskColor }}>{task.title}</span>
+          <span className="task-bar__outside-title">{task.title}</span>
         </div>
       )}
 
@@ -163,12 +176,18 @@ export default function TaskBar({
         </div>
       )}
 
-      {/* Date tooltips during resize */}
+      {/* Date tooltips during resize — combined when bar is narrow to avoid overlap */}
       {resizing && (
-        <>
-          <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateShort(dispStart)}</div>
-          <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateShort(dispEnd)}</div>
-        </>
+        w < 260 ? (
+          <div className="task-bar__tooltip task-bar__tooltip--center">
+            {formatDateWithDay(dispStart)} → {formatDateWithDay(dispEnd)}
+          </div>
+        ) : (
+          <>
+            <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateWithDay(dispStart)}</div>
+            <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateWithDay(dispEnd)}</div>
+          </>
+        )
       )}
 
       {/* Context menu */}
@@ -178,7 +197,7 @@ export default function TaskBar({
             <div className="task-bar__menu-info">
               <div className="task-bar__menu-task-title">{task.title}</div>
               <div className="task-bar__menu-dates">
-                {formatDateShort(new Date(task.startDate))} → {formatDateShort(new Date(task.endDate))}
+                {formatDateWithDay(new Date(task.startDate))} → {formatDateWithDay(new Date(task.endDate))}
               </div>
             </div>
             {!readOnly && onEdit && (

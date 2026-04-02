@@ -39,6 +39,7 @@ export default function App() {
   const [filterTeamIds,     setFilterTeamIds]     = useState([])
   const [modal,             setModal]             = useState(null) // 'task' | 'person' | 'team' | 'share'
   const [defaultAssigneeId, setDefaultAssigneeId] = useState(null)
+  const [defaultStartDate,  setDefaultStartDate]  = useState(null)
   const [editingTask,       setEditingTask]       = useState(null) // task object or null
   const [settingsOpen,      setSettingsOpen]      = useState(false)
 
@@ -119,7 +120,7 @@ export default function App() {
         filterPersonIds={filterPersonIds} filterTeamIds={filterTeamIds}
         onUpdateTask={(id, data) => updateTask(id, data)}
         onDeleteTask={(id) => deleteTask(id)}
-        onAddTaskForPerson={(assigneeId) => { setDefaultAssigneeId(assigneeId); setModal('task') }}
+        onAddTaskForPerson={(assigneeId, startDate) => { setDefaultAssigneeId(assigneeId); setDefaultStartDate(startDate || null); setModal('task') }}
         onEditTask={(task) => setEditingTask(task)}
         readOnly={readOnly}
       />
@@ -127,10 +128,11 @@ export default function App() {
       {/* Add Task modal */}
       {modal === 'task' && (
         <TaskModal
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); setDefaultStartDate(null) }}
           onSave={(data) => addTask(data)}
           people={people} teams={teams}
           defaultAssigneeId={defaultAssigneeId}
+          defaultStartDate={defaultStartDate}
           onCreatePerson={handleCreatePerson}
           onCreateTeam={handleCreateTeam}
         />

@@ -22,6 +22,15 @@ export const diffDays = (a, b) => Math.round((startOfDay(b) - startOfDay(a)) / D
 
 export const formatDateShort = (date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
+// e.g. "Apr 2, Thu"
+export const formatDateWithDay = (date) => {
+  const d = new Date(date)
+  const month   = d.toLocaleDateString('en-US', { month: 'short' })
+  const day     = d.getDate()
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  return `${month} ${day}, ${weekday}`
+}
+
 export const toDateString = (date) => {
   const d = new Date(date)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
