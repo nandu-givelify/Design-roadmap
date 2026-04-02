@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { toDateString, nextWorkday, isWeekend, addMonths, TASK_COLORS, getAvatarColor, AVATAR_COLORS } from '../utils/dateUtils'
+import { toDateString, nextWorkday, isWeekend, addMonths, TASK_COLORS, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
 import { addPerson as fbAddPerson, addTeam as fbAddTeam } from '../firebase'
 
 // ── Shared shell ─────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
 }
 
 // ── Task fields (shared between Add and Edit modals) ──────────────────────────
-function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, onStartDateChange, onEndDateChange }) {
+function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, onStartDateChange, onEndDateChange, onTitleEnter }) {
   return (
     <>
       <Field label="Task title *">
@@ -185,6 +185,7 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, on
           className="field__input"
           value={form.title}
           onChange={(e) => set('title', e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onTitleEnter?.() } }}
           placeholder="e.g. Homepage redesign"
           autoFocus
         />
@@ -232,19 +233,6 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, on
         </Field>
       </div>
 
-      <Field label="Color">
-        <div className="color-picker">
-          {TASK_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`color-swatch${form.color === c ? ' color-swatch--selected' : ''}`}
-              style={{ background: c }}
-              onClick={() => set('color', c)}
-            />
-          ))}
-        </div>
-      </Field>
     </>
   )
 }
@@ -252,7 +240,7 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, on
 // ── Task Modal (Add) ──────────────────────────────────────────────────────────
 export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreateTeam }) {
   const today     = new Date()
-  const baseStart = defaultStartDate ? new Date(defaultStartDate) : today
+  const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
   const endDate   = addMonths(startDate, 1)
 
@@ -271,7 +259,7 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, d
   const handleStartDateChange = (v) => {
     set('startDate', v)
     if (!endDateTouched) {
-      const newEnd = addMonths(new Date(v), 1)
+      const newEnd = addMonths(parseLocalDate(v), 1)
       set('endDate', toDateString(newEnd))
     }
   }
@@ -296,6 +284,7 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, d
         onCreateTeam={onCreateTeam}
         onStartDateChange={handleStartDateChange}
         onEndDateChange={handleEndDateChange}
+        onTitleEnter={() => { if (form.title.trim()) handleSave() }}
       />
       <div className="modal-footer">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
@@ -335,6 +324,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, teams, 
         people={people} teams={teams}
         onCreatePerson={onCreatePerson}
         onCreateTeam={onCreateTeam}
+        onTitleEnter={() => { if (form.title.trim()) handleSave() }}
       />
       <div className="modal-footer">
         <button className="btn-danger" onClick={handleDelete}>Delete</button>

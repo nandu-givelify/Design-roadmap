@@ -3,7 +3,7 @@ import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
   MONTHS_SHORT, getQuarterForMonth,
-  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS, formatDateWithDay,
+  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS, formatDateWithDay, parseLocalDate,
 } from '../utils/dateUtils'
 import TaskBar from './TaskBar'
 
@@ -81,7 +81,7 @@ const Timeline = forwardRef(function Timeline({
 
   // ── Scroll helpers ────────────────────────────────────────────────────────
   const dateToGridX = useCallback((date) =>
-    diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth,
+    diffDays(startOfDay(totalStart), startOfDay(parseLocalDate(date))) * dayWidth,
   [dayWidth, totalStart])
 
   const scrollToDate = useCallback((date) => {
@@ -169,8 +169,8 @@ const Timeline = forwardRef(function Timeline({
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
           const updates = {}
-          const ns = snapWeekday(addDays(new Date(d.task.startDate), daysDelta), daysDelta >= 0)
-          const ne = snapWeekday(addDays(new Date(d.task.endDate),   daysDelta), daysDelta >= 0)
+          const ns = snapWeekday(addDays(parseLocalDate(d.task.startDate), daysDelta), daysDelta >= 0)
+          const ne = snapWeekday(addDays(parseLocalDate(d.task.endDate),   daysDelta), daysDelta >= 0)
           if (toDateString(ns) !== d.task.startDate) updates.startDate = toDateString(ns)
           if (toDateString(ne) !== d.task.endDate)   updates.endDate   = toDateString(ne)
           if (d.targetAssigneeId !== d.origAssigneeId) {
@@ -245,10 +245,10 @@ const Timeline = forwardRef(function Timeline({
     // Sort by start date; each task = its own row
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
-    const pastTasks    = sorted.filter((t) => new Date(t.endDate)   < totalStart)
-    const futureTasks  = sorted.filter((t) => new Date(t.startDate) > totalEnd)
+    const pastTasks    = sorted.filter((t) => parseLocalDate(t.endDate)   < totalStart)
+    const futureTasks  = sorted.filter((t) => parseLocalDate(t.startDate) > totalEnd)
     const inRangeTasks = sorted.filter(
-      (t) => !(new Date(t.endDate) < totalStart) && !(new Date(t.startDate) > totalEnd)
+      (t) => !(parseLocalDate(t.endDate) < totalStart) && !(parseLocalDate(t.startDate) > totalEnd)
     )
     const lanedTasks = inRangeTasks.map((t, i) => ({ ...t, _lane: i }))
 
@@ -336,7 +336,7 @@ const Timeline = forwardRef(function Timeline({
           {lanedTasks.map((task) => {
             const x = dateToGridX(task.startDate)
             const w = Math.max(dayWidth,
-              (diffDays(startOfDay(new Date(task.startDate)), startOfDay(new Date(task.endDate))) + 1) * dayWidth
+              (diffDays(startOfDay(parseLocalDate(task.startDate)), startOfDay(parseLocalDate(task.endDate))) + 1) * dayWidth
             )
             const laneY = ROW_PAD_TOP + task._lane * (LANE_H + LANE_GAP)
             const taskColor = task.color || '#6366f1'
@@ -404,8 +404,8 @@ const Timeline = forwardRef(function Timeline({
 
     // Compute drag date tooltips
     const daysDelta = dayWidth > 0 ? Math.round(dx / dayWidth) : 0
-    const dragStart = snapWeekday(addDays(new Date(task.startDate), daysDelta), daysDelta >= 0)
-    const dragEnd   = snapWeekday(addDays(new Date(task.endDate),   daysDelta), daysDelta >= 0)
+    const dragStart = snapWeekday(addDays(parseLocalDate(task.startDate), daysDelta), daysDelta >= 0)
+    const dragEnd   = snapWeekday(addDays(parseLocalDate(task.endDate),   daysDelta), daysDelta >= 0)
 
     const overlayW = barRect.width
     return (

@@ -1,5 +1,5 @@
 import { useRef, useState, useLayoutEffect } from 'react'
-import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor } from '../utils/dateUtils'
+import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 const BAR_H = 50
 
@@ -32,8 +32,8 @@ export default function TaskBar({
   const pmTeam    = teams.find((t)  => t.id === task.teamId)
   const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
 
-  const dispStart = visual ? visual.startDate : new Date(task.startDate)
-  const dispEnd   = visual ? visual.endDate   : new Date(task.endDate)
+  const dispStart = visual ? visual.startDate : parseLocalDate(task.startDate)
+  const dispEnd   = visual ? visual.endDate   : parseLocalDate(task.endDate)
   const x = dateToX(dispStart)
   const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
   const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
@@ -53,8 +53,8 @@ export default function TaskBar({
   const startResize = (e, type) => {
     if (readOnly) return
     e.preventDefault(); e.stopPropagation()
-    const origStart = new Date(task.startDate)
-    const origEnd   = new Date(task.endDate)
+    const origStart = parseLocalDate(task.startDate)
+    const origEnd   = parseLocalDate(task.endDate)
     const startX    = e.clientX
     dragRef.current = { type, startX, origStart, origEnd, curStart: origStart, curEnd: origEnd }
     setResizing(true)
@@ -198,7 +198,7 @@ export default function TaskBar({
             <div className="task-bar__menu-info">
               <div className="task-bar__menu-task-title">{task.title}</div>
               <div className="task-bar__menu-dates">
-                {formatDateWithDay(new Date(task.startDate))} → {formatDateWithDay(new Date(task.endDate))}
+                {formatDateWithDay(parseLocalDate(task.startDate))} → {formatDateWithDay(parseLocalDate(task.endDate))}
               </div>
             </div>
             {!readOnly && onEdit && (

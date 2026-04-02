@@ -20,6 +20,16 @@ export const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getD
 export const addMonths = (date, n) => { const d = new Date(date); d.setMonth(d.getMonth() + n); return d }
 export const diffDays = (a, b) => Math.round((startOfDay(b) - startOfDay(a)) / DAY_MS)
 
+// Parse a "YYYY-MM-DD" string as LOCAL midnight (not UTC).
+// JavaScript's new Date("YYYY-MM-DD") parses as UTC, which shifts the date
+// by the timezone offset and produces wrong results in non-UTC timezones.
+export const parseLocalDate = (date) => {
+  if (!date) return new Date()
+  if (date instanceof Date) return date
+  const [y, m, d] = String(date).split('-').map(Number)
+  return new Date(y, m - 1, d) // month is 0-indexed; this is LOCAL midnight
+}
+
 export const formatDateShort = (date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 // e.g. "Apr 2, Thu"
