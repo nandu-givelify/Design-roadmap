@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Header from './components/Header'
 import Timeline from './components/Timeline'
-import { TaskModal, PersonModal, TeamModal, ShareModal } from './components/Modals'
+import Settings from './components/Settings'
+import { TaskModal, EditTaskModal, PersonModal, TeamModal, ShareModal } from './components/Modals'
 import {
   subscribePeople, subscribeTeams, subscribeTasks,
-  addPerson, addTeam, addTask, updateTask, deleteTask
+  addPerson, addTeam, addTask, updateTask, deleteTask,
 } from './firebase'
 
 const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
@@ -34,21 +35,33 @@ export default function App() {
     return () => { unsubs.forEach((u) => u()); clearTimeout(errTimeout) }
   }, [])
 
-  const [filterPersonIds, setFilterPersonIds] = useState([])
-  const [filterTeamIds,   setFilterTeamIds]   = useState([])
-  const [modal,           setModal]           = useState(null)
+  const [filterPersonIds,   setFilterPersonIds]   = useState([])
+  const [filterTeamIds,     setFilterTeamIds]     = useState([])
+  const [modal,             setModal]             = useState(null) // 'task' | 'person' | 'team' | 'share'
   const [defaultAssigneeId, setDefaultAssigneeId] = useState(null)
+  const [editingTask,       setEditingTask]       = useState(null) // task object or null
+  const [settingsOpen,      setSettingsOpen]      = useState(false)
 
   const timelineRef = useRef(null)
 
-  // Today: update year/quarter to match today, then scroll
+  // Today: update year/quarter to match current date, then scroll to today
   const handleJumpToday = useCallback(() => {
     const today = new Date()
     setYear(today.getFullYear())
     setQuarter(getQuarterForDate(today))
-    // scroll happens via Timeline's useEffect that reacts to year/quarter change
-    // but also call directly in case view didn't change
     setTimeout(() => timelineRef.current?.scrollToToday(), 50)
+  }, [])
+
+  // Year view: jump to current year; Quarter view: jump to current quarter
+  const handleViewModeChange = useCallback((mode) => {
+    const today = new Date()
+    if (mode === 'year') {
+      setYear(today.getFullYear())
+    } else {
+      setYear(today.getFullYear())
+      setQuarter(getQuarterForDate(today))
+    }
+    setViewMode(mode)
   }, [])
 
   // Create person inline (called from task modal combobox)
@@ -85,12 +98,13 @@ export default function App() {
   return (
     <div className="app">
       <Header
-        viewMode={viewMode} setViewMode={setViewMode}
+        viewMode={viewMode} setViewMode={handleViewModeChange}
         year={year} setYear={setYear}
         quarter={quarter} setQuarter={setQuarter}
         onJumpToday={handleJumpToday}
         onAddTask={() => { setDefaultAssigneeId(null); setModal('task') }}
         onShare={() => setModal('share')}
+        onSettings={() => setSettingsOpen(true)}
         people={people} teams={teams}
         filterPersonIds={filterPersonIds} setFilterPersonIds={setFilterPersonIds}
         filterTeamIds={filterTeamIds} setFilterTeamIds={setFilterTeamIds}
@@ -106,9 +120,11 @@ export default function App() {
         onUpdateTask={(id, data) => updateTask(id, data)}
         onDeleteTask={(id) => deleteTask(id)}
         onAddTaskForPerson={(assigneeId) => { setDefaultAssigneeId(assigneeId); setModal('task') }}
+        onEditTask={(task) => setEditingTask(task)}
         readOnly={readOnly}
       />
 
+      {/* Add Task modal */}
       {modal === 'task' && (
         <TaskModal
           onClose={() => setModal(null)}
@@ -119,6 +135,20 @@ export default function App() {
           onCreateTeam={handleCreateTeam}
         />
       )}
+
+      {/* Edit Task modal */}
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSave={(data) => updateTask(editingTask.id, data)}
+          onDelete={() => deleteTask(editingTask.id)}
+          people={people} teams={teams}
+          onCreatePerson={handleCreatePerson}
+          onCreateTeam={handleCreateTeam}
+        />
+      )}
+
       {modal === 'person' && (
         <PersonModal onClose={() => setModal(null)} onSave={(d) => addPerson(d)} teams={teams} />
       )}
@@ -126,6 +156,15 @@ export default function App() {
         <TeamModal onClose={() => setModal(null)} onSave={(d) => addTeam(d)} />
       )}
       {modal === 'share' && <ShareModal onClose={() => setModal(null)} />}
+
+      {/* Settings panel */}
+      {settingsOpen && (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          people={people}
+          teams={teams}
+        />
+      )}
     </div>
   )
 }

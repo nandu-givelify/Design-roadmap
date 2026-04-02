@@ -27,7 +27,7 @@ function Field({ label, children }) {
 }
 
 // ── Photo picker ──────────────────────────────────────────────────────────────
-function PhotoPicker({ value, onChange, isTeam }) {
+export function PhotoPicker({ value, onChange, isTeam }) {
   const ref = useRef()
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return
@@ -51,13 +51,13 @@ function PhotoPicker({ value, onChange, isTeam }) {
 
 // ── Combobox: choose from existing list or add new inline ─────────────────────
 function Combobox({ value, onChange, options, placeholder, onCreateNew, type = 'person' }) {
-  const [open, setOpen]           = useState(false)
-  const [query, setQuery]         = useState('')
+  const [open, setOpen]             = useState(false)
+  const [query, setQuery]           = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName]     = useState('')
-  const [newEmail, setNewEmail]   = useState('')
-  const [newPhoto, setNewPhoto]   = useState(null)
-  const [creating, setCreating]   = useState(false)
+  const [newName, setNewName]       = useState('')
+  const [newEmail, setNewEmail]     = useState('')
+  const [newPhoto, setNewPhoto]     = useState(null)
+  const [creating, setCreating]     = useState(false)
   const wrapRef = useRef()
 
   const selected = options.find((o) => o.id === value)
@@ -109,11 +109,6 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
 
       {open && (
         <div className="combobox__dropdown">
-          {!selected && query && (
-            <div className="combobox__input-wrap" style={{ padding: '6px 8px' }}>
-              {/* query already typed above */}
-            </div>
-          )}
           {filtered.map((opt) => (
             <div
               key={opt.id}
@@ -171,30 +166,10 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
   )
 }
 
-// ── Task Modal ────────────────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, onCreatePerson, onCreateTeam }) {
-  const today     = new Date()
-  const startDate = isWeekend(today) ? nextWorkday(today) : today
-  const endDate   = addMonths(startDate, 1)
-
-  const [form, setForm] = useState({
-    title:      '',
-    assigneeId: defaultAssigneeId || '',
-    teamId:     '',
-    startDate:  toDateString(startDate),
-    endDate:    toDateString(endDate),
-    color:      TASK_COLORS[0],
-  })
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-
-  const handleSave = () => {
-    if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
-    onClose()
-  }
-
+// ── Task fields (shared between Add and Edit modals) ──────────────────────────
+function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam }) {
   return (
-    <ModalShell title="Add Task" onClose={onClose}>
+    <>
       <Field label="Task title *">
         <input
           className="field__input"
@@ -202,7 +177,6 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, o
           onChange={(e) => set('title', e.target.value)}
           placeholder="e.g. Homepage redesign"
           autoFocus
-          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
         />
       </Field>
 
@@ -250,10 +224,84 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, o
           ))}
         </div>
       </Field>
+    </>
+  )
+}
 
+// ── Task Modal (Add) ──────────────────────────────────────────────────────────
+export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, onCreatePerson, onCreateTeam }) {
+  const today     = new Date()
+  const startDate = isWeekend(today) ? nextWorkday(today) : today
+  const endDate   = addMonths(startDate, 1)
+
+  const [form, setForm] = useState({
+    title:      '',
+    assigneeId: defaultAssigneeId || '',
+    teamId:     '',
+    startDate:  toDateString(startDate),
+    endDate:    toDateString(endDate),
+    color:      TASK_COLORS[0],
+  })
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  const handleSave = () => {
+    if (!form.title.trim()) return
+    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
+    onClose()
+  }
+
+  return (
+    <ModalShell title="Add Task" onClose={onClose}>
+      <TaskFields
+        form={form} set={set}
+        people={people} teams={teams}
+        onCreatePerson={onCreatePerson}
+        onCreateTeam={onCreateTeam}
+      />
       <div className="modal-footer">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Add Task</button>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ── Edit Task Modal ────────────────────────────────────────────────────────────
+export function EditTaskModal({ task, onClose, onSave, onDelete, people, teams, onCreatePerson, onCreateTeam }) {
+  const [form, setForm] = useState({
+    title:      task.title      || '',
+    assigneeId: task.assigneeId || '',
+    teamId:     task.teamId     || '',
+    startDate:  task.startDate  || '',
+    endDate:    task.endDate    || '',
+    color:      task.color      || TASK_COLORS[0],
+  })
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  const handleSave = () => {
+    if (!form.title.trim()) return
+    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
+    onClose()
+  }
+
+  const handleDelete = () => {
+    onDelete()
+    onClose()
+  }
+
+  return (
+    <ModalShell title="Edit Task" onClose={onClose}>
+      <TaskFields
+        form={form} set={set}
+        people={people} teams={teams}
+        onCreatePerson={onCreatePerson}
+        onCreateTeam={onCreateTeam}
+      />
+      <div className="modal-footer">
+        <button className="btn-danger" onClick={handleDelete}>Delete</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Save Changes</button>
       </div>
     </ModalShell>
   )

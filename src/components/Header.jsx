@@ -8,6 +8,7 @@ export default function Header({
   onJumpToday,
   onAddTask,
   onShare,
+  onSettings,
   people, teams,
   filterPersonIds, setFilterPersonIds,
   filterTeamIds, setFilterTeamIds,
@@ -125,6 +126,11 @@ export default function Header({
 
       {/* Share */}
       <button className="header__share-btn" onClick={onShare}>Share</button>
+
+      {/* Settings */}
+      {!readOnly && (
+        <button className="header__settings-btn" onClick={onSettings}>Settings</button>
+      )}
 
       {readOnly && <div className="header__readonly-badge">View only</div>}
     </header>

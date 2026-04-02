@@ -7,7 +7,7 @@ export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
   rowPaddingTop, laneHeight, laneGap,
   people, teams,
-  onDelete, onDragEnd,
+  onDelete, onDragEnd, onDragMove, onEdit,
   readOnly,
 }) {
   const [dragging, setDragging] = useState(false)
@@ -27,13 +27,19 @@ export default function TaskBar({
     const origStart = new Date(task.startDate)
     const origEnd   = new Date(task.endDate)
     const startX = e.clientX
+    const startY = e.clientY
+    let moved = false
     dragRef.current = { type, startX, origStart, origEnd, curStart: origStart, curEnd: origEnd }
     setDragging(true)
     setVisual({ startDate: origStart, endDate: origEnd })
 
     const onMove = (me) => {
+      const dx = Math.abs(me.clientX - startX)
+      const dy = Math.abs(me.clientY - startY)
+      if (dx > 4 || dy > 4) moved = true
+      if (!moved) return
+
       const daysDelta = Math.round((me.clientX - startX) / dayWidth)
-      const { type, origStart, origEnd } = dragRef.current
       let ns = dragRef.current.curStart
       let ne = dragRef.current.curEnd
       if (type === 'move') {
@@ -51,11 +57,20 @@ export default function TaskBar({
       dragRef.current.curStart = ns
       dragRef.current.curEnd   = ne
       setVisual({ startDate: new Date(ns), endDate: new Date(ne) })
+      if (onDragMove) onDragMove(me.clientY)
     }
 
     const onUp = (ue) => {
       const ds = dragRef.current
       if (ds) {
+        if (!moved && type === 'move') {
+          // No significant movement — treat as a click → open edit modal
+          setDragging(false); setVisual(null); dragRef.current = null
+          window.removeEventListener('mousemove', onMove)
+          window.removeEventListener('mouseup', onUp)
+          if (onEdit) onEdit()
+          return
+        }
         const updates = {}
         if (ds.type === 'move' || ds.type === 'left')  updates.startDate = toDateString(ds.curStart)
         if (ds.type === 'move' || ds.type === 'right') updates.endDate   = toDateString(ds.curEnd)
@@ -65,6 +80,7 @@ export default function TaskBar({
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
+
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
@@ -95,7 +111,6 @@ export default function TaskBar({
         className="task-bar__inner"
         style={{ background: taskColor }}
         onMouseDown={(e) => startDrag(e, 'move')}
-        onDoubleClick={() => !readOnly && setShowMenu(true)}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && setShowMenu(true) }}
       >
         {assignee && (
@@ -133,12 +148,22 @@ export default function TaskBar({
                 {formatDateShort(new Date(task.startDate))} → {formatDateShort(new Date(task.endDate))}
               </div>
             </div>
-            <button
-              className="task-bar__menu-item task-bar__menu-item--delete"
-              onClick={() => { onDelete(); setShowMenu(false) }}
-            >
-              Delete task
-            </button>
+            {!readOnly && onEdit && (
+              <button
+                className="task-bar__menu-item"
+                onClick={() => { setShowMenu(false); onEdit() }}
+              >
+                Edit task
+              </button>
+            )}
+            {!readOnly && (
+              <button
+                className="task-bar__menu-item task-bar__menu-item--delete"
+                onClick={() => { onDelete(); setShowMenu(false) }}
+              >
+                Delete task
+              </button>
+            )}
           </div>
         </div>
       )}
