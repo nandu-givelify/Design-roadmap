@@ -1,342 +1,343 @@
-import { useState, useRef } from 'react'
-import { toDateString, nextWorkday, prevWorkday, isWeekend, TASK_COLORS } from '../utils/dateUtils'
+import { useState, useRef, useEffect } from 'react'
+import { toDateString, nextWorkday, isWeekend, addMonths, TASK_COLORS, getAvatarColor, AVATAR_COLORS } from '../utils/dateUtils'
+import { addPerson as fbAddPerson, addTeam as fbAddTeam } from '../firebase'
 
-// ── Shared ────────────────────────────────────────────────────────────────────
-const ModalShell = ({ title, onClose, children }) => (
-  <div
-    style={{
-      position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(0,0,0,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}
-    onClick={onClose}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        background: '#fff', borderRadius: 12,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-        width: 480, maxWidth: '90vw',
-        maxHeight: '90vh', overflowY: 'auto',
-      }}
-    >
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '18px 20px', borderBottom: '1px solid #f3f4f6'
-      }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{title}</div>
-        <button onClick={onClose} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 20, color: '#6b7280', lineHeight: 1,
-        }}>×</button>
+// ── Shared shell ─────────────────────────────────────────────────────────────
+function ModalShell({ title, onClose, children }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__header">
+          <span className="modal__title">{title}</span>
+          <button className="modal__close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal__body">{children}</div>
       </div>
-      <div style={{ padding: '20px' }}>{children}</div>
     </div>
-  </div>
-)
-
-const Field = ({ label, children }) => (
-  <div style={{ marginBottom: 16 }}>
-    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-      {label}
-    </label>
-    {children}
-  </div>
-)
-
-const inputStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #d1d5db',
-  borderRadius: 6, fontSize: 13, color: '#111827',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
+  )
 }
 
-const BtnPrimary = ({ onClick, children, disabled }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    style={{
-      background: '#6366f1', color: '#fff', border: 'none',
-      padding: '9px 18px', borderRadius: 6, fontSize: 13,
-      fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
-    }}
-  >
-    {children}
-  </button>
-)
+function Field({ label, children }) {
+  return (
+    <div className="field">
+      <label className="field__label">{label}</label>
+      {children}
+    </div>
+  )
+}
 
-const BtnSecondary = ({ onClick, children }) => (
-  <button
-    onClick={onClick}
-    style={{
-      background: 'none', color: '#374151', border: '1px solid #d1d5db',
-      padding: '9px 18px', borderRadius: 6, fontSize: 13,
-      fontWeight: 500, cursor: 'pointer',
-    }}
-  >
-    {children}
-  </button>
-)
-
-// ── Photo picker (base64 upload) ──────────────────────────────────────────────
-function PhotoPicker({ value, onChange, label = 'Photo' }) {
+// ── Photo picker ──────────────────────────────────────────────────────────────
+function PhotoPicker({ value, onChange, isTeam }) {
   const ref = useRef()
   const handleFile = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    const file = e.target.files[0]; if (!file) return
     const reader = new FileReader()
     reader.onload = (ev) => onChange(ev.target.result)
     reader.readAsDataURL(file)
   }
   return (
-    <Field label={label}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: '50%',
-          background: '#f3f4f6',
-          border: '2px dashed #d1d5db',
-          overflow: 'hidden', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {value
-            ? <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-            : <span style={{ fontSize: 20, color: '#9ca3af' }}>👤</span>
-          }
-        </div>
-        <button
-          type="button"
-          onClick={() => ref.current.click()}
-          style={{
-            background: 'none', border: '1px solid #d1d5db',
-            borderRadius: 6, padding: '6px 12px',
-            fontSize: 12, color: '#374151', cursor: 'pointer',
-          }}
-        >
-          {value ? 'Change photo' : 'Upload photo'}
-        </button>
-        {value && (
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
-          >Remove</button>
-        )}
+    <div className="photo-picker">
+      <div className={`photo-picker__preview${isTeam ? ' photo-picker__preview--team' : ''}`}>
+        {value ? <img src={value} alt="" /> : (isTeam ? '🏷' : '👤')}
       </div>
-      <input ref={ref} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }}/>
-    </Field>
+      <button type="button" className="photo-picker__btn" onClick={() => ref.current.click()}>
+        {value ? 'Change' : 'Upload photo'}
+      </button>
+      {value && <button type="button" className="photo-picker__remove" onClick={() => onChange(null)}>Remove</button>}
+      <input ref={ref} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
+    </div>
   )
 }
 
-// ── Add / Edit Task Modal ─────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId }) {
-  const today = new Date()
+// ── Combobox: choose from existing list or add new inline ─────────────────────
+function Combobox({ value, onChange, options, placeholder, onCreateNew, type = 'person' }) {
+  const [open, setOpen]           = useState(false)
+  const [query, setQuery]         = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName]     = useState('')
+  const [newEmail, setNewEmail]   = useState('')
+  const [newPhoto, setNewPhoto]   = useState(null)
+  const [creating, setCreating]   = useState(false)
+  const wrapRef = useRef()
+
+  const selected = options.find((o) => o.id === value)
+
+  useEffect(() => {
+    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = query
+    ? options.filter((o) => o.name.toLowerCase().includes(query.toLowerCase()))
+    : options
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return
+    setCreating(true)
+    const data = { name: newName.trim(), photo: newPhoto, color: getAvatarColor(newName.trim()) }
+    if (type === 'person') data.email = newEmail
+    const id = await onCreateNew(data)
+    onChange(id)
+    setOpen(false); setShowCreate(false); setNewName(''); setNewEmail(''); setNewPhoto(null); setCreating(false)
+  }
+
+  return (
+    <div className="combobox" ref={wrapRef}>
+      {selected ? (
+        <div className="combobox__selected-badge" onClick={() => { setOpen(true); setQuery('') }}>
+          <div
+            className={`combobox__option-avatar${type === 'team' ? ' combobox__option-avatar--team' : ''}`}
+            style={{ background: type === 'person' ? (selected.color || getAvatarColor(selected.name)) : '#6366f1' }}
+          >
+            {selected.photo ? <img src={selected.photo} alt="" /> : selected.name?.charAt(0)}
+          </div>
+          <span className="combobox__selected-name">{selected.name}</span>
+          <span className="combobox__selected-change">change ▾</span>
+        </div>
+      ) : (
+        <div className="combobox__input-wrap">
+          <input
+            className="combobox__input"
+            placeholder={placeholder}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+          />
+        </div>
+      )}
+
+      {open && (
+        <div className="combobox__dropdown">
+          {!selected && query && (
+            <div className="combobox__input-wrap" style={{ padding: '6px 8px' }}>
+              {/* query already typed above */}
+            </div>
+          )}
+          {filtered.map((opt) => (
+            <div
+              key={opt.id}
+              className="combobox__option"
+              onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}
+            >
+              <div
+                className={`combobox__option-avatar${type === 'team' ? ' combobox__option-avatar--team' : ''}`}
+                style={{ background: type === 'person' ? (opt.color || getAvatarColor(opt.name)) : '#6366f1' }}
+              >
+                {opt.photo ? <img src={opt.photo} alt="" /> : opt.name?.charAt(0)}
+              </div>
+              <div>
+                <div className="combobox__option-label">{opt.name}</div>
+                {opt.email && <div className="combobox__option-sub">{opt.email}</div>}
+              </div>
+            </div>
+          ))}
+
+          {!showCreate ? (
+            <div className="combobox__option combobox__option--add" onClick={() => setShowCreate(true)}>
+              + Add new {type}…
+            </div>
+          ) : (
+            <div className="combobox__inline-form" onClick={(e) => e.stopPropagation()}>
+              <input
+                className="field__input"
+                placeholder={type === 'person' ? 'Full name' : 'Team name'}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+              />
+              {type === 'person' && (
+                <input
+                  className="field__input"
+                  style={{ marginTop: 6 }}
+                  placeholder="Email (optional)"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                />
+              )}
+              <div className="combobox__inline-actions" style={{ marginTop: 6 }}>
+                <button className="combobox__inline-add" onClick={handleCreate} disabled={creating || !newName.trim()}>
+                  {creating ? 'Adding…' : 'Add'}
+                </button>
+                <button className="combobox__inline-cancel" onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Task Modal ────────────────────────────────────────────────────────────────
+export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, onCreatePerson, onCreateTeam }) {
+  const today     = new Date()
+  const startDate = isWeekend(today) ? nextWorkday(today) : today
+  const endDate   = addMonths(startDate, 1)
+
   const [form, setForm] = useState({
-    title: '',
-    project: '',
-    assigneeId: defaultAssigneeId || (people[0]?.id || ''),
-    startDate: toDateString(isWeekend(today) ? nextWorkday(today) : today),
-    endDate: toDateString(isWeekend(today) ? nextWorkday(new Date(today.getTime() + 7 * 86400000)) : new Date(today.getTime() + 7 * 86400000)),
-    color: TASK_COLORS[0],
+    title:      '',
+    assigneeId: defaultAssigneeId || '',
+    teamId:     '',
+    startDate:  toDateString(startDate),
+    endDate:    toDateString(endDate),
+    color:      TASK_COLORS[0],
   })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const handleSave = () => {
-    if (!form.title.trim() || !form.assigneeId || !form.startDate || !form.endDate) return
-    // Enforce no weekends
-    let s = new Date(form.startDate)
-    let e = new Date(form.endDate)
-    if (isWeekend(s)) s = nextWorkday(s)
-    if (isWeekend(e)) e = prevWorkday(e)
-    onSave({ ...form, startDate: toDateString(s), endDate: toDateString(e) })
+    if (!form.title.trim()) return
+    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
     onClose()
   }
 
   return (
     <ModalShell title="Add Task" onClose={onClose}>
       <Field label="Task title *">
-        <input style={inputStyle} value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Homepage redesign"/>
+        <input
+          className="field__input"
+          value={form.title}
+          onChange={(e) => set('title', e.target.value)}
+          placeholder="e.g. Homepage redesign"
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        />
       </Field>
-      <Field label="Project">
-        <input style={inputStyle} value={form.project} onChange={(e) => set('project', e.target.value)} placeholder="e.g. Website Rebrand"/>
+
+      <Field label="Assignee">
+        <Combobox
+          value={form.assigneeId}
+          onChange={(v) => set('assigneeId', v)}
+          options={people}
+          placeholder="Search or add person…"
+          onCreateNew={onCreatePerson}
+          type="person"
+        />
       </Field>
-      <Field label="Assignee *">
-        <select style={inputStyle} value={form.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
-          <option value="">Select person…</option>
-          {people.map((p) => {
-            const team = teams.find((t) => t.id === p.teamId)
-            return <option key={p.id} value={p.id}>{p.name}{team ? ` (${team.name})` : ''}</option>
-          })}
-        </select>
+
+      <Field label="Team">
+        <Combobox
+          value={form.teamId}
+          onChange={(v) => set('teamId', v)}
+          options={teams}
+          placeholder="Search or add team…"
+          onCreateNew={onCreateTeam}
+          type="team"
+        />
       </Field>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label="Start date *">
-          <input style={inputStyle} type="date" value={form.startDate} onChange={(e) => set('startDate', e.target.value)}/>
+
+      <div className="field__row">
+        <Field label="Start date">
+          <input className="field__input" type="date" value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
         </Field>
-        <Field label="End date *">
-          <input style={inputStyle} type="date" value={form.endDate} min={form.startDate} onChange={(e) => set('endDate', e.target.value)}/>
+        <Field label="End date">
+          <input className="field__input" type="date" value={form.endDate} min={form.startDate} onChange={(e) => set('endDate', e.target.value)} />
         </Field>
       </div>
+
       <Field label="Color">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="color-picker">
           {TASK_COLORS.map((c) => (
             <button
               key={c}
+              type="button"
+              className={`color-swatch${form.color === c ? ' color-swatch--selected' : ''}`}
+              style={{ background: c }}
               onClick={() => set('color', c)}
-              style={{
-                width: 28, height: 28, borderRadius: '50%', background: c,
-                border: form.color === c ? '3px solid #111827' : '3px solid transparent',
-                cursor: 'pointer', padding: 0,
-              }}
             />
           ))}
         </div>
       </Field>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-        <BtnSecondary onClick={onClose}>Cancel</BtnSecondary>
-        <BtnPrimary onClick={handleSave} disabled={!form.title.trim() || !form.assigneeId}>Add Task</BtnPrimary>
+
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Add Task</button>
       </div>
     </ModalShell>
   )
 }
 
-// ── Add Person Modal ──────────────────────────────────────────────────────────
+// ── Person Modal ──────────────────────────────────────────────────────────────
 export function PersonModal({ onClose, onSave, teams }) {
-  const [form, setForm] = useState({ name: '', email: '', photo: null, teamId: teams[0]?.id || '', color: '#6366f1' })
+  const [form, setForm] = useState({ name: '', email: '', photo: null, teamId: '', color: AVATAR_COLORS[0] })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-
-  const AVATAR_COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6']
-
-  const handleSave = () => {
-    if (!form.name.trim()) return
-    onSave(form)
-    onClose()
-  }
 
   return (
     <ModalShell title="Add Person" onClose={onClose}>
-      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} label="Photo (optional)"/>
+      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} />
       <Field label="Name *">
-        <input style={inputStyle} value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Alex Johnson"/>
+        <input className="field__input" value={form.name} onChange={(e) => { set('name', e.target.value); set('color', getAvatarColor(e.target.value)) }} placeholder="e.g. Alex Johnson" autoFocus />
       </Field>
       <Field label="Email (optional)">
-        <input style={inputStyle} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="alex@company.com"/>
+        <input className="field__input" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="alex@company.com" />
       </Field>
       <Field label="Team">
-        <select style={inputStyle} value={form.teamId} onChange={(e) => set('teamId', e.target.value)}>
+        <select className="field__select" value={form.teamId} onChange={(e) => set('teamId', e.target.value)}>
           <option value="">No team</option>
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </Field>
       {!form.photo && (
         <Field label="Avatar color">
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="color-picker">
             {AVATAR_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => set('color', c)}
-                style={{
-                  width: 28, height: 28, borderRadius: '50%', background: c,
-                  border: form.color === c ? '3px solid #111827' : '3px solid transparent',
-                  cursor: 'pointer', padding: 0,
-                }}
-              />
+              <button key={c} type="button" className={`color-swatch${form.color === c ? ' color-swatch--selected' : ''}`} style={{ background: c }} onClick={() => set('color', c)} />
             ))}
           </div>
         </Field>
       )}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-        <BtnSecondary onClick={onClose}>Cancel</BtnSecondary>
-        <BtnPrimary onClick={handleSave} disabled={!form.name.trim()}>Add Person</BtnPrimary>
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave({ ...form, color: form.color || getAvatarColor(form.name) }); onClose() } }} disabled={!form.name.trim()}>Add Person</button>
       </div>
     </ModalShell>
   )
 }
 
-// ── Add Team Modal ────────────────────────────────────────────────────────────
+// ── Team Modal ────────────────────────────────────────────────────────────────
 export function TeamModal({ onClose, onSave }) {
   const [form, setForm] = useState({ name: '', photo: null })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-
-  const handleSave = () => {
-    if (!form.name.trim()) return
-    onSave(form)
-    onClose()
-  }
-
   return (
     <ModalShell title="Add Team" onClose={onClose}>
-      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} label="Team photo / icon (optional)"/>
+      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} isTeam />
       <Field label="Team name *">
-        <input style={inputStyle} value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Product Design"/>
+        <input className="field__input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Product Design" autoFocus />
       </Field>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-        <BtnSecondary onClick={onClose}>Cancel</BtnSecondary>
-        <BtnPrimary onClick={handleSave} disabled={!form.name.trim()}>Add Team</BtnPrimary>
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave(form); onClose() } }} disabled={!form.name.trim()}>Add Team</button>
       </div>
     </ModalShell>
   )
 }
 
-// ── Share Modal ────────────────────────────────────────────────────────────────
+// ── Share Modal ───────────────────────────────────────────────────────────────
 export function ShareModal({ onClose }) {
-  const base = window.location.origin + window.location.pathname
-  const viewUrl = base + '?mode=view'
-  const editUrl = base + '?mode=edit'
+  const base    = window.location.origin + window.location.pathname
   const [copied, setCopied] = useState(null)
-
   const copy = (url, key) => {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(key)
-      setTimeout(() => setCopied(null), 2000)
-    })
+    navigator.clipboard.writeText(url).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000) })
   }
-
   const LinkRow = ({ label, url, desc, k }) => (
-    <div style={{
-      border: '1px solid #e5e7eb', borderRadius: 8,
-      padding: '12px 14px', marginBottom: 12,
-    }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>{desc}</div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input
-          readOnly value={url}
-          style={{ ...inputStyle, flex: 1, background: '#f9fafb', fontSize: 12 }}
-          onFocus={(e) => e.target.select()}
-        />
-        <button
-          onClick={() => copy(url, k)}
-          style={{
-            background: copied === k ? '#10b981' : '#6366f1',
-            color: '#fff', border: 'none', borderRadius: 6,
-            padding: '8px 12px', fontSize: 12, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-          }}
-        >
-          {copied === k ? '✓ Copied!' : 'Copy link'}
+    <div className="share-link-row">
+      <div className="share-link-row__label">{label}</div>
+      <div className="share-link-row__desc">{desc}</div>
+      <div className="share-link-row__controls">
+        <input readOnly className="share-link-row__input" value={url} onFocus={(e) => e.target.select()} />
+        <button className={`share-copy-btn${copied === k ? ' share-copy-btn--copied' : ''}`} onClick={() => copy(url, k)}>
+          {copied === k ? '✓ Copied!' : 'Copy'}
         </button>
       </div>
     </div>
   )
-
   return (
     <ModalShell title="Share Roadmap" onClose={onClose}>
-      <LinkRow
-        k="view"
-        label="View only"
-        desc="Anyone with this link can view the roadmap but cannot make changes."
-        url={viewUrl}
-      />
-      <LinkRow
-        k="edit"
-        label="Full access"
-        desc="Anyone with this link can view and edit the roadmap."
-        url={editUrl}
-      />
-      <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 8 }}>
-        The base URL (no query param) always opens in edit mode for you.
-      </p>
+      <LinkRow k="view" label="View only" desc="Can view, cannot edit." url={`${base}?mode=view`} />
+      <LinkRow k="edit" label="Full access" desc="Can view and edit." url={`${base}?mode=edit`} />
+      <p className="share-hint">The base URL (no query param) opens in edit mode.</p>
     </ModalShell>
   )
 }

@@ -1,236 +1,141 @@
-import { useRef, useState, useCallback } from 'react'
-import {
-  startOfDay, addDays, diffDays, formatDateShort,
-  isWeekend, nextWorkday, prevWorkday, toDateString
-} from '../utils/dateUtils'
+import { useRef, useState } from 'react'
+import { startOfDay, addDays, diffDays, formatDateShort, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor } from '../utils/dateUtils'
 
-const BAR_HEIGHT = 32
+const BAR_H = 32
 
 export default function TaskBar({
-  task, xOffset, width, yOffset,
-  dayWidth, rangeStart, rangeEnd, days,
-  onUpdate, onDelete, readOnly, viewMode,
+  task, totalStart, dayWidth, laneIndex,
+  rowPaddingTop, laneHeight, laneGap,
+  people, teams,
+  onDelete, onDragEnd,
+  readOnly,
 }) {
-  const barRef = useRef(null)
-  const [dragging, setDragging] = useState(null) // null | 'move' | 'left' | 'right'
-  const [tooltip, setTooltip] = useState(null) // {startDate, endDate}
+  const [dragging, setDragging] = useState(false)
+  const [visual, setVisual] = useState(null)
   const [showMenu, setShowMenu] = useState(false)
-  const dragState = useRef(null)
+  const dragRef = useRef(null)
 
-  const snapToWorkday = (date, preferForward = true) => {
-    if (!isWeekend(date)) return date
-    return preferForward ? nextWorkday(date) : prevWorkday(date)
-  }
+  const snapWorkday = (date, forward = true) =>
+    !isWeekend(date) ? date : forward ? nextWorkday(date) : prevWorkday(date)
 
-  const dayFromX = (absoluteX) => {
-    const idx = Math.round((absoluteX - xOffset) / dayWidth)
-    const clamped = Math.max(0, Math.min(days.length - 1, idx))
-    return days[clamped]
-  }
+  const dateToX = (date) =>
+    diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth
 
-  const startMouseDown = (e, type) => {
+  const startDrag = (e, type) => {
     if (readOnly) return
-    e.preventDefault()
-    e.stopPropagation()
-
-    const startX = e.clientX
+    e.preventDefault(); e.stopPropagation()
     const origStart = new Date(task.startDate)
-    const origEnd = new Date(task.endDate)
-
-    dragState.current = { type, startX, origStart, origEnd, currentStart: origStart, currentEnd: origEnd }
-    setDragging(type)
-    setTooltip({ startDate: origStart, endDate: origEnd })
+    const origEnd   = new Date(task.endDate)
+    const startX = e.clientX
+    dragRef.current = { type, startX, origStart, origEnd, curStart: origStart, curEnd: origEnd }
+    setDragging(true)
+    setVisual({ startDate: origStart, endDate: origEnd })
 
     const onMove = (me) => {
-      const dx = me.clientX - startX
-      const daysDelta = Math.round(dx / dayWidth)
-      const ds = dragState.current
-      let newStart = ds.currentStart
-      let newEnd = ds.currentEnd
-
+      const daysDelta = Math.round((me.clientX - startX) / dayWidth)
+      const { type, origStart, origEnd } = dragRef.current
+      let ns = dragRef.current.curStart
+      let ne = dragRef.current.curEnd
       if (type === 'move') {
-        newStart = addDays(ds.origStart, daysDelta)
-        newEnd = addDays(ds.origEnd, daysDelta)
-        newStart = snapToWorkday(newStart, daysDelta >= 0)
-        newEnd = snapToWorkday(newEnd, daysDelta >= 0)
+        ns = snapWorkday(addDays(origStart, daysDelta), daysDelta >= 0)
+        ne = snapWorkday(addDays(origEnd,   daysDelta), daysDelta >= 0)
       } else if (type === 'left') {
-        newStart = addDays(ds.origStart, daysDelta)
-        newStart = snapToWorkday(newStart, true)
-        if (newStart >= ds.origEnd) newStart = addDays(ds.origEnd, -1)
-        newStart = snapToWorkday(newStart, false)
+        ns = snapWorkday(addDays(origStart, daysDelta), true)
+        if (ns >= origEnd) ns = snapWorkday(addDays(origEnd, -1), false)
+        ne = origEnd
       } else if (type === 'right') {
-        newEnd = addDays(ds.origEnd, daysDelta)
-        newEnd = snapToWorkday(newEnd, false)
-        if (newEnd <= ds.origStart) newEnd = addDays(ds.origStart, 1)
-        newEnd = snapToWorkday(newEnd, true)
+        ne = snapWorkday(addDays(origEnd, daysDelta), false)
+        if (ne <= origStart) ne = snapWorkday(addDays(origStart, 1), true)
+        ns = origStart
       }
-
-      ds.currentStart = newStart
-      ds.currentEnd = newEnd
-      setTooltip({ startDate: newStart, endDate: newEnd })
+      dragRef.current.curStart = ns
+      dragRef.current.curEnd   = ne
+      setVisual({ startDate: new Date(ns), endDate: new Date(ne) })
     }
 
-    const onUp = () => {
-      const ds = dragState.current
+    const onUp = (ue) => {
+      const ds = dragRef.current
       if (ds) {
         const updates = {}
-        if (type === 'move' || type === 'left') updates.startDate = toDateString(ds.currentStart)
-        if (type === 'move' || type === 'right') updates.endDate = toDateString(ds.currentEnd)
-        onUpdate(updates)
+        if (ds.type === 'move' || ds.type === 'left')  updates.startDate = toDateString(ds.curStart)
+        if (ds.type === 'move' || ds.type === 'right') updates.endDate   = toDateString(ds.curEnd)
+        onDragEnd(updates, ue.clientY)
       }
-      setDragging(null)
-      setTooltip(null)
-      dragState.current = null
+      setDragging(false); setVisual(null); dragRef.current = null
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
 
-  const taskColor = task.color || '#6366f1'
-  const isActive = dragging !== null
-  const tipStart = tooltip?.startDate || new Date(task.startDate)
-  const tipEnd = tooltip?.endDate || new Date(task.endDate)
+  const dispStart = visual ? visual.startDate : new Date(task.startDate)
+  const dispEnd   = visual ? visual.endDate   : new Date(task.endDate)
+  const x = dateToX(dispStart)
+  const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
+  const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
+
+  const taskColor     = task.color || '#6366f1'
+  const assignee      = people.find((p) => p.id === task.assigneeId)
+  const team          = teams.find((t)  => t.id === task.teamId)
+  const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
 
   return (
     <div
-      ref={barRef}
-      style={{
-        position: 'absolute',
-        left: xOffset,
-        top: yOffset,
-        width: Math.max(dayWidth, width),
-        height: BAR_HEIGHT,
-        zIndex: isActive ? 100 : 10,
-        userSelect: 'none',
-      }}
+      className={`task-bar${dragging ? ' task-bar--dragging' : ''}`}
+      style={{ left: x, top: y, width: w, height: BAR_H }}
     >
-      {/* Left resize handle */}
       {!readOnly && (
-        <div
-          onMouseDown={(e) => startMouseDown(e, 'left')}
-          style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0,
-            width: 8, cursor: 'ew-resize', zIndex: 5,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <div style={{ width: 2, height: 14, background: 'rgba(255,255,255,0.6)', borderRadius: 1 }}/>
+        <div className="task-bar__handle task-bar__handle--left" onMouseDown={(e) => startDrag(e, 'left')}>
+          <div className="task-bar__handle-grip" />
         </div>
       )}
 
-      {/* Main bar */}
       <div
-        onMouseDown={(e) => startMouseDown(e, 'move')}
-        onContextMenu={(e) => { e.preventDefault(); setShowMenu(true) }}
-        onDoubleClick={() => setShowMenu(true)}
-        style={{
-          position: 'absolute', left: 4, right: 4, top: 0, bottom: 0,
-          background: taskColor,
-          borderRadius: 6,
-          cursor: readOnly ? 'default' : 'grab',
-          display: 'flex', alignItems: 'center',
-          paddingLeft: 8,
-          overflow: 'hidden',
-          boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.12)',
-          transition: isActive ? 'none' : 'box-shadow 0.15s',
-          opacity: isActive ? 0.9 : 1,
-        }}
+        className="task-bar__inner"
+        style={{ background: taskColor }}
+        onMouseDown={(e) => startDrag(e, 'move')}
+        onDoubleClick={() => !readOnly && setShowMenu(true)}
+        onContextMenu={(e) => { e.preventDefault(); !readOnly && setShowMenu(true) }}
       >
-        <span style={{
-          fontSize: 12, fontWeight: 600, color: '#fff',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          pointerEvents: 'none',
-        }}>
-          {task.title}
-        </span>
-        {task.project && (
-          <span style={{
-            fontSize: 10, color: 'rgba(255,255,255,0.75)',
-            marginLeft: 6, flexShrink: 0, pointerEvents: 'none',
-          }}>
-            · {task.project}
-          </span>
+        {assignee && (
+          <div className="task-bar__assignee-avatar" style={{ background: assigneeColor }}>
+            {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
+          </div>
         )}
+        {team && (
+          <div className="task-bar__team-avatar">
+            {team.photo ? <img src={team.photo} alt="" /> : team.name?.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <span className="task-bar__title">{task.title}</span>
       </div>
 
-      {/* Right resize handle */}
       {!readOnly && (
-        <div
-          onMouseDown={(e) => startMouseDown(e, 'right')}
-          style={{
-            position: 'absolute', right: 0, top: 0, bottom: 0,
-            width: 8, cursor: 'ew-resize', zIndex: 5,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <div style={{ width: 2, height: 14, background: 'rgba(255,255,255,0.6)', borderRadius: 1 }}/>
+        <div className="task-bar__handle task-bar__handle--right" onMouseDown={(e) => startDrag(e, 'right')}>
+          <div className="task-bar__handle-grip" />
         </div>
       )}
 
-      {/* Drag tooltip */}
-      {tooltip && (
+      {dragging && (
         <>
-          {/* Left date label */}
-          <div style={{
-            position: 'absolute', bottom: '100%', left: 4,
-            marginBottom: 4,
-            background: '#111827', color: '#fff',
-            fontSize: 11, padding: '2px 6px', borderRadius: 4,
-            whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 200,
-          }}>
-            {formatDateShort(tipStart)}
-          </div>
-          {/* Right date label */}
-          <div style={{
-            position: 'absolute', bottom: '100%', right: 4,
-            marginBottom: 4,
-            background: '#111827', color: '#fff',
-            fontSize: 11, padding: '2px 6px', borderRadius: 4,
-            whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 200,
-          }}>
-            {formatDateShort(tipEnd)}
-          </div>
+          <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateShort(dispStart)}</div>
+          <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateShort(dispEnd)}</div>
         </>
       )}
 
-      {/* Context menu */}
-      {showMenu && !readOnly && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-          }}
-          onClick={() => setShowMenu(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'absolute',
-              left: xOffset, top: yOffset + BAR_HEIGHT + 4,
-              background: '#fff', borderRadius: 8,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-              border: '1px solid #e5e7eb',
-              minWidth: 160, zIndex: 1000,
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{ padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{task.title}</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>
+      {showMenu && (
+        <div className="task-bar__menu-overlay" onClick={() => setShowMenu(false)}>
+          <div className="task-bar__menu" style={{ top: BAR_H + 4, left: 0 }} onClick={(e) => e.stopPropagation()}>
+            <div className="task-bar__menu-info">
+              <div className="task-bar__menu-task-title">{task.title}</div>
+              <div className="task-bar__menu-dates">
                 {formatDateShort(new Date(task.startDate))} → {formatDateShort(new Date(task.endDate))}
               </div>
             </div>
             <button
+              className="task-bar__menu-item task-bar__menu-item--delete"
               onClick={() => { onDelete(); setShowMenu(false) }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '8px 14px', border: 'none', background: 'none',
-                fontSize: 13, color: '#ef4444', cursor: 'pointer',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
             >
               Delete task
             </button>
