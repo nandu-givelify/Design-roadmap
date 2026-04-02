@@ -35,10 +35,13 @@ export const getQuarterRange = (year, quarter) => {
   return { start: new Date(year, months[0], 1), end: new Date(year, months[2]+1, 0) }
 }
 
-// Total scrollable range: 2 years back, 2 years forward
+// Days of padding shown before/after each view period
+export const VIEW_PAD_DAYS = 7
+
+// Total scrollable range: 2 years back, 2 years forward + 7-day buffer on each side
 export const getTotalRange = (referenceYear) => ({
-  start: new Date(referenceYear - 2, 0, 1),
-  end: new Date(referenceYear + 2, 11, 31),
+  start: addDays(new Date(referenceYear - 2, 0, 1), -VIEW_PAD_DAYS),
+  end:   addDays(new Date(referenceYear + 2, 11, 31), VIEW_PAD_DAYS),
 })
 
 export const getDaysInRange = (start, end) => {

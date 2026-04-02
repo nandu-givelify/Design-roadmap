@@ -4,20 +4,18 @@ import { updatePerson, deletePerson, updateTeam, deleteTeam, addPerson, addTeam 
 import { PhotoPicker } from './Modals'
 
 // ── Inline edit form for a person ─────────────────────────────────────────────
-function PersonEditForm({ person, teams, onDone }) {
-  const [name,   setName]   = useState(person.name   || '')
-  const [email,  setEmail]  = useState(person.email  || '')
-  const [teamId, setTeamId] = useState(person.teamId || '')
+function PersonEditForm({ person, onDone }) {
+  const [name,   setName]   = useState(person.name  || '')
+  const [email,  setEmail]  = useState(person.email || '')
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
     if (!name.trim()) return
     setSaving(true)
     await updatePerson(person.id, {
-      name:   name.trim(),
-      email:  email.trim(),
-      teamId: teamId || null,
-      color:  getAvatarColor(name.trim()),
+      name:  name.trim(),
+      email: email.trim(),
+      color: getAvatarColor(name.trim()),
     })
     setSaving(false)
     onDone()
@@ -37,10 +35,6 @@ function PersonEditForm({ person, teams, onDone }) {
         placeholder="Email (optional)"
         type="email"
       />
-      <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-        <option value="">No team</option>
-        {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-      </select>
       <div className="settings-inline-actions">
         <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleSave} disabled={saving || !name.trim()}>
           {saving ? 'Saving…' : 'Save'}
@@ -87,10 +81,9 @@ function TeamEditForm({ team, onDone }) {
 }
 
 // ── Add person form ───────────────────────────────────────────────────────────
-function AddPersonForm({ teams, onDone }) {
+function AddPersonForm({ onDone }) {
   const [name,   setName]   = useState('')
   const [email,  setEmail]  = useState('')
-  const [teamId, setTeamId] = useState('')
   const [photo,  setPhoto]  = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -98,11 +91,10 @@ function AddPersonForm({ teams, onDone }) {
     if (!name.trim()) return
     setSaving(true)
     await addPerson({
-      name:   name.trim(),
-      email:  email.trim(),
-      teamId: teamId || null,
-      photo:  photo || null,
-      color:  getAvatarColor(name.trim()),
+      name:  name.trim(),
+      email: email.trim(),
+      photo: photo || null,
+      color: getAvatarColor(name.trim()),
     })
     setSaving(false)
     onDone()
@@ -113,10 +105,6 @@ function AddPersonForm({ teams, onDone }) {
       <PhotoPicker value={photo} onChange={setPhoto} />
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus />
       <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" type="email" />
-      <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-        <option value="">No team</option>
-        {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-      </select>
       <div className="settings-inline-actions">
         <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleSave} disabled={saving || !name.trim()}>
           {saving ? 'Adding…' : 'Add Person'}
@@ -185,18 +173,16 @@ export default function Settings({ onClose, people, teams }) {
 
         <div className="settings-panel__body">
 
-          {/* ── Teams section ─────────────────────────────────────────── */}
+          {/* ── PMs section ─────────────────────────────────────────── */}
           <div className="settings-section">
             <div className="settings-section__header">
-              <span className="settings-section__title">Teams</span>
+              <span className="settings-section__title">PMs</span>
               <button className="settings-section__add" onClick={() => { setAddingTeam(true); setAddingPerson(false) }}>
-                + Add team
+                + Add PM
               </button>
             </div>
 
-            {addingTeam && (
-              <AddTeamForm onDone={() => setAddingTeam(false)} />
-            )}
+            {addingTeam && <AddTeamForm onDone={() => setAddingTeam(false)} />}
 
             {teams.map((team) => (
               <div key={team.id}>
@@ -212,9 +198,7 @@ export default function Settings({ onClose, people, teams }) {
                   </div>
                   <div className="settings-item__info">
                     <div className="settings-item__name">{team.name}</div>
-                    <div className="settings-item__sub">
-                      {people.filter((p) => p.teamId === team.id).length} member(s)
-                    </div>
+                    <div className="settings-item__sub">PM</div>
                   </div>
                   <div className="settings-item__actions">
                     <button
@@ -238,7 +222,7 @@ export default function Settings({ onClose, people, teams }) {
             ))}
 
             {teams.length === 0 && !addingTeam && (
-              <div style={{ fontSize: 13, color: '#9ca3af', padding: '8px 0' }}>No teams yet.</div>
+              <div style={{ fontSize: 13, color: '#9ca3af', padding: '8px 0' }}>No PMs yet.</div>
             )}
           </div>
 
@@ -251,12 +235,9 @@ export default function Settings({ onClose, people, teams }) {
               </button>
             </div>
 
-            {addingPerson && (
-              <AddPersonForm teams={teams} onDone={() => setAddingPerson(false)} />
-            )}
+            {addingPerson && <AddPersonForm onDone={() => setAddingPerson(false)} />}
 
             {people.map((person) => {
-              const personTeam = teams.find((t) => t.id === person.teamId)
               return (
                 <div key={person.id}>
                   <div className="settings-item">
@@ -271,9 +252,7 @@ export default function Settings({ onClose, people, teams }) {
                     </div>
                     <div className="settings-item__info">
                       <div className="settings-item__name">{person.name}</div>
-                      <div className="settings-item__sub">
-                        {[person.email, personTeam?.name].filter(Boolean).join(' · ') || 'No team'}
-                      </div>
+                      <div className="settings-item__sub">{person.email || 'Designer'}</div>
                     </div>
                     <div className="settings-item__actions">
                       <button
@@ -293,7 +272,6 @@ export default function Settings({ onClose, people, teams }) {
                   {editingPersonId === person.id && (
                     <PersonEditForm
                       person={person}
-                      teams={teams}
                       onDone={() => setEditingPersonId(null)}
                     />
                   )}

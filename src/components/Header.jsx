@@ -87,7 +87,7 @@ export default function Header({
             <div className="header__filter-popover">
               {teams.length > 0 && (
                 <>
-                  <div className="header__filter-section-title">Teams</div>
+                  <div className="header__filter-section-title">PMs</div>
                   {teams.map((t) => (
                     <label key={t.id} className="filter-row">
                       <input type="checkbox" checked={filterTeamIds.includes(t.id)} onChange={() => toggleTeam(t.id)} />

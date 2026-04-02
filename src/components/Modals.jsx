@@ -191,12 +191,12 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam }) 
         />
       </Field>
 
-      <Field label="Team">
+      <Field label="PM">
         <Combobox
           value={form.teamId}
           onChange={(v) => set('teamId', v)}
           options={teams}
-          placeholder="Search or add team…"
+          placeholder="Search or add PM…"
           onCreateNew={onCreateTeam}
           type="team"
         />
@@ -321,12 +321,6 @@ export function PersonModal({ onClose, onSave, teams }) {
       <Field label="Email (optional)">
         <input className="field__input" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="alex@company.com" />
       </Field>
-      <Field label="Team">
-        <select className="field__select" value={form.teamId} onChange={(e) => set('teamId', e.target.value)}>
-          <option value="">No team</option>
-          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </Field>
       {!form.photo && (
         <Field label="Avatar color">
           <div className="color-picker">
@@ -338,7 +332,7 @@ export function PersonModal({ onClose, onSave, teams }) {
       )}
       <div className="modal-footer">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave({ ...form, color: form.color || getAvatarColor(form.name) }); onClose() } }} disabled={!form.name.trim()}>Add Person</button>
+        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave({ ...form, teamId: null, color: form.color || getAvatarColor(form.name) }); onClose() } }} disabled={!form.name.trim()}>Add Person</button>
       </div>
     </ModalShell>
   )
@@ -349,14 +343,14 @@ export function TeamModal({ onClose, onSave }) {
   const [form, setForm] = useState({ name: '', photo: null })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   return (
-    <ModalShell title="Add Team" onClose={onClose}>
+    <ModalShell title="Add PM" onClose={onClose}>
       <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} isTeam />
-      <Field label="Team name *">
-        <input className="field__input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Product Design" autoFocus />
+      <Field label="PM name *">
+        <input className="field__input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Sarah Chen" autoFocus />
       </Field>
       <div className="modal-footer">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave(form); onClose() } }} disabled={!form.name.trim()}>Add Team</button>
+        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave(form); onClose() } }} disabled={!form.name.trim()}>Add PM</button>
       </div>
     </ModalShell>
   )

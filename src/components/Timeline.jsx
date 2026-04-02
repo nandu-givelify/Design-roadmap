@@ -3,7 +3,7 @@ import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
   MONTHS_SHORT, getQuarterForMonth,
-  getAvatarColor,
+  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS,
 } from '../utils/dateUtils'
 import TaskBar from './TaskBar'
 
@@ -15,8 +15,15 @@ const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
 const MIN_ROW_H    = ROW_PAD_TOP + LANE_H + ROW_PAD_BOT
 
-const VIEW_DAYS_YEAR    = 365
-const VIEW_DAYS_QUARTER = 91
+// View shows this many days — includes 7-day buffer on each side
+const VIEW_DAYS_YEAR    = 365 + VIEW_PAD_DAYS * 2  // 379
+const VIEW_DAYS_QUARTER = 91  + VIEW_PAD_DAYS * 2  // 105
+
+const snapWeekday = (date, forward = true) => {
+  const d = new Date(date)
+  if (!isWeekend(d)) return d
+  return forward ? nextWorkday(d) : (() => { while (isWeekend(d)) d.setDate(d.getDate() - 1); return d })()
+}
 
 const Timeline = forwardRef(function Timeline({
   viewMode, year, quarter,
@@ -30,7 +37,8 @@ const Timeline = forwardRef(function Timeline({
   const rowRefsMap   = useRef({})
 
   const [containerW, setContainerW] = useState(0)
-  const [dropTarget, setDropTarget] = useState(null)
+  const [activeDrag, setActiveDrag] = useState(null) // floating clone drag state
+  const [scrollLeft, setScrollLeft] = useState(0)    // for viewport-edge badges
 
   const totalRange = getTotalRange(year)
   const totalStart = totalRange.start
@@ -45,61 +53,73 @@ const Timeline = forwardRef(function Timeline({
   useEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver(() => {
-      setContainerW(containerRef.current?.clientWidth || 0)
+      const w = containerRef.current?.clientWidth || 0
+      setContainerW(w)
+      // keep CSS var in sync for sticky/badge positioning
+      if (scrollRef.current) {
+        scrollRef.current.style.setProperty('--cw', (w - PERSON_COL_W) + 'px')
+      }
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
     return () => ro.disconnect()
   }, [])
 
+  // Scroll listener (lightweight — updates CSS var + throttled React state)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let rafId
+    const handler = () => {
+      el.style.setProperty('--sl', el.scrollLeft + 'px')
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => setScrollLeft(el.scrollLeft))
+    }
+    el.addEventListener('scroll', handler, { passive: true })
+    return () => { el.removeEventListener('scroll', handler); cancelAnimationFrame(rafId) }
+  }, [])
+
   // ── Scroll helpers ────────────────────────────────────────────────────────
+  const dateToGridX = useCallback((date) =>
+    diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth,
+  [dayWidth, totalStart])
+
   const scrollToDate = useCallback((date) => {
     if (!scrollRef.current || dayWidth <= 0) return
     const idx = diffDays(startOfDay(totalStart), startOfDay(date))
     scrollRef.current.scrollLeft = Math.max(0, idx * dayWidth)
   }, [dayWidth, totalStart])
 
+  // Jump to start of current period (with left-padding buffer)
   const scrollToToday = useCallback(() => {
-    scrollToDate(new Date())
-  }, [scrollToDate])
+    const today = new Date()
+    const yr = today.getFullYear()
+    const q  = getQuarterForMonth(today.getMonth())
+    const { start } = viewMode === 'year'
+      ? getYearRange(yr)
+      : getQuarterRange(yr, q)
+    scrollToDate(addDays(start, -VIEW_PAD_DAYS))
+  }, [viewMode, scrollToDate])
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
-  // Scroll to start of view whenever dayWidth or view changes
+  // Auto-scroll when view/year/quarter changes
   useEffect(() => {
     if (dayWidth <= 0) return
     const { start } = viewMode === 'year'
       ? getYearRange(year)
       : getQuarterRange(year, quarter)
-    scrollToDate(start)
+    scrollToDate(addDays(start, -VIEW_PAD_DAYS))
   }, [dayWidth, viewMode, year, quarter]) // eslint-disable-line
 
-  // ── Today position ────────────────────────────────────────────────────────
+  // ── Today line ────────────────────────────────────────────────────────────
   const today    = startOfDay(new Date())
   const todayIdx = diffDays(startOfDay(totalStart), today)
   const todayX   = todayIdx >= 0 && todayIdx < allDays.length
     ? PERSON_COL_W + todayIdx * dayWidth + dayWidth / 2
     : null
 
-  // ── Filtered people (OR logic when both person + team filters active) ─────
-  const visiblePeople = people.filter((p) => {
-    const noFilter = filterPersonIds.length === 0 && filterTeamIds.length === 0
-    if (noFilter) return true
-    if (filterPersonIds.length > 0 && filterTeamIds.length > 0) {
-      // OR: show person if they match either filter
-      return filterPersonIds.includes(p.id) || filterTeamIds.includes(p.teamId)
-    }
-    if (filterPersonIds.length > 0) return filterPersonIds.includes(p.id)
-    if (filterTeamIds.length > 0)   return filterTeamIds.includes(p.teamId)
-    return true
-  })
-
-  // Tasks with no valid assignee
-  const unassignedTasks = tasks.filter(
-    (t) => !t.assigneeId || !people.find((p) => p.id === t.assigneeId)
-  )
-
-  // ── Drag helpers ──────────────────────────────────────────────────────────
+  // ── Resolve person from cursor Y ─────────────────────────────────────────
   const resolveAssigneeFromY = (clientY) => {
     for (const [personId, el] of Object.entries(rowRefsMap.current)) {
       if (!el) continue
@@ -109,49 +129,121 @@ const Timeline = forwardRef(function Timeline({
     return null
   }
 
-  const handleDragMove = useCallback((clientY) => {
-    setDropTarget(resolveAssigneeFromY(clientY))
-  }, []) // eslint-disable-line
-
-  const handleDragEnd = (taskId, currentAssigneeId, updates, clientY) => {
-    const newAssigneeId = resolveAssigneeFromY(clientY)
-    const finalUpdates = { ...updates }
-    if (newAssigneeId && newAssigneeId !== currentAssigneeId) {
-      finalUpdates.assigneeId = newAssigneeId === '__unassigned__' ? null : newAssigneeId
+  // ── Move-drag (lifted from TaskBar) ─────────────────────────────────────
+  const startMoveDrag = useCallback((task, e, barRect) => {
+    if (readOnly) return
+    const drag = {
+      task,
+      origAssigneeId: task.assigneeId || null,
+      targetAssigneeId: task.assigneeId || null,
+      startCursorX: e.clientX,
+      startCursorY: e.clientY,
+      cursorX: e.clientX,
+      cursorY: e.clientY,
+      barRect,
     }
-    onUpdateTask(taskId, finalUpdates)
-    setDropTarget(null)
+    const dragRef = { current: drag }
+    setActiveDrag(drag)
+
+    const onMove = (me) => {
+      const target = resolveAssigneeFromY(me.clientY)
+      const updated = {
+        ...dragRef.current,
+        cursorX: me.clientX,
+        cursorY: me.clientY,
+        targetAssigneeId: target || dragRef.current.origAssigneeId,
+      }
+      dragRef.current = updated
+      setActiveDrag({ ...updated })
+    }
+
+    const onUp = () => {
+      const d = dragRef.current
+      if (d) {
+        const daysDelta = Math.round((d.cursorX - d.startCursorX) / dayWidth)
+        const updates = {}
+        const ns = snapWeekday(addDays(new Date(d.task.startDate), daysDelta), daysDelta >= 0)
+        const ne = snapWeekday(addDays(new Date(d.task.endDate),   daysDelta), daysDelta >= 0)
+        if (toDateString(ns) !== d.task.startDate) updates.startDate = toDateString(ns)
+        if (toDateString(ne) !== d.task.endDate)   updates.endDate   = toDateString(ne)
+        if (d.targetAssigneeId !== d.origAssigneeId) {
+          updates.assigneeId = d.targetAssigneeId === '__unassigned__' ? null : d.targetAssigneeId
+        }
+        if (Object.keys(updates).length > 0) onUpdateTask(d.task.id, updates)
+      }
+      dragRef.current = null
+      setActiveDrag(null)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [dayWidth, readOnly, onUpdateTask]) // eslint-disable-line
+
+  // ── Filter logic (PM = task-based filter) ────────────────────────────────
+  // PM filter: show persons who have tasks with matching PM; filter tasks in row
+  // Person filter: show only selected persons; show all their tasks
+  // Both: show selected persons; show only tasks with matching PM
+
+  const getPmFilteredTasks = (personTasks) =>
+    filterTeamIds.length > 0
+      ? personTasks.filter((t) => filterTeamIds.includes(t.teamId))
+      : personTasks
+
+  let visiblePeople = people
+  if (filterPersonIds.length > 0 && filterTeamIds.length === 0) {
+    visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
+  } else if (filterTeamIds.length > 0 && filterPersonIds.length === 0) {
+    // PM filter only: show persons who have at least one task with that PM
+    const personIdsWithMatch = new Set(
+      tasks.filter((t) => filterTeamIds.includes(t.teamId)).map((t) => t.assigneeId).filter(Boolean)
+    )
+    visiblePeople = people.filter((p) => personIdsWithMatch.has(p.id))
+  } else if (filterPersonIds.length > 0 && filterTeamIds.length > 0) {
+    // Both: AND logic — selected persons AND tasks with matching PM
+    visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   }
+
+  const unassignedTasks = getPmFilteredTasks(
+    tasks.filter((t) => !t.assigneeId || !people.find((p) => p.id === t.assigneeId))
+  )
 
   // ── Month groups ──────────────────────────────────────────────────────────
   const monthGroups = groupDaysByMonth(allDays)
 
-  // ── Render a person's task row ────────────────────────────────────────────
+  // ── Render each person's row ──────────────────────────────────────────────
   const renderPersonRow = (person, rowTasks, isUnassigned = false) => {
     const personId    = person ? person.id : '__unassigned__'
     const personName  = person ? person.name : 'Unassigned'
     const personColor = person ? (person.color || getAvatarColor(person.name)) : '#9ca3af'
-    const team        = person ? teams.find((t) => t.id === person.teamId) : null
 
-    // Sort by start date; each task gets its own row (no overlap packing)
+    // Sort by start date; each task = its own row
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
-    // Separate tasks outside the renderable range
     const pastTasks    = sorted.filter((t) => new Date(t.endDate)   < totalStart)
     const futureTasks  = sorted.filter((t) => new Date(t.startDate) > totalEnd)
     const inRangeTasks = sorted.filter(
       (t) => !(new Date(t.endDate) < totalStart) && !(new Date(t.startDate) > totalEnd)
     )
-
-    // Assign a lane index to each in-range task
     const lanedTasks = inRangeTasks.map((t, i) => ({ ...t, _lane: i }))
 
-    const numVisible = inRangeTasks.length
+    // Extra slot for incoming drag from another row
+    const isIncomingDrag = activeDrag &&
+      activeDrag.targetAssigneeId === personId &&
+      activeDrag.origAssigneeId  !== personId
+    const extraSlots = isIncomingDrag ? 1 : 0
+
+    const numVisible = inRangeTasks.length + extraSlots
     const rowH = numVisible > 0
       ? ROW_PAD_TOP + numVisible * LANE_H + (numVisible - 1) * LANE_GAP + ROW_PAD_BOT
       : MIN_ROW_H
 
-    const isDropTgt = dropTarget === personId
+    const isDropTgt = activeDrag?.targetAssigneeId === personId
+
+    // Visible portion of the grid area (for viewport-edge badges)
+    const visLeft  = scrollLeft                                  // grid-area left visible
+    const visRight = scrollLeft + containerW - PERSON_COL_W     // grid-area right visible
 
     return (
       <div
@@ -178,7 +270,6 @@ const Timeline = forwardRef(function Timeline({
           </div>
           <div className="timeline__person-info">
             <div className="timeline__person-name">{personName}</div>
-            {team && <div className="timeline__person-team">{team.name}</div>}
             {!readOnly && person && (
               <button className="timeline__add-task-btn" onClick={() => onAddTaskForPerson(personId)}>
                 + task
@@ -187,29 +278,62 @@ const Timeline = forwardRef(function Timeline({
           </div>
         </div>
 
-        {/* Grid area with task bars */}
+        {/* Grid area */}
         <div className="timeline__grid-area" style={{ minHeight: rowH }}>
-          {lanedTasks.map((task) => (
-            <TaskBar
-              key={task.id}
-              task={task}
-              totalStart={totalStart}
-              dayWidth={dayWidth}
-              laneIndex={task._lane}
-              rowPaddingTop={ROW_PAD_TOP}
-              laneHeight={LANE_H}
-              laneGap={LANE_GAP}
-              people={people}
-              teams={teams}
-              onDelete={() => onDeleteTask(task.id)}
-              onDragEnd={(updates, clientY) => handleDragEnd(task.id, task.assigneeId, updates, clientY)}
-              onDragMove={handleDragMove}
-              onEdit={() => onEditTask && onEditTask(task)}
-              readOnly={readOnly}
-            />
-          ))}
+          {lanedTasks.map((task) => {
+            const isGhost = activeDrag?.task?.id === task.id
+            return (
+              <TaskBar
+                key={task.id}
+                task={task}
+                totalStart={totalStart}
+                dayWidth={dayWidth}
+                laneIndex={task._lane}
+                rowPaddingTop={ROW_PAD_TOP}
+                laneHeight={LANE_H}
+                laneGap={LANE_GAP}
+                people={people}
+                teams={teams}
+                onDelete={() => onDeleteTask(task.id)}
+                onResizeDone={(updates) => onUpdateTask(task.id, updates)}
+                onMoveDragStart={startMoveDrag}
+                onEdit={() => onEditTask && onEditTask(task)}
+                isGhost={isGhost}
+                readOnly={readOnly}
+              />
+            )
+          })}
 
-          {/* Outside-range indicator chips */}
+          {/* Viewport-edge badges for scrolled-off tasks */}
+          {lanedTasks.map((task) => {
+            const x = dateToGridX(task.startDate)
+            const w = Math.max(dayWidth,
+              (diffDays(startOfDay(new Date(task.startDate)), startOfDay(new Date(task.endDate))) + 1) * dayWidth
+            )
+            const laneY = ROW_PAD_TOP + task._lane * (LANE_H + LANE_GAP)
+            const taskColor = task.color || '#6366f1'
+            const isOffLeft  = x + w < visLeft
+            const isOffRight = x > visRight
+
+            if (!isOffLeft && !isOffRight) return null
+            return (
+              <div
+                key={`badge-${task.id}`}
+                className="timeline__vp-badge"
+                style={{
+                  top: laneY + (LANE_H - 20) / 2,
+                  left: isOffLeft
+                    ? Math.max(0, visLeft + 4)
+                    : Math.min(totalW - 164, visRight - 164),
+                  background: taskColor,
+                }}
+              >
+                {isOffLeft ? '←' : '→'} {task.title}
+              </div>
+            )
+          })}
+
+          {/* Outside-range chips */}
           {(pastTasks.length > 0 || futureTasks.length > 0) && (
             <div className="timeline__out-chips">
               {pastTasks.length > 0 && (
@@ -237,122 +361,146 @@ const Timeline = forwardRef(function Timeline({
     )
   }
 
-  return (
-    <div className="timeline" ref={containerRef}>
+  // ── Floating drag overlay ─────────────────────────────────────────────────
+  const renderDragOverlay = () => {
+    if (!activeDrag) return null
+    const { task, barRect, startCursorX, startCursorY, cursorX, cursorY } = activeDrag
+    const dx = cursorX - startCursorX
+    const dy = cursorY - startCursorY
+    const assignee  = people.find((p) => p.id === task.assigneeId)
+    const pmTeam    = teams.find((t)  => t.id === task.teamId)
+    const taskColor = task.color || '#6366f1'
+    const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
+
+    return (
       <div
-        className="timeline__scroll"
-        ref={scrollRef}
-        style={{ '--pcol': `${PERSON_COL_W}px` }}
+        className="task-drag-overlay"
+        style={{
+          left:   barRect.left + dx,
+          top:    barRect.top  + dy,
+          width:  barRect.width,
+          height: barRect.height,
+          background: taskColor,
+        }}
       >
-        <div className="timeline__inner" style={{ width: PERSON_COL_W + totalW }}>
+        {assignee && (
+          <div className="task-bar__avatars" style={{ marginRight: 5 }}>
+            <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
+              {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
+            </div>
+            {pmTeam && (
+              <div className="task-bar__avatar task-bar__avatar--second" style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}>
+                {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
+        <span className="task-drag-overlay__title">{task.title}</span>
+      </div>
+    )
+  }
 
-          {/* ── Sticky header ────────────────────────────────────────────── */}
-          <div className="timeline__header">
-            {/* Person col header — sticky left */}
-            <div className="timeline__header-person-col">Team</div>
+  return (
+    <>
+      <div className="timeline" ref={containerRef}>
+        <div
+          className="timeline__scroll"
+          ref={scrollRef}
+          style={{ '--pcol': `${PERSON_COL_W}px` }}
+        >
+          <div className="timeline__inner" style={{ width: PERSON_COL_W + totalW }}>
 
-            {/* Date rows — scrolls with content */}
-            <div className="timeline__header-grid">
-              {/* Quarter row (year view only) */}
-              {viewMode === 'year' && (
-                <div className="timeline__quarter-row">
-                  {[1, 2, 3, 4].map((q) => {
-                    const qDays = allDays.filter(
-                      (d) => getQuarterForMonth(d.getMonth()) === q && d.getFullYear() === year
-                    )
-                    if (!qDays.length) return null
+            {/* ── Sticky header ──────────────────────────────────────── */}
+            <div className="timeline__header">
+              <div className="timeline__header-person-col">Designer</div>
+              <div className="timeline__header-grid">
+                {/* Quarter row (year view only) */}
+                {viewMode === 'year' && (
+                  <div className="timeline__quarter-row">
+                    {[1, 2, 3, 4].map((q) => {
+                      const qDays = allDays.filter(
+                        (d) => getQuarterForMonth(d.getMonth()) === q && d.getFullYear() === year
+                      )
+                      if (!qDays.length) return null
+                      return (
+                        <div
+                          key={q}
+                          className={`timeline__quarter-cell${q % 2 === 0 ? ' timeline__quarter-cell--even' : ''}`}
+                          style={{ width: qDays.length * dayWidth }}
+                        >
+                          Q{q} {year}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Month row */}
+                <div className="timeline__month-row">
+                  {monthGroups.map((mg, i) => {
+                    const label = viewMode === 'year'
+                      ? (mg.month === 0 ? `${MONTHS_SHORT[mg.month]} ${mg.year}` : MONTHS_SHORT[mg.month])
+                      : `${MONTHS_SHORT[mg.month]} ${mg.year}`
                     return (
-                      <div
-                        key={q}
-                        className={`timeline__quarter-cell${q % 2 === 0 ? ' timeline__quarter-cell--even' : ''}`}
-                        style={{ width: qDays.length * dayWidth }}
-                      >
-                        Q{q} {year}
+                      <div key={i} className="timeline__month-cell" style={{ width: mg.days.length * dayWidth }}>
+                        {label}
                       </div>
                     )
                   })}
                 </div>
+                {/* No day row — removed per user request */}
+              </div>
+            </div>
+
+            {/* ── Body ─────────────────────────────────────────────── */}
+            <div className="timeline__body">
+              {/* Weekend shading */}
+              {allDays.map((d, i) => isWeekend(d) ? (
+                <div
+                  key={`we-${i}`}
+                  className="timeline__weekend-col"
+                  style={{ left: PERSON_COL_W + i * dayWidth, width: dayWidth }}
+                />
+              ) : null)}
+
+              {/* Month boundary lines */}
+              {monthGroups.map((mg, i) => {
+                const x = allDays.findIndex(
+                  (d) => d.getMonth() === mg.month && d.getFullYear() === mg.year
+                ) * dayWidth
+                return <div key={`ml-${i}`} className="timeline__month-line" style={{ left: PERSON_COL_W + x }} />
+              })}
+
+              {/* Today line */}
+              {todayX !== null && (
+                <div className="timeline__today-line" style={{ left: todayX }}>
+                  <div className="timeline__today-label">TODAY</div>
+                </div>
               )}
 
-              {/* Month row */}
-              <div className="timeline__month-row">
-                {monthGroups.map((mg, i) => {
-                  // Year view: only show year on January; other views show month + year
-                  const label = viewMode === 'year'
-                    ? (mg.month === 0 ? `${MONTHS_SHORT[mg.month]} ${mg.year}` : MONTHS_SHORT[mg.month])
-                    : `${MONTHS_SHORT[mg.month]} ${mg.year}`
-                  return (
-                    <div key={i} className="timeline__month-cell" style={{ width: mg.days.length * dayWidth }}>
-                      {label}
-                    </div>
-                  )
-                })}
-              </div>
+              {/* Person rows */}
+              {visiblePeople.map((person) => {
+                const allPersonTasks = tasks.filter((t) => t.assigneeId === person.id)
+                const rowTasks = getPmFilteredTasks(allPersonTasks)
+                return renderPersonRow(person, rowTasks)
+              })}
 
-              {/* Day row (quarter view only) */}
-              {viewMode === 'quarter' && (
-                <div className="timeline__day-row">
-                  {allDays.map((d, i) => (
-                    <div
-                      key={i}
-                      className={`timeline__day-cell${isWeekend(d) ? ' timeline__day-cell--weekend' : ''}`}
-                      style={{ width: dayWidth }}
-                    >
-                      {dayWidth >= 18 ? d.getDate() : ''}
-                    </div>
-                  ))}
+              {/* Unassigned row */}
+              {unassignedTasks.length > 0 && renderPersonRow(null, unassignedTasks, true)}
+
+              {visiblePeople.length === 0 && unassignedTasks.length === 0 && (
+                <div className="timeline__empty">
+                  No people added yet. Use the Add button to get started.
                 </div>
               )}
             </div>
           </div>
-
-          {/* ── Body ─────────────────────────────────────────────────────── */}
-          <div className="timeline__body">
-
-            {/* Weekend shading — behind tasks (z-index: 0 in CSS) */}
-            {allDays.map((d, i) => isWeekend(d) ? (
-              <div
-                key={`we-${i}`}
-                className="timeline__weekend-col"
-                style={{ left: PERSON_COL_W + i * dayWidth, width: dayWidth }}
-              />
-            ) : null)}
-
-            {/* Month boundary lines */}
-            {monthGroups.map((mg, i) => {
-              const x = allDays.findIndex(
-                (d) => d.getMonth() === mg.month && d.getFullYear() === mg.year
-              ) * dayWidth
-              return (
-                <div key={`ml-${i}`} className="timeline__month-line" style={{ left: PERSON_COL_W + x }} />
-              )
-            })}
-
-            {/* Today line */}
-            {todayX !== null && (
-              <div className="timeline__today-line" style={{ left: todayX }}>
-                <div className="timeline__today-label">TODAY</div>
-              </div>
-            )}
-
-            {/* Person rows */}
-            {visiblePeople.map((person) => {
-              const rowTasks = tasks.filter((t) => t.assigneeId === person.id)
-              return renderPersonRow(person, rowTasks)
-            })}
-
-            {/* Unassigned row */}
-            {unassignedTasks.length > 0 && renderPersonRow(null, unassignedTasks, true)}
-
-            {visiblePeople.length === 0 && unassignedTasks.length === 0 && (
-              <div className="timeline__empty">
-                No people added yet. Use the Add button to get started.
-              </div>
-            )}
-          </div>
         </div>
       </div>
-    </div>
+
+      {/* Floating drag clone — rendered outside scroll container so it can go anywhere */}
+      {renderDragOverlay()}
+    </>
   )
 })
 
