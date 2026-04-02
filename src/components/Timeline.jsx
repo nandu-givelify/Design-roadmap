@@ -9,7 +9,7 @@ import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 const PERSON_COL_W = 200
-const LANE_H       = 50
+const LANE_H       = 40
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
@@ -242,15 +242,27 @@ const Timeline = forwardRef(function Timeline({
     const personName  = person ? person.name : 'Unassigned'
     const personColor = person ? (person.color || getAvatarColor(person.name)) : '#9ca3af'
 
-    // Sort by start date; each task = its own row
+    // Sort by start date; each task = its own lane
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
-    const pastTasks    = sorted.filter((t) => parseLocalDate(t.endDate)   < totalStart)
-    const futureTasks  = sorted.filter((t) => parseLocalDate(t.startDate) > totalEnd)
-    const inRangeTasks = sorted.filter(
+    // All tasks within the full scrollable total range (for rendering)
+    const allInRange = sorted.filter(
       (t) => !(parseLocalDate(t.endDate) < totalStart) && !(parseLocalDate(t.startDate) > totalEnd)
     )
-    const lanedTasks = inRangeTasks.map((t, i) => ({ ...t, _lane: i }))
+    const lanedTasks = allInRange.map((t, i) => ({ ...t, _lane: i }))
+
+    // Visible window: only tasks whose bars overlap the current scroll viewport
+    // Used to determine row height dynamically as user scrolls
+    const visibleStart = dayWidth > 0
+      ? addDays(totalStart, Math.floor(scrollLeft / dayWidth))
+      : totalStart
+    const visibleEnd = dayWidth > 0
+      ? addDays(totalStart, Math.ceil((scrollLeft + containerW - PERSON_COL_W) / dayWidth))
+      : totalEnd
+
+    const visibleLanedTasks = lanedTasks.filter(
+      (t) => parseLocalDate(t.endDate) >= visibleStart && parseLocalDate(t.startDate) <= visibleEnd
+    )
 
     // Extra slot for incoming drag from another row
     const isIncomingDrag = activeDrag &&
@@ -258,16 +270,13 @@ const Timeline = forwardRef(function Timeline({
       activeDrag.origAssigneeId  !== personId
     const extraSlots = isIncomingDrag ? 1 : 0
 
-    const numVisible = inRangeTasks.length + extraSlots
+    // Row height based on tasks visible in the current scroll window
+    const numVisible = visibleLanedTasks.length + extraSlots
     const rowH = numVisible > 0
       ? ROW_PAD_TOP + numVisible * LANE_H + (numVisible - 1) * LANE_GAP + ROW_PAD_BOT
       : MIN_ROW_H
 
     const isDropTgt = activeDrag?.targetAssigneeId === personId
-
-    // Visible portion of the grid area (for viewport-edge badges)
-    const visLeft  = scrollLeft                                  // grid-area left visible
-    const visRight = scrollLeft + containerW - PERSON_COL_W     // grid-area right visible
 
     return (
       <div
@@ -302,7 +311,7 @@ const Timeline = forwardRef(function Timeline({
           </div>
         </div>
 
-        {/* Grid area */}
+        {/* Grid area — render all in-range tasks (for scrolling), height driven by visible tasks */}
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
@@ -331,58 +340,6 @@ const Timeline = forwardRef(function Timeline({
               />
             )
           })}
-
-          {/* Viewport-edge badges for scrolled-off tasks */}
-          {lanedTasks.map((task) => {
-            const x = dateToGridX(task.startDate)
-            const w = Math.max(dayWidth,
-              (diffDays(startOfDay(parseLocalDate(task.startDate)), startOfDay(parseLocalDate(task.endDate))) + 1) * dayWidth
-            )
-            const laneY = ROW_PAD_TOP + task._lane * (LANE_H + LANE_GAP)
-            const taskColor = task.color || '#6366f1'
-            const isOffLeft  = x + w < visLeft
-            const isOffRight = x > visRight
-
-            if (!isOffLeft && !isOffRight) return null
-            return (
-              <div
-                key={`badge-${task.id}`}
-                className="timeline__vp-badge"
-                style={{
-                  top: laneY + (LANE_H - 20) / 2,
-                  left: isOffLeft
-                    ? Math.max(0, visLeft + 4)
-                    : Math.min(totalW - 164, visRight - 164),
-                }}
-              >
-                {isOffLeft ? '←' : '→'} {task.title}
-              </div>
-            )
-          })}
-
-          {/* Outside-range chips */}
-          {(pastTasks.length > 0 || futureTasks.length > 0) && (
-            <div className="timeline__out-chips">
-              {pastTasks.length > 0 && (
-                <div
-                  className="timeline__out-chip timeline__out-chip--past"
-                  style={{ background: pastTasks[0].color || '#6366f1' }}
-                  title={pastTasks.map((t) => t.title).join(', ')}
-                >
-                  ← {pastTasks.length}
-                </div>
-              )}
-              {futureTasks.length > 0 && (
-                <div
-                  className="timeline__out-chip timeline__out-chip--future"
-                  style={{ background: futureTasks[0].color || '#6366f1' }}
-                  title={futureTasks.map((t) => t.title).join(', ')}
-                >
-                  {futureTasks.length} →
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     )

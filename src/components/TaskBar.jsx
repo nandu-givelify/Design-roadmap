@@ -1,7 +1,7 @@
 import { useRef, useState, useLayoutEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
-const BAR_H = 50
+const BAR_H = 40
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
@@ -43,7 +43,7 @@ export default function TaskBar({
     const naturalW = hiddenTitleRef.current.offsetWidth
     // Available width inside bar: total width minus 8px padding each side minus avatar stack
     // Avatars: 32px each, second overlaps by 10px, plus 6px margin-right
-    const avatarW = (assignee ? 32 : 0) + (pmTeam ? 22 : 0) + ((assignee || pmTeam) ? 6 : 0)
+    const avatarW = (assignee ? 28 : 0) + (pmTeam ? 18 : 0) + ((assignee || pmTeam) ? 6 : 0)
     const availW = w - 16 - avatarW
     // Move outside when 70% or more of text would be hidden (only 30% visible)
     setIsNarrow(availW < naturalW * 0.3)
