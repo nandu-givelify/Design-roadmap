@@ -3,7 +3,7 @@ import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
   MONTHS_SHORT, getQuarterForMonth,
-  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS,
+  getAvatarColor, addDays, toDateString, nextWorkday, VIEW_PAD_DAYS, formatDateShort,
 } from '../utils/dateUtils'
 import TaskBar from './TaskBar'
 
@@ -160,16 +160,24 @@ const Timeline = forwardRef(function Timeline({
     const onUp = () => {
       const d = dragRef.current
       if (d) {
-        const daysDelta = Math.round((d.cursorX - d.startCursorX) / dayWidth)
-        const updates = {}
-        const ns = snapWeekday(addDays(new Date(d.task.startDate), daysDelta), daysDelta >= 0)
-        const ne = snapWeekday(addDays(new Date(d.task.endDate),   daysDelta), daysDelta >= 0)
-        if (toDateString(ns) !== d.task.startDate) updates.startDate = toDateString(ns)
-        if (toDateString(ne) !== d.task.endDate)   updates.endDate   = toDateString(ne)
-        if (d.targetAssigneeId !== d.origAssigneeId) {
-          updates.assigneeId = d.targetAssigneeId === '__unassigned__' ? null : d.targetAssigneeId
+        const ddx = d.cursorX - d.startCursorX
+        const ddy = d.cursorY - d.startCursorY
+        const dist = Math.sqrt(ddx * ddx + ddy * ddy)
+        if (dist < 5) {
+          // Treat as click → open edit modal
+          if (onEditTask) onEditTask(d.task)
+        } else {
+          const daysDelta = Math.round(ddx / dayWidth)
+          const updates = {}
+          const ns = snapWeekday(addDays(new Date(d.task.startDate), daysDelta), daysDelta >= 0)
+          const ne = snapWeekday(addDays(new Date(d.task.endDate),   daysDelta), daysDelta >= 0)
+          if (toDateString(ns) !== d.task.startDate) updates.startDate = toDateString(ns)
+          if (toDateString(ne) !== d.task.endDate)   updates.endDate   = toDateString(ne)
+          if (d.targetAssigneeId !== d.origAssigneeId) {
+            updates.assigneeId = d.targetAssigneeId === '__unassigned__' ? null : d.targetAssigneeId
+          }
+          if (Object.keys(updates).length > 0) onUpdateTask(d.task.id, updates)
         }
-        if (Object.keys(updates).length > 0) onUpdateTask(d.task.id, updates)
       }
       dragRef.current = null
       setActiveDrag(null)
@@ -364,13 +372,21 @@ const Timeline = forwardRef(function Timeline({
   // ── Floating drag overlay ─────────────────────────────────────────────────
   const renderDragOverlay = () => {
     if (!activeDrag) return null
-    const { task, barRect, startCursorX, startCursorY, cursorX, cursorY } = activeDrag
+    const { task, barRect, startCursorX, startCursorY, cursorX, cursorY, targetAssigneeId } = activeDrag
     const dx = cursorX - startCursorX
     const dy = cursorY - startCursorY
-    const assignee  = people.find((p) => p.id === task.assigneeId)
+
+    // Show target person's avatar when dragging to a different row
+    const displayAssigneeId = targetAssigneeId || task.assigneeId
+    const assignee  = people.find((p) => p.id === displayAssigneeId)
     const pmTeam    = teams.find((t)  => t.id === task.teamId)
     const taskColor = task.color || '#6366f1'
     const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
+
+    // Compute drag date tooltips
+    const daysDelta = dayWidth > 0 ? Math.round(dx / dayWidth) : 0
+    const dragStart = snapWeekday(addDays(new Date(task.startDate), daysDelta), daysDelta >= 0)
+    const dragEnd   = snapWeekday(addDays(new Date(task.endDate),   daysDelta), daysDelta >= 0)
 
     return (
       <div
@@ -383,11 +399,13 @@ const Timeline = forwardRef(function Timeline({
           background: taskColor,
         }}
       >
-        {assignee && (
+        {(assignee || pmTeam) && (
           <div className="task-bar__avatars" style={{ marginRight: 5 }}>
-            <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
-              {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
-            </div>
+            {assignee && (
+              <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
+                {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
+              </div>
+            )}
             {pmTeam && (
               <div className="task-bar__avatar task-bar__avatar--second" style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}>
                 {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
@@ -396,6 +414,9 @@ const Timeline = forwardRef(function Timeline({
           </div>
         )}
         <span className="task-drag-overlay__title">{task.title}</span>
+        {/* Date tooltips */}
+        <div className="task-bar__tooltip task-bar__tooltip--left">{formatDateShort(dragStart)}</div>
+        <div className="task-bar__tooltip task-bar__tooltip--right">{formatDateShort(dragEnd)}</div>
       </div>
     )
   }
@@ -414,27 +435,6 @@ const Timeline = forwardRef(function Timeline({
             <div className="timeline__header">
               <div className="timeline__header-person-col">Designer</div>
               <div className="timeline__header-grid">
-                {/* Quarter row (year view only) */}
-                {viewMode === 'year' && (
-                  <div className="timeline__quarter-row">
-                    {[1, 2, 3, 4].map((q) => {
-                      const qDays = allDays.filter(
-                        (d) => getQuarterForMonth(d.getMonth()) === q && d.getFullYear() === year
-                      )
-                      if (!qDays.length) return null
-                      return (
-                        <div
-                          key={q}
-                          className={`timeline__quarter-cell${q % 2 === 0 ? ' timeline__quarter-cell--even' : ''}`}
-                          style={{ width: qDays.length * dayWidth }}
-                        >
-                          Q{q} {year}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
                 {/* Month row */}
                 <div className="timeline__month-row">
                   {monthGroups.map((mg, i) => {

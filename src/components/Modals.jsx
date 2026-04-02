@@ -68,6 +68,10 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const isTeamLike = type === 'team' || type === 'pm'
+  const typeLabel  = type === 'pm' ? 'PM' : type === 'team' ? 'team' : 'person'
+  const namePlaceholder = type === 'person' ? 'Full name' : type === 'pm' ? 'PM name' : 'Team name'
+
   const filtered = query
     ? options.filter((o) => o.name.toLowerCase().includes(query.toLowerCase()))
     : options
@@ -87,7 +91,7 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
       {selected ? (
         <div className="combobox__selected-badge" onClick={() => { setOpen(true); setQuery('') }}>
           <div
-            className={`combobox__option-avatar${type === 'team' ? ' combobox__option-avatar--team' : ''}`}
+            className={`combobox__option-avatar${isTeamLike ? ' combobox__option-avatar--team' : ''}`}
             style={{ background: type === 'person' ? (selected.color || getAvatarColor(selected.name)) : '#6366f1' }}
           >
             {selected.photo ? <img src={selected.photo} alt="" /> : selected.name?.charAt(0)}
@@ -116,7 +120,7 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
               onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}
             >
               <div
-                className={`combobox__option-avatar${type === 'team' ? ' combobox__option-avatar--team' : ''}`}
+                className={`combobox__option-avatar${isTeamLike ? ' combobox__option-avatar--team' : ''}`}
                 style={{ background: type === 'person' ? (opt.color || getAvatarColor(opt.name)) : '#6366f1' }}
               >
                 {opt.photo ? <img src={opt.photo} alt="" /> : opt.name?.charAt(0)}
@@ -130,13 +134,13 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
 
           {!showCreate ? (
             <div className="combobox__option combobox__option--add" onClick={() => setShowCreate(true)}>
-              + Add new {type}…
+              + Add new {typeLabel}…
             </div>
           ) : (
             <div className="combobox__inline-form" onClick={(e) => e.stopPropagation()}>
               <input
                 className="field__input"
-                placeholder={type === 'person' ? 'Full name' : 'Team name'}
+                placeholder={namePlaceholder}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 autoFocus
@@ -167,7 +171,7 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
 }
 
 // ── Task fields (shared between Add and Edit modals) ──────────────────────────
-function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam }) {
+function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, onStartDateChange, onEndDateChange }) {
   return (
     <>
       <Field label="Task title *">
@@ -198,16 +202,27 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam }) 
           options={teams}
           placeholder="Search or add PM…"
           onCreateNew={onCreateTeam}
-          type="team"
+          type="pm"
         />
       </Field>
 
       <div className="field__row">
         <Field label="Start date">
-          <input className="field__input" type="date" value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
+          <input
+            className="field__input"
+            type="date"
+            value={form.startDate}
+            onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)}
+          />
         </Field>
         <Field label="End date">
-          <input className="field__input" type="date" value={form.endDate} min={form.startDate} onChange={(e) => set('endDate', e.target.value)} />
+          <input
+            className="field__input"
+            type="date"
+            value={form.endDate}
+            min={form.startDate}
+            onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)}
+          />
         </Field>
       </div>
 
@@ -242,7 +257,22 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, o
     endDate:    toDateString(endDate),
     color:      TASK_COLORS[0],
   })
+  const [endDateTouched, setEndDateTouched] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  // When start date changes, auto-set end date to 1 month later (unless user already set end date)
+  const handleStartDateChange = (v) => {
+    set('startDate', v)
+    if (!endDateTouched) {
+      const newEnd = addMonths(new Date(v), 1)
+      set('endDate', toDateString(newEnd))
+    }
+  }
+
+  const handleEndDateChange = (v) => {
+    setEndDateTouched(true)
+    set('endDate', v)
+  }
 
   const handleSave = () => {
     if (!form.title.trim()) return
@@ -257,6 +287,8 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, o
         people={people} teams={teams}
         onCreatePerson={onCreatePerson}
         onCreateTeam={onCreateTeam}
+        onStartDateChange={handleStartDateChange}
+        onEndDateChange={handleEndDateChange}
       />
       <div className="modal-footer">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>

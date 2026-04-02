@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { startOfDay, addDays, diffDays, formatDateShort, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor } from '../utils/dateUtils'
 
 const BAR_H = 34
-const NARROW_W = 68 // below this, show text outside the bar
+const NARROW_W = 180 // below this, move avatars + text outside the bar
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
@@ -115,8 +115,8 @@ export default function TaskBar({
         onMouseDown={handleMoveDown}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
-        {/* Avatar stack */}
-        {(assignee || pmTeam) && (
+        {/* Avatar stack + title inside bar (only when wide enough) */}
+        {!isNarrow && (assignee || pmTeam) && (
           <div className="task-bar__avatars">
             {assignee && (
               <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
@@ -130,19 +130,29 @@ export default function TaskBar({
             )}
           </div>
         )}
-        {/* Title inside bar (hidden when narrow) */}
         {!isNarrow && (
           <span className="task-bar__title">{task.title}</span>
         )}
       </div>
 
-      {/* Title outside bar (when too narrow) */}
+      {/* Avatars + title outside bar (when too narrow) */}
       {isNarrow && (
-        <div
-          className="task-bar__outside-title"
-          style={{ left: w + 5, color: taskColor }}
-        >
-          {task.title}
+        <div className="task-bar__outside-content" style={{ left: w + 5 }}>
+          {(assignee || pmTeam) && (
+            <div className="task-bar__avatars">
+              {assignee && (
+                <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
+                  {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
+              {pmTeam && (
+                <div className="task-bar__avatar task-bar__avatar--second" style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}>
+                  {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+          )}
+          <span className="task-bar__outside-title" style={{ color: taskColor }}>{task.title}</span>
         </div>
       )}
 
