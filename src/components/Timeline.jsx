@@ -245,24 +245,24 @@ const Timeline = forwardRef(function Timeline({
     // Sort by start date; each task = its own lane
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
-    // All tasks within the full scrollable total range (for rendering)
-    const allInRange = sorted.filter(
-      (t) => !(parseLocalDate(t.endDate) < totalStart) && !(parseLocalDate(t.startDate) > totalEnd)
-    )
-    const lanedTasks = allInRange.map((t, i) => ({ ...t, _lane: i }))
-
-    // Visible window: only tasks whose bars overlap the current scroll viewport
-    // Used to determine row height dynamically as user scrolls
+    // Visible scroll window in date space
     const visibleStart = dayWidth > 0
-      ? addDays(totalStart, Math.floor(scrollLeft / dayWidth))
+      ? addDays(totalStart, Math.max(0, Math.floor(scrollLeft / dayWidth)))
       : totalStart
     const visibleEnd = dayWidth > 0
-      ? addDays(totalStart, Math.ceil((scrollLeft + containerW - PERSON_COL_W) / dayWidth))
+      ? addDays(totalStart, Math.ceil((scrollLeft + Math.max(containerW, 1) - PERSON_COL_W) / dayWidth))
       : totalEnd
 
-    const visibleLanedTasks = lanedTasks.filter(
-      (t) => parseLocalDate(t.endDate) >= visibleStart && parseLocalDate(t.startDate) <= visibleEnd
-    )
+    // Only tasks whose bars overlap the current scroll viewport AND the total range.
+    // Lane indices are assigned within this visible subset so they always start at 0.
+    const lanedTasks = sorted
+      .filter((t) => {
+        const ts = parseLocalDate(t.startDate)
+        const te = parseLocalDate(t.endDate)
+        return te >= visibleStart && ts <= visibleEnd &&
+               te >= totalStart  && ts <= totalEnd
+      })
+      .map((t, i) => ({ ...t, _lane: i }))
 
     // Extra slot for incoming drag from another row
     const isIncomingDrag = activeDrag &&
@@ -270,8 +270,8 @@ const Timeline = forwardRef(function Timeline({
       activeDrag.origAssigneeId  !== personId
     const extraSlots = isIncomingDrag ? 1 : 0
 
-    // Row height based on tasks visible in the current scroll window
-    const numVisible = visibleLanedTasks.length + extraSlots
+    // Row height = visible tasks only; shrinks/grows as you scroll
+    const numVisible = lanedTasks.length + extraSlots
     const rowH = numVisible > 0
       ? ROW_PAD_TOP + numVisible * LANE_H + (numVisible - 1) * LANE_GAP + ROW_PAD_BOT
       : MIN_ROW_H
@@ -311,7 +311,7 @@ const Timeline = forwardRef(function Timeline({
           </div>
         </div>
 
-        {/* Grid area — render all in-range tasks (for scrolling), height driven by visible tasks */}
+        {/* Grid area — only render tasks visible in the scroll window; lanes indexed from 0 */}
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
