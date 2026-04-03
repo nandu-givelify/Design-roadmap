@@ -222,8 +222,22 @@ const Timeline = forwardRef(function Timeline({
     if (e.target.closest('.timeline__person-col')) return
     if (e.target.closest('.timeline__bulk-bar')) return
 
-    const startX = e.clientX
-    const startY = e.clientY
+    // Prevent browser text-selection highlight during drag
+    e.preventDefault()
+
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return
+
+    // Compute grid-area bounds in viewport coords — selection is clipped to these
+    const cr = scrollEl.getBoundingClientRect()
+    const gridMinX = cr.left + PERSON_COL_W   // left edge = right of person col
+    const gridMaxX = cr.right
+    const gridMinY = cr.top
+    const gridMaxY = cr.bottom
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+
+    const startX = clamp(e.clientX, gridMinX, gridMaxX)
+    const startY = clamp(e.clientY, gridMinY, gridMaxY)
 
     const hitTest = (curX, curY) => {
       const selLeft   = Math.min(startX, curX)
@@ -243,25 +257,24 @@ const Timeline = forwardRef(function Timeline({
     }
 
     const onMove = (me) => {
-      const curX = me.clientX
-      const curY = me.clientY
+      const curX = clamp(me.clientX, gridMinX, gridMaxX)
+      const curY = clamp(me.clientY, gridMinY, gridMaxY)
       const w = Math.abs(curX - startX)
       const h = Math.abs(curY - startY)
       if (w > 5 || h > 5) {
         setSelectionBox({ startX, startY, curX, curY })
-        // Real-time highlight: update selected IDs as rectangle grows/shrinks
         setSelectedTaskIds(hitTest(curX, curY))
       }
     }
 
     const onUp = (ue) => {
-      const w = Math.abs(ue.clientX - startX)
-      const h = Math.abs(ue.clientY - startY)
+      const curX = clamp(ue.clientX, gridMinX, gridMaxX)
+      const curY = clamp(ue.clientY, gridMinY, gridMaxY)
+      const w = Math.abs(curX - startX)
+      const h = Math.abs(curY - startY)
       if (w <= 5 && h <= 5) {
-        // Plain click — clear selection
         setSelectedTaskIds(new Set())
       }
-      // Otherwise selection is already correct from last onMove
       setSelectionBox(null)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)

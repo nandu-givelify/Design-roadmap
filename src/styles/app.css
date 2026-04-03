@@ -65,7 +65,7 @@ input:focus, select:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
 
 /* ── Timeline ────────────────────────────────────────────────────────────────── */
 .timeline { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.timeline__scroll { flex: 1; overflow: auto; }
+.timeline__scroll { flex: 1; overflow: auto; user-select: none; }
 .timeline__inner { position: relative; display: inline-block; min-width: 100%; }
 
 /* Sticky header */
