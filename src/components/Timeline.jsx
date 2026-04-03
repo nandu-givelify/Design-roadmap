@@ -224,36 +224,44 @@ const Timeline = forwardRef(function Timeline({
 
     const startX = e.clientX
     const startY = e.clientY
-    let moved = false
+
+    const hitTest = (curX, curY) => {
+      const selLeft   = Math.min(startX, curX)
+      const selTop    = Math.min(startY, curY)
+      const selRight  = Math.max(startX, curX)
+      const selBottom = Math.max(startY, curY)
+      const bars = document.querySelectorAll('[data-task-id]')
+      const hitIds = new Set()
+      bars.forEach((bar) => {
+        const rect = bar.getBoundingClientRect()
+        if (rect.left < selRight && rect.right > selLeft &&
+            rect.top < selBottom && rect.bottom > selTop) {
+          hitIds.add(bar.getAttribute('data-task-id'))
+        }
+      })
+      return hitIds
+    }
 
     const onMove = (me) => {
-      moved = true
-      setSelectionBox({ startX, startY, curX: me.clientX, curY: me.clientY })
+      const curX = me.clientX
+      const curY = me.clientY
+      const w = Math.abs(curX - startX)
+      const h = Math.abs(curY - startY)
+      if (w > 5 || h > 5) {
+        setSelectionBox({ startX, startY, curX, curY })
+        // Real-time highlight: update selected IDs as rectangle grows/shrinks
+        setSelectedTaskIds(hitTest(curX, curY))
+      }
     }
 
     const onUp = (ue) => {
-      const selLeft   = Math.min(startX, ue.clientX)
-      const selTop    = Math.min(startY, ue.clientY)
-      const selRight  = Math.max(startX, ue.clientX)
-      const selBottom = Math.max(startY, ue.clientY)
-
-      if (moved && (selRight - selLeft > 5 || selBottom - selTop > 5)) {
-        // Hit-test all rendered task bar inner elements by their viewport rects
-        const bars = document.querySelectorAll('[data-task-id]')
-        const hitIds = new Set()
-        bars.forEach((bar) => {
-          const rect = bar.getBoundingClientRect()
-          if (rect.left < selRight && rect.right > selLeft &&
-              rect.top < selBottom && rect.bottom > selTop) {
-            hitIds.add(bar.getAttribute('data-task-id'))
-          }
-        })
-        setSelectedTaskIds(hitIds)
-      } else {
-        // Plain click on empty space → clear selection
+      const w = Math.abs(ue.clientX - startX)
+      const h = Math.abs(ue.clientY - startY)
+      if (w <= 5 && h <= 5) {
+        // Plain click — clear selection
         setSelectedTaskIds(new Set())
       }
-
+      // Otherwise selection is already correct from last onMove
       setSelectionBox(null)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
