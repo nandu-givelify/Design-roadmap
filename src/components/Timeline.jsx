@@ -452,7 +452,10 @@ const Timeline = forwardRef(function Timeline({
               </div>
             )}
             {pmTeam && (
-              <div className="task-bar__avatar task-bar__avatar--second" style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}>
+              <div
+                className={`task-bar__avatar${assignee ? ' task-bar__avatar--second' : ''}`}
+                style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}
+              >
                 {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
               </div>
             )}
