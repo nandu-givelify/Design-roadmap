@@ -9,7 +9,7 @@ import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 const PERSON_COL_W = 200
-const LANE_H       = 40
+const LANE_H       = 34
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
@@ -38,7 +38,12 @@ const Timeline = forwardRef(function Timeline({
 
   const [containerW, setContainerW] = useState(0)
   const [activeDrag, setActiveDrag] = useState(null) // floating clone drag state
-  const [scrollLeft, setScrollLeft] = useState(0)    // for viewport-edge badges
+  const [scrollLeft, setScrollLeft] = useState(0)
+
+  // ── Multi-select state ────────────────────────────────────────────────────
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
+  const [selectionBox, setSelectionBox]       = useState(null) // {startX,startY,curX,curY} viewport
+  const [bulkAssignOpen, setBulkAssignOpen]   = useState(null) // 'person' | 'pm' | null
 
   const totalRange = getTotalRange(year)
   const totalStart = totalRange.start
@@ -55,7 +60,6 @@ const Timeline = forwardRef(function Timeline({
     const ro = new ResizeObserver(() => {
       const w = containerRef.current?.clientWidth || 0
       setContainerW(w)
-      // keep CSS var in sync for sticky/badge positioning
       if (scrollRef.current) {
         scrollRef.current.style.setProperty('--cw', (w - PERSON_COL_W) + 'px')
       }
@@ -65,7 +69,7 @@ const Timeline = forwardRef(function Timeline({
     return () => ro.disconnect()
   }, [])
 
-  // Scroll listener (lightweight — updates CSS var + throttled React state)
+  // Scroll listener (rAF-throttled React state)
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -79,6 +83,15 @@ const Timeline = forwardRef(function Timeline({
     return () => { el.removeEventListener('scroll', handler); cancelAnimationFrame(rafId) }
   }, [])
 
+  // Escape key clears selection
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   // ── Scroll helpers ────────────────────────────────────────────────────────
   const dateToGridX = useCallback((date) =>
     diffDays(startOfDay(totalStart), startOfDay(parseLocalDate(date))) * dayWidth,
@@ -90,7 +103,6 @@ const Timeline = forwardRef(function Timeline({
     scrollRef.current.scrollLeft = Math.max(0, idx * dayWidth)
   }, [dayWidth, totalStart])
 
-  // Jump to start of current period (with left-padding buffer)
   const scrollToToday = useCallback(() => {
     const today = new Date()
     const yr = today.getFullYear()
@@ -103,7 +115,6 @@ const Timeline = forwardRef(function Timeline({
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
-  // Auto-scroll when view/year/quarter changes
   useEffect(() => {
     if (dayWidth <= 0) return
     const { start } = viewMode === 'year'
@@ -164,7 +175,6 @@ const Timeline = forwardRef(function Timeline({
         const ddy = d.cursorY - d.startCursorY
         const dist = Math.sqrt(ddx * ddx + ddy * ddy)
         if (dist < 5) {
-          // Treat as click → open edit modal
           if (onEditTask) onEditTask(d.task)
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
@@ -189,10 +199,9 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('mouseup', onUp)
   }, [dayWidth, readOnly, onUpdateTask]) // eslint-disable-line
 
-  // ── Double-click on empty grid → add task at that date for that person ──────
+  // ── Double-click on empty grid → add task ────────────────────────────────
   const handleGridDoubleClick = useCallback((personId, e) => {
     if (readOnly || !onAddTaskForPerson) return
-    // Don't trigger if click landed on an existing task bar
     if (e.target.closest('.task-bar')) return
     const scrollEl = scrollRef.current
     if (!scrollEl) return
@@ -205,11 +214,75 @@ const Timeline = forwardRef(function Timeline({
     onAddTaskForPerson(personId === '__unassigned__' ? null : personId, toDateString(snapped))
   }, [readOnly, dayWidth, allDays, onAddTaskForPerson]) // eslint-disable-line
 
-  // ── Filter logic (PM = task-based filter) ────────────────────────────────
-  // PM filter: show persons who have tasks with matching PM; filter tasks in row
-  // Person filter: show only selected persons; show all their tasks
-  // Both: show selected persons; show only tasks with matching PM
+  // ── Rubber-band selection (Figma-style) ──────────────────────────────────
+  const handleScrollMouseDown = useCallback((e) => {
+    if (readOnly) return
+    if (e.button !== 0) return
+    if (e.target.closest('.task-bar')) return
+    if (e.target.closest('.timeline__person-col')) return
+    if (e.target.closest('.timeline__bulk-bar')) return
 
+    const startX = e.clientX
+    const startY = e.clientY
+    let moved = false
+
+    const onMove = (me) => {
+      moved = true
+      setSelectionBox({ startX, startY, curX: me.clientX, curY: me.clientY })
+    }
+
+    const onUp = (ue) => {
+      const selLeft   = Math.min(startX, ue.clientX)
+      const selTop    = Math.min(startY, ue.clientY)
+      const selRight  = Math.max(startX, ue.clientX)
+      const selBottom = Math.max(startY, ue.clientY)
+
+      if (moved && (selRight - selLeft > 5 || selBottom - selTop > 5)) {
+        // Hit-test all rendered task bar inner elements by their viewport rects
+        const bars = document.querySelectorAll('[data-task-id]')
+        const hitIds = new Set()
+        bars.forEach((bar) => {
+          const rect = bar.getBoundingClientRect()
+          if (rect.left < selRight && rect.right > selLeft &&
+              rect.top < selBottom && rect.bottom > selTop) {
+            hitIds.add(bar.getAttribute('data-task-id'))
+          }
+        })
+        setSelectedTaskIds(hitIds)
+      } else {
+        // Plain click on empty space → clear selection
+        setSelectedTaskIds(new Set())
+      }
+
+      setSelectionBox(null)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [readOnly])
+
+  // ── Bulk actions ─────────────────────────────────────────────────────────
+  const handleBulkDelete = () => {
+    if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size > 1 ? 's' : ''}?`)) return
+    selectedTaskIds.forEach((id) => onDeleteTask(id))
+    setSelectedTaskIds(new Set())
+  }
+
+  const handleBulkAssignPerson = (personId) => {
+    selectedTaskIds.forEach((id) => onUpdateTask(id, { assigneeId: personId }))
+    setBulkAssignOpen(null)
+    setSelectedTaskIds(new Set())
+  }
+
+  const handleBulkAssignPM = (teamId) => {
+    selectedTaskIds.forEach((id) => onUpdateTask(id, { teamId }))
+    setBulkAssignOpen(null)
+    setSelectedTaskIds(new Set())
+  }
+
+  // ── Filter logic ─────────────────────────────────────────────────────────
   const getPmFilteredTasks = (personTasks) =>
     filterTeamIds.length > 0
       ? personTasks.filter((t) => filterTeamIds.includes(t.teamId))
@@ -219,13 +292,11 @@ const Timeline = forwardRef(function Timeline({
   if (filterPersonIds.length > 0 && filterTeamIds.length === 0) {
     visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   } else if (filterTeamIds.length > 0 && filterPersonIds.length === 0) {
-    // PM filter only: show persons who have at least one task with that PM
     const personIdsWithMatch = new Set(
       tasks.filter((t) => filterTeamIds.includes(t.teamId)).map((t) => t.assigneeId).filter(Boolean)
     )
     visiblePeople = people.filter((p) => personIdsWithMatch.has(p.id))
   } else if (filterPersonIds.length > 0 && filterTeamIds.length > 0) {
-    // Both: AND logic — selected persons AND tasks with matching PM
     visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   }
 
@@ -242,7 +313,6 @@ const Timeline = forwardRef(function Timeline({
     const personName  = person ? person.name : 'Unassigned'
     const personColor = person ? (person.color || getAvatarColor(person.name)) : '#9ca3af'
 
-    // Sort by start date; each task = its own lane
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
     // Visible scroll window in date space
@@ -253,8 +323,7 @@ const Timeline = forwardRef(function Timeline({
       ? addDays(totalStart, Math.ceil((scrollLeft + Math.max(containerW, 1) - PERSON_COL_W) / dayWidth))
       : totalEnd
 
-    // Only tasks whose bars overlap the current scroll viewport AND the total range.
-    // Lane indices are assigned within this visible subset so they always start at 0.
+    // Only tasks overlapping the visible window, lanes indexed from 0
     const lanedTasks = sorted
       .filter((t) => {
         const ts = parseLocalDate(t.startDate)
@@ -270,7 +339,6 @@ const Timeline = forwardRef(function Timeline({
       activeDrag.origAssigneeId  !== personId
     const extraSlots = isIncomingDrag ? 1 : 0
 
-    // Row height = visible tasks only; shrinks/grows as you scroll
     const numVisible = lanedTasks.length + extraSlots
     const rowH = numVisible > 0
       ? ROW_PAD_TOP + numVisible * LANE_H + (numVisible - 1) * LANE_GAP + ROW_PAD_BOT
@@ -290,7 +358,7 @@ const Timeline = forwardRef(function Timeline({
         data-person-id={personId}
         style={{ minHeight: rowH }}
       >
-        {/* Sticky left column */}
+        {/* Sticky left column — avatar + name, vertically centered */}
         <div className="timeline__person-col" style={{ minHeight: rowH }}>
           <div
             className="timeline__avatar"
@@ -303,15 +371,10 @@ const Timeline = forwardRef(function Timeline({
           </div>
           <div className="timeline__person-info">
             <div className="timeline__person-name">{personName}</div>
-            {!readOnly && person && (
-              <button className="timeline__add-task-btn" onClick={() => onAddTaskForPerson(personId)}>
-                + task
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Grid area — only render tasks visible in the scroll window; lanes indexed from 0 */}
+        {/* Grid area — only visible tasks, lanes from 0 */}
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
@@ -336,6 +399,7 @@ const Timeline = forwardRef(function Timeline({
                 onMoveDragStart={startMoveDrag}
                 onEdit={() => onEditTask && onEditTask(task)}
                 isGhost={isGhost}
+                isSelected={selectedTaskIds.has(task.id)}
                 readOnly={readOnly}
               />
             )
@@ -352,14 +416,11 @@ const Timeline = forwardRef(function Timeline({
     const dx = cursorX - startCursorX
     const dy = cursorY - startCursorY
 
-    // Show target person's avatar when dragging to a different row
     const displayAssigneeId = targetAssigneeId || task.assigneeId
     const assignee  = people.find((p) => p.id === displayAssigneeId)
     const pmTeam    = teams.find((t)  => t.id === task.teamId)
-    const taskColor = task.color || '#6366f1'
     const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
 
-    // Compute drag date tooltips
     const daysDelta = dayWidth > 0 ? Math.round(dx / dayWidth) : 0
     const dragStart = snapWeekday(addDays(parseLocalDate(task.startDate), daysDelta), daysDelta >= 0)
     const dragEnd   = snapWeekday(addDays(parseLocalDate(task.endDate),   daysDelta), daysDelta >= 0)
@@ -390,7 +451,6 @@ const Timeline = forwardRef(function Timeline({
           </div>
         )}
         <span className="task-drag-overlay__title">{task.title}</span>
-        {/* Date tooltips — combined when bar is too narrow for both */}
         {overlayW < 260 ? (
           <div className="task-bar__tooltip task-bar__tooltip--center">
             {formatDateWithDay(dragStart)} → {formatDateWithDay(dragEnd)}
@@ -405,6 +465,111 @@ const Timeline = forwardRef(function Timeline({
     )
   }
 
+  // ── Selection box (rubber-band) ───────────────────────────────────────────
+  const renderSelectionBox = () => {
+    if (!selectionBox) return null
+    const left   = Math.min(selectionBox.startX, selectionBox.curX)
+    const top    = Math.min(selectionBox.startY, selectionBox.curY)
+    const width  = Math.abs(selectionBox.curX - selectionBox.startX)
+    const height = Math.abs(selectionBox.curY - selectionBox.startY)
+    return (
+      <div
+        className="timeline__selection-box"
+        style={{ position: 'fixed', left, top, width, height, pointerEvents: 'none' }}
+      />
+    )
+  }
+
+  // ── Bulk action bar ───────────────────────────────────────────────────────
+  const renderBulkBar = () => {
+    if (selectedTaskIds.size === 0) return null
+    const count = selectedTaskIds.size
+    return (
+      <div className="timeline__bulk-bar" onClick={(e) => e.stopPropagation()}>
+        <span className="timeline__bulk-count">
+          {count} task{count > 1 ? 's' : ''} selected
+        </span>
+
+        {/* Assign Person */}
+        <div className="timeline__bulk-action-wrap">
+          <button
+            className="timeline__bulk-btn"
+            onClick={() => setBulkAssignOpen(bulkAssignOpen === 'person' ? null : 'person')}
+          >
+            Assign person
+          </button>
+          {bulkAssignOpen === 'person' && (
+            <div className="timeline__bulk-dropdown">
+              {people.map((p) => (
+                <div
+                  key={p.id}
+                  className="timeline__bulk-dropdown-item"
+                  onClick={() => handleBulkAssignPerson(p.id)}
+                >
+                  <div
+                    className="timeline__bulk-dropdown-avatar"
+                    style={{ background: p.color || getAvatarColor(p.name) }}
+                  >
+                    {p.photo
+                      ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : p.name?.charAt(0).toUpperCase()
+                    }
+                  </div>
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Assign PM */}
+        <div className="timeline__bulk-action-wrap">
+          <button
+            className="timeline__bulk-btn"
+            onClick={() => setBulkAssignOpen(bulkAssignOpen === 'pm' ? null : 'pm')}
+          >
+            Assign PM
+          </button>
+          {bulkAssignOpen === 'pm' && (
+            <div className="timeline__bulk-dropdown">
+              {teams.map((t) => (
+                <div
+                  key={t.id}
+                  className="timeline__bulk-dropdown-item"
+                  onClick={() => handleBulkAssignPM(t.id)}
+                >
+                  <div
+                    className="timeline__bulk-dropdown-avatar"
+                    style={{ background: '#6366f1', borderRadius: '3px' }}
+                  >
+                    {t.photo
+                      ? <img src={t.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : t.name?.charAt(0).toUpperCase()
+                    }
+                  </div>
+                  {t.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Delete */}
+        <button className="timeline__bulk-btn timeline__bulk-btn--delete" onClick={handleBulkDelete}>
+          Delete
+        </button>
+
+        {/* Clear selection */}
+        <button
+          className="timeline__bulk-close"
+          onClick={() => { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }}
+        >
+          ×
+        </button>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="timeline" ref={containerRef}>
@@ -412,6 +577,7 @@ const Timeline = forwardRef(function Timeline({
           className="timeline__scroll"
           ref={scrollRef}
           style={{ '--pcol': `${PERSON_COL_W}px` }}
+          onMouseDown={handleScrollMouseDown}
         >
           <div className="timeline__inner" style={{ width: PERSON_COL_W + totalW }}>
 
@@ -419,7 +585,6 @@ const Timeline = forwardRef(function Timeline({
             <div className="timeline__header">
               <div className="timeline__header-person-col">Designer</div>
               <div className="timeline__header-grid">
-                {/* Month row */}
                 <div className="timeline__month-row">
                   {monthGroups.map((mg, i) => {
                     const label = viewMode === 'year'
@@ -432,7 +597,6 @@ const Timeline = forwardRef(function Timeline({
                     )
                   })}
                 </div>
-                {/* No day row — removed per user request */}
               </div>
             </div>
 
@@ -447,12 +611,11 @@ const Timeline = forwardRef(function Timeline({
                 />
               ) : null)}
 
-              {/* Month boundary lines — dashed for regular months, solid for quarter starts */}
+              {/* Month boundary lines */}
               {monthGroups.map((mg, i) => {
                 const x = allDays.findIndex(
                   (d) => d.getMonth() === mg.month && d.getFullYear() === mg.year
                 ) * dayWidth
-                // Quarter boundaries: Jan(0), Apr(3), Jul(6), Oct(9)
                 const isQBoundary = mg.month === 0 || mg.month === 3 || mg.month === 6 || mg.month === 9
                 return (
                   <div
@@ -490,8 +653,14 @@ const Timeline = forwardRef(function Timeline({
         </div>
       </div>
 
-      {/* Floating drag clone — rendered outside scroll container so it can go anywhere */}
+      {/* Floating drag clone */}
       {renderDragOverlay()}
+
+      {/* Rubber-band selection box */}
+      {renderSelectionBox()}
+
+      {/* Bulk action bar */}
+      {renderBulkBar()}
     </>
   )
 })

@@ -1,20 +1,20 @@
 import { useRef, useState, useLayoutEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
-const BAR_H = 40
+const BAR_H = 34
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
   rowPaddingTop, laneHeight, laneGap,
   people, teams,
   onDelete, onResizeDone, onMoveDragStart, onEdit,
-  isGhost,
+  isGhost, isSelected,
   readOnly,
 }) {
   const [resizing, setResizing]   = useState(false)
   const [visual,   setVisual]     = useState(null)
   const [showMenu, setShowMenu]   = useState(false)
-  // isNarrow = title is clipped >50% → move avatars + title outside
+  // isNarrow = title is clipped >60% → move avatars + title outside
   const [isNarrow, setIsNarrow]   = useState(false)
 
   const barRef        = useRef(null)
@@ -27,7 +27,7 @@ export default function TaskBar({
   const dateToX = (date) =>
     diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth
 
-  // ── Clipping detection: move outside when >50% of title is hidden ──────────
+  // ── Clipping detection: move outside when >60% of title is hidden ──────────
   const assignee  = people.find((p) => p.id === task.assigneeId)
   const pmTeam    = teams.find((t)  => t.id === task.teamId)
   const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
@@ -41,12 +41,12 @@ export default function TaskBar({
   useLayoutEffect(() => {
     if (!hiddenTitleRef.current) return
     const naturalW = hiddenTitleRef.current.offsetWidth
-    // Available width inside bar: total width minus 8px padding each side minus avatar stack
-    // Avatars: 32px each, second overlaps by 10px, plus 6px margin-right
-    const avatarW = (assignee ? 28 : 0) + (pmTeam ? 18 : 0) + ((assignee || pmTeam) ? 6 : 0)
-    const availW = w - 16 - avatarW
-    // Move outside when 70% or more of text would be hidden (only 30% visible)
-    setIsNarrow(availW < naturalW * 0.3)
+    // Available width inside bar: total width minus 4px*2 padding minus avatar stack
+    // Avatars: 24px first, second overlaps by 8px (net +16), plus 6px margin-right
+    const avatarW = (assignee ? 24 : 0) + (pmTeam ? 16 : 0) + ((assignee || pmTeam) ? 6 : 0)
+    const availW = w - 8 - avatarW
+    // Move outside when 60% or more of text would be hidden (only 40% visible)
+    setIsNarrow(availW < naturalW * 0.4)
   }, [task.title, w, assignee, pmTeam]) // eslint-disable-line
 
   // ── Resize drag (left/right handles) ──────────────────────────────────────
@@ -126,7 +126,8 @@ export default function TaskBar({
 
       {/* Main bar — white background, avatars+title inside only when wide enough */}
       <div
-        className="task-bar__inner"
+        className={['task-bar__inner', isSelected ? 'task-bar__inner--selected' : ''].filter(Boolean).join(' ')}
+        data-task-id={task.id}
         onMouseDown={handleMoveDown}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
@@ -149,7 +150,7 @@ export default function TaskBar({
         )}
       </div>
 
-      {/* Avatars + title outside bar when >50% clipped */}
+      {/* Avatars + title outside bar when >60% clipped */}
       {isNarrow && (
         <div className="task-bar__outside-content" style={{ left: w + 5 }}>
           {(assignee || pmTeam) && (
