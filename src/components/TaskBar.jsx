@@ -45,8 +45,8 @@ export default function TaskBar({
     // Avatars: 24px first, second overlaps by 8px (net +16), plus 6px margin-right
     const avatarW = (assignee ? 24 : 0) + (pmTeam ? 16 : 0) + ((assignee || pmTeam) ? 6 : 0)
     const availW = w - 8 - avatarW
-    // Move outside when 60% or more of text would be hidden (only 40% visible)
-    setIsNarrow(availW < naturalW * 0.4)
+    // Move outside when 40% or more of text would be hidden (only 60% visible)
+    setIsNarrow(availW < naturalW * 0.6)
   }, [task.title, w, assignee, pmTeam]) // eslint-disable-line
 
   // ── Resize drag (left/right handles) ──────────────────────────────────────

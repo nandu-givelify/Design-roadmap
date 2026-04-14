@@ -39,6 +39,8 @@ const Timeline = forwardRef(function Timeline({
   const [containerW, setContainerW] = useState(0)
   const [activeDrag, setActiveDrag] = useState(null) // floating clone drag state
   const [scrollLeft, setScrollLeft] = useState(0)
+  const [zoomScale, setZoomScale]   = useState(1.0)  // pinch-to-zoom multiplier
+  const zoomScaleRef = useRef(1.0)                   // sync ref for wheel handler
 
   // ── Multi-select state ────────────────────────────────────────────────────
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
@@ -50,7 +52,9 @@ const Timeline = forwardRef(function Timeline({
   const totalEnd   = totalRange.end
   const allDays    = getDaysInRange(totalStart, totalEnd)
 
-  const viewDays = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
+  const baseViewDays = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
+  // zoomScale > 1 = zoomed in (fewer days visible); < 1 = zoomed out (more days)
+  const viewDays = Math.max(7, baseViewDays / zoomScale)
   const dayWidth = containerW > 0 ? (containerW - PERSON_COL_W) / viewDays : 0
   const totalW   = dayWidth * allDays.length
 
@@ -82,6 +86,43 @@ const Timeline = forwardRef(function Timeline({
     el.addEventListener('scroll', handler, { passive: true })
     return () => { el.removeEventListener('scroll', handler); cancelAnimationFrame(rafId) }
   }, [])
+
+  // Pinch-to-zoom: trackpad pinch generates ctrl+wheel events in browsers
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    const onWheel = (e) => {
+      if (!e.ctrlKey) return   // regular scroll — let it pass through
+      e.preventDefault()       // stop browser page-zoom
+
+      const rect = el.getBoundingClientRect()
+      const cursorXInGrid = e.clientX - rect.left - PERSON_COL_W
+      if (cursorXInGrid < 0) return  // cursor over person column — ignore
+
+      // Capture current geometry before changing scale
+      const baseVD   = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
+      const curVD    = Math.max(7, baseVD / zoomScaleRef.current)
+      const oldDayW  = (el.clientWidth - PERSON_COL_W) / curVD
+      // Which day is currently under the cursor?
+      const cursorDay = (el.scrollLeft + cursorXInGrid) / oldDayW
+
+      // Compute new scale (exponential so feel is consistent at all zoom levels)
+      const factor   = Math.exp(-e.deltaY / 120)
+      const newScale = Math.max(0.1, Math.min(15, zoomScaleRef.current * factor))
+      zoomScaleRef.current = newScale
+
+      // Recompute dayWidth at new scale and restore the cursor day to same position
+      const newVD      = Math.max(7, baseVD / newScale)
+      const newDayW    = (el.clientWidth - PERSON_COL_W) / newVD
+      el.scrollLeft    = Math.max(0, cursorDay * newDayW - cursorXInGrid)
+
+      setZoomScale(newScale)
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [viewMode]) // eslint-disable-line
 
   // Escape key clears selection
   useEffect(() => {
@@ -115,13 +156,16 @@ const Timeline = forwardRef(function Timeline({
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
+  // Only re-scroll when navigation changes, NOT on every zoom-induced dayWidth change.
+  // hasDayWidth transitions false→true once (initial load), then stays true.
+  const hasDayWidth = dayWidth > 0
   useEffect(() => {
-    if (dayWidth <= 0) return
+    if (!hasDayWidth) return
     const { start } = viewMode === 'year'
       ? getYearRange(year)
       : getQuarterRange(year, quarter)
     scrollToDate(addDays(start, -VIEW_PAD_DAYS))
-  }, [dayWidth, viewMode, year, quarter]) // eslint-disable-line
+  }, [hasDayWidth, viewMode, year, quarter]) // eslint-disable-line
 
   // ── Today line ────────────────────────────────────────────────────────────
   const today    = startOfDay(new Date())
