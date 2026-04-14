@@ -7,6 +7,7 @@ import { PhotoPicker } from './Modals'
 function PersonEditForm({ person, onDone }) {
   const [name,   setName]   = useState(person.name  || '')
   const [email,  setEmail]  = useState(person.email || '')
+  const [photo,  setPhoto]  = useState(person.photo || null)
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
@@ -15,6 +16,7 @@ function PersonEditForm({ person, onDone }) {
     await updatePerson(person.id, {
       name:  name.trim(),
       email: email.trim(),
+      photo: photo || null,
       color: getAvatarColor(name.trim()),
     })
     setSaving(false)
@@ -23,6 +25,7 @@ function PersonEditForm({ person, onDone }) {
 
   return (
     <div className="settings-inline-form">
+      <PhotoPicker value={photo} onChange={setPhoto} />
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -49,19 +52,21 @@ function PersonEditForm({ person, onDone }) {
 
 // ── Inline edit form for a team ───────────────────────────────────────────────
 function TeamEditForm({ team, onDone }) {
-  const [name,   setName]   = useState(team.name || '')
+  const [name,   setName]   = useState(team.name  || '')
+  const [photo,  setPhoto]  = useState(team.photo || null)
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
     if (!name.trim()) return
     setSaving(true)
-    await updateTeam(team.id, { name: name.trim() })
+    await updateTeam(team.id, { name: name.trim(), photo: photo || null })
     setSaving(false)
     onDone()
   }
 
   return (
     <div className="settings-inline-form">
+      <PhotoPicker value={photo} onChange={setPhoto} isTeam />
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}

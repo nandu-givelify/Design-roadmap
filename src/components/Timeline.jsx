@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
@@ -40,7 +40,8 @@ const Timeline = forwardRef(function Timeline({
   const [activeDrag, setActiveDrag] = useState(null) // floating clone drag state
   const [scrollLeft, setScrollLeft] = useState(0)
   const [zoomScale, setZoomScale]   = useState(1.0)  // pinch-to-zoom multiplier
-  const zoomScaleRef = useRef(1.0)                   // sync ref for wheel handler
+  const zoomScaleRef       = useRef(1.0)  // sync ref for wheel handler (avoids stale closure)
+  const pendingScrollRef   = useRef(null) // desired scrollLeft for next useLayoutEffect flush
 
   // ── Multi-select state ────────────────────────────────────────────────────
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
@@ -53,8 +54,9 @@ const Timeline = forwardRef(function Timeline({
   const allDays    = getDaysInRange(totalStart, totalEnd)
 
   const baseViewDays = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
-  // zoomScale > 1 = zoomed in (fewer days visible); < 1 = zoomed out (more days)
-  const viewDays = Math.max(7, baseViewDays / zoomScale)
+  // zoomScale > 1 = zoomed in (fewer days); < 1 = zoomed out (more days)
+  // Clamp: min 60 days (~2 months) visible, max 730 days (~2 years) visible
+  const viewDays = Math.max(60, Math.min(730, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - PERSON_COL_W) / viewDays : 0
   const totalW   = dayWidth * allDays.length
 
@@ -87,42 +89,60 @@ const Timeline = forwardRef(function Timeline({
     return () => { el.removeEventListener('scroll', handler); cancelAnimationFrame(rafId) }
   }, [])
 
-  // Pinch-to-zoom: trackpad pinch generates ctrl+wheel events in browsers
+  // Pinch-to-zoom: trackpad pinch fires ctrl+wheel events
+  // ─── Design: never set scrollLeft in the wheel handler directly.
+  //     Instead, store the intended scroll in pendingScrollRef and apply it
+  //     in useLayoutEffect (after DOM reflects new totalW, before paint).
+  //     This eliminates the flicker caused by setting scrollLeft before
+  //     the content width has been updated by React.
+  const MIN_VD = 60   // ~2 months — min visible days (max zoom-in)
+  const MAX_VD = 730  // ~2 years  — max visible days (max zoom-out)
+
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
 
     const onWheel = (e) => {
-      if (!e.ctrlKey) return   // regular scroll — let it pass through
-      e.preventDefault()       // stop browser page-zoom
+      if (!e.ctrlKey) return
+      e.preventDefault()
 
       const rect = el.getBoundingClientRect()
       const cursorXInGrid = e.clientX - rect.left - PERSON_COL_W
-      if (cursorXInGrid < 0) return  // cursor over person column — ignore
+      if (cursorXInGrid < 0) return
 
-      // Capture current geometry before changing scale
-      const baseVD   = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
-      const curVD    = Math.max(7, baseVD / zoomScaleRef.current)
+      const baseVD = viewMode === 'year' ? VIEW_DAYS_YEAR : VIEW_DAYS_QUARTER
+      // Use pendingScrollRef if we haven't flushed yet (multiple events per frame)
+      const currentScrollLeft = pendingScrollRef.current !== null
+        ? pendingScrollRef.current
+        : el.scrollLeft
+
+      const curVD    = Math.max(MIN_VD, Math.min(MAX_VD, baseVD / zoomScaleRef.current))
       const oldDayW  = (el.clientWidth - PERSON_COL_W) / curVD
-      // Which day is currently under the cursor?
-      const cursorDay = (el.scrollLeft + cursorXInGrid) / oldDayW
+      const cursorDay = (currentScrollLeft + cursorXInGrid) / oldDayW
 
-      // Compute new scale (exponential so feel is consistent at all zoom levels)
-      const factor   = Math.exp(-e.deltaY / 120)
-      const newScale = Math.max(0.1, Math.min(15, zoomScaleRef.current * factor))
+      const factor    = Math.exp(-e.deltaY / 120)
+      const rawScale  = zoomScaleRef.current * factor
+      // Clamp via viewDays so limits are exact
+      const newVD     = Math.max(MIN_VD, Math.min(MAX_VD, baseVD / rawScale))
+      const newScale  = baseVD / newVD
       zoomScaleRef.current = newScale
 
-      // Recompute dayWidth at new scale and restore the cursor day to same position
-      const newVD      = Math.max(7, baseVD / newScale)
-      const newDayW    = (el.clientWidth - PERSON_COL_W) / newVD
-      el.scrollLeft    = Math.max(0, cursorDay * newDayW - cursorXInGrid)
-
-      setZoomScale(newScale)
+      const newDayW = (el.clientWidth - PERSON_COL_W) / newVD
+      pendingScrollRef.current = Math.max(0, cursorDay * newDayW - cursorXInGrid)
+      setZoomScale(newScale)  // triggers re-render → useLayoutEffect fires
     }
 
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [viewMode]) // eslint-disable-line
+
+  // Flush pending scroll AFTER DOM has updated (new totalW) but BEFORE paint
+  useLayoutEffect(() => {
+    if (pendingScrollRef.current !== null && scrollRef.current) {
+      scrollRef.current.scrollLeft = pendingScrollRef.current
+      pendingScrollRef.current = null
+    }
+  }, [zoomScale])
 
   // Escape key clears selection
   useEffect(() => {
@@ -156,15 +176,25 @@ const Timeline = forwardRef(function Timeline({
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
-  // Only re-scroll when navigation changes, NOT on every zoom-induced dayWidth change.
-  // hasDayWidth transitions false→true once (initial load), then stays true.
+  // Scroll to period start when navigating (year/quarter buttons) AND reset zoom to 1x.
+  // We compute the scroll target using the RESET dayWidth so zoom and scroll are in sync.
+  // hasDayWidth goes false→true once on initial load, then stays true (so this won't
+  // re-fire on every zoom-induced dayWidth change).
   const hasDayWidth = dayWidth > 0
   useEffect(() => {
     if (!hasDayWidth) return
-    const { start } = viewMode === 'year'
-      ? getYearRange(year)
-      : getQuarterRange(year, quarter)
-    scrollToDate(addDays(start, -VIEW_PAD_DAYS))
+    // Reset zoom synchronously via ref before computing scroll
+    zoomScaleRef.current = 1.0
+    pendingScrollRef.current = null  // cancel any in-flight zoom scroll
+    const resetDayW = containerW > PERSON_COL_W
+      ? (containerW - PERSON_COL_W) / baseViewDays
+      : 0
+    if (resetDayW > 0 && scrollRef.current) {
+      const { start } = viewMode === 'year' ? getYearRange(year) : getQuarterRange(year, quarter)
+      const idx = diffDays(startOfDay(totalStart), startOfDay(addDays(start, -VIEW_PAD_DAYS)))
+      scrollRef.current.scrollLeft = Math.max(0, idx * resetDayW)
+    }
+    setZoomScale(1.0)  // triggers re-render with zoom=1 (no-op if already 1)
   }, [hasDayWidth, viewMode, year, quarter]) // eslint-disable-line
 
   // ── Today line ────────────────────────────────────────────────────────────
