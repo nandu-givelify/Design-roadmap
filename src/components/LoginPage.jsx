@@ -219,7 +219,7 @@ function RoadmapLogo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
-        <rect width="32" height="32" rx="8" fill="#6366f1"/>
+        <rect width="32" height="32" rx="8" fill="#111827"/>
         <rect x="6" y="10" width="20" height="3" rx="1.5" fill="white"/>
         <rect x="6" y="15" width="14" height="3" rx="1.5" fill="white" opacity="0.7"/>
         <rect x="6" y="20" width="17" height="3" rx="1.5" fill="white" opacity="0.5"/>

@@ -76,16 +76,16 @@ export default function Header({
             onBlur={handleRenameSubmit}
           />
         ) : (
-          <span className="header__board-title">{boardName}</span>
+          <span
+            className="header__board-title"
+            onDoubleClick={() => { if (!readOnly) { setRenameVal(boardName); setRenaming(true) } }}
+            title="Double-click to rename"
+          >{boardName}</span>
         )}
 
         {!readOnly && !renaming && (
           <div style={{ position: 'relative' }}>
-            <button
-              className="header__board-dots"
-              onClick={() => setShowBoardMenu(v => !v)}
-              title="Board options"
-            >
+            <button className="header__board-dots" onClick={() => setShowBoardMenu(v => !v)} title="Board options">
               <DotsIcon />
             </button>
             {showBoardMenu && (

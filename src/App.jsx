@@ -55,15 +55,20 @@ function AuthenticatedApp({ user }) {
   // Filters
   const [filterPersonIds, setFilterPersonIds] = useState([])
 
-  // Board ordering
-  const [boardOrder, setBoardOrder] = useState([])
+  // Board ordering + favourites
+  const [boardOrder,      setBoardOrder]      = useState([])
+  const [favoriteBoardIds,setFavoriteBoardIds]= useState([])
+  const boardSetupStarted = useRef(false)  // prevent double-creation
 
   const timelineRef = useRef(null)
 
-  // ── Subscribe to user prefs (board order) ────────────────────────────────
+  // ── Subscribe to user prefs (board order + favourites) ───────────────────
   useEffect(() => {
     if (!user) return
-    return subscribeUserPrefs(user.uid, (prefs) => setBoardOrder(prefs.boardOrder || []))
+    return subscribeUserPrefs(user.uid, (prefs) => {
+      setBoardOrder(prefs.boardOrder || [])
+      setFavoriteBoardIds(prefs.favoriteBoardIds || [])
+    })
   }, [user])
 
   // ── Sorted boards (by user-defined order) ────────────────────────────────
@@ -102,8 +107,9 @@ function AuthenticatedApp({ user }) {
           setBoardIdInUrl(found.id)
           return found.id
         })
-      } else {
-        // No boards yet — run migration or create empty board
+      } else if (!boardSetupStarted.current) {
+        // No boards yet — guard against double-fire from two onSnapshot listeners
+        boardSetupStarted.current = true
         setMigrating(true)
         try {
           const migratedId = await checkAndRunMigration(user.uid, user.email)
@@ -188,6 +194,14 @@ function AuthenticatedApp({ user }) {
     updateUserPrefs(user.uid, { boardOrder: newOrderIds })
   }, [user])
 
+  // ── Toggle favourite ──────────────────────────────────────────────────────
+  const handleToggleFavorite = useCallback((boardId) => {
+    const next = favoriteBoardIds.includes(boardId)
+      ? favoriteBoardIds.filter(id => id !== boardId)
+      : [...favoriteBoardIds, boardId]
+    updateUserPrefs(user.uid, { favoriteBoardIds: next })
+  }, [user, favoriteBoardIds])
+
   // ── View mode ────────────────────────────────────────────────────────────
   const handleViewModeChange = useCallback((mode) => {
     const today = new Date()
@@ -249,10 +263,12 @@ function AuthenticatedApp({ user }) {
         user={user}
         boards={sortedBoards}
         activeBoardId={activeBoardId}
+        favoriteBoardIds={favoriteBoardIds}
         onSelectBoard={handleSelectBoard}
         onNewBoard={handleNewBoard}
         onSettings={() => setSettingsOpen(true)}
         onReorderBoards={handleReorderBoards}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       <div className="main-content">
