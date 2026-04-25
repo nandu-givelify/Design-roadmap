@@ -32,6 +32,13 @@ export const onAuthChange       = (cb) => onAuthStateChanged(auth, cb)
 export const updateUserProfile  = (data) => updateProfile(auth.currentUser, data)
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email)
 
+// ── User prefs (board order, etc.) ───────────────────────────────────────────
+export const subscribeUserPrefs = (uid, cb) =>
+  onSnapshot(doc(db, 'userPrefs', uid), (s) => cb(s.data() || {}))
+
+export const updateUserPrefs = (uid, data) =>
+  setDoc(doc(db, 'userPrefs', uid), data, { merge: true })
+
 // ── Boards ───────────────────────────────────────────────────────────────────
 export const subscribeBoards = (uid, email, cb) => {
   let owned = [], membered = []

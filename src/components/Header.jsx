@@ -1,21 +1,45 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { getAvatarColor } from '../utils/dateUtils'
 
 export default function Header({
-  boardName,
+  board,
   viewMode, setViewMode,
   year, setYear,
   quarter, setQuarter,
   onJumpToday,
   onShare,
+  onRenameBoard,
+  onDeleteBoard,
   people,
   filterPersonIds, setFilterPersonIds,
   groupBy, setGroupBy,
   roles,
   readOnly,
 }) {
-  const [showFilters, setShowFilters] = useState(false)
-  const [showGroup,   setShowGroup]   = useState(false)
+  const [showFilters,  setShowFilters]  = useState(false)
+  const [showGroup,    setShowGroup]    = useState(false)
+  const [showBoardMenu,setShowBoardMenu]= useState(false)
+  const [renaming,     setRenaming]     = useState(false)
+  const [renameVal,    setRenameVal]    = useState('')
+  const renameInputRef = useRef(null)
+  const boardMenuRef   = useRef(null)
+
+  useEffect(() => { if (renaming) renameInputRef.current?.select() }, [renaming])
+
+  useEffect(() => {
+    if (!showBoardMenu) return
+    const handler = (e) => { if (boardMenuRef.current && !boardMenuRef.current.contains(e.target)) setShowBoardMenu(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showBoardMenu])
+
+  const handleRenameSubmit = () => {
+    const name = renameVal.trim()
+    if (name && name !== board?.name) onRenameBoard(board.id, name)
+    setRenaming(false)
+  }
+
+  const boardName = board?.name || ''
 
   const navPrev = () => {
     if (viewMode === 'year') setYear((y) => y - 1)
@@ -40,8 +64,48 @@ export default function Header({
 
   return (
     <header className="header">
-      {/* Board title */}
-      <span className="header__board-title">{boardName}</span>
+      {/* Board title + ⋯ menu */}
+      <div className="header__board-area" ref={boardMenuRef}>
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="header__board-rename-input"
+            value={renameVal}
+            onChange={e => setRenameVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenaming(false) }}
+            onBlur={handleRenameSubmit}
+          />
+        ) : (
+          <span className="header__board-title">{boardName}</span>
+        )}
+
+        {!readOnly && !renaming && (
+          <div style={{ position: 'relative' }}>
+            <button
+              className="header__board-dots"
+              onClick={() => setShowBoardMenu(v => !v)}
+              title="Board options"
+            >
+              <DotsIcon />
+            </button>
+            {showBoardMenu && (
+              <div className="header__dropdown header__dropdown--left">
+                <button className="header__dropdown-item" onClick={() => {
+                  setRenameVal(boardName); setRenaming(true); setShowBoardMenu(false)
+                }}>Rename board</button>
+                <button className="header__dropdown-item" onClick={() => {
+                  onShare(); setShowBoardMenu(false)
+                }}>Copy share link</button>
+                <div style={{ height: 1, background: '#f3f4f6', margin: '4px 0' }} />
+                <button className="header__dropdown-item header__dropdown-item--danger" onClick={() => {
+                  if (window.confirm(`Delete "${boardName}"? This cannot be undone.`)) onDeleteBoard(board.id)
+                  setShowBoardMenu(false)
+                }}>Delete board</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="header__spacer" />
 

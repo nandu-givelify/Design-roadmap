@@ -12,6 +12,7 @@ import {
   addPerson, updatePerson, deletePerson,
   addTask, updateTask, deleteTask,
   checkAndRunMigration,
+  subscribeUserPrefs, updateUserPrefs,
 } from './firebase'
 
 const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
@@ -54,7 +55,28 @@ function AuthenticatedApp({ user }) {
   // Filters
   const [filterPersonIds, setFilterPersonIds] = useState([])
 
+  // Board ordering
+  const [boardOrder, setBoardOrder] = useState([])
+
   const timelineRef = useRef(null)
+
+  // ── Subscribe to user prefs (board order) ────────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    return subscribeUserPrefs(user.uid, (prefs) => setBoardOrder(prefs.boardOrder || []))
+  }, [user])
+
+  // ── Sorted boards (by user-defined order) ────────────────────────────────
+  const sortedBoards = boardOrder.length > 0
+    ? [...boards].sort((a, b) => {
+        const ai = boardOrder.indexOf(a.id)
+        const bi = boardOrder.indexOf(b.id)
+        if (ai === -1 && bi === -1) return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+    : boards
 
   // ── Active board from URL ────────────────────────────────────────────────
   const getBoardIdFromUrl = () => new URLSearchParams(window.location.search).get('board')
@@ -157,9 +179,14 @@ function AuthenticatedApp({ user }) {
     const url = new URL(window.location)
     url.searchParams.set('board', id)
     navigator.clipboard.writeText(url.toString())
-      .then(() => alert('Board link copied to clipboard!'))
-      .catch(() => alert(url.toString()))
+      .then(() => alert('Board link copied!'))
+      .catch(() => prompt('Copy this link:', url.toString()))
   }, [])
+
+  // ── Reorder boards ────────────────────────────────────────────────────────
+  const handleReorderBoards = useCallback((newOrderIds) => {
+    updateUserPrefs(user.uid, { boardOrder: newOrderIds })
+  }, [user])
 
   // ── View mode ────────────────────────────────────────────────────────────
   const handleViewModeChange = useCallback((mode) => {
@@ -220,25 +247,25 @@ function AuthenticatedApp({ user }) {
     <div className="app">
       <LeftNav
         user={user}
-        boards={boards}
+        boards={sortedBoards}
         activeBoardId={activeBoardId}
         onSelectBoard={handleSelectBoard}
         onNewBoard={handleNewBoard}
         onSettings={() => setSettingsOpen(true)}
-        onRenameBoard={handleRenameBoard}
-        onDeleteBoard={handleDeleteBoard}
-        onShareBoard={handleShareBoard}
+        onReorderBoards={handleReorderBoards}
       />
 
       <div className="main-content">
         <Header
-          boardName={activeBoard?.name || ''}
+          board={activeBoard}
           viewMode={viewMode}
           setViewMode={handleViewModeChange}
           year={year} setYear={setYear}
           quarter={quarter} setQuarter={setQuarter}
           onJumpToday={handleJumpToday}
-          onShare={() => setModal('share')}
+          onShare={() => handleShareBoard(activeBoardId)}
+          onRenameBoard={handleRenameBoard}
+          onDeleteBoard={handleDeleteBoard}
           people={people}
           filterPersonIds={filterPersonIds}
           setFilterPersonIds={setFilterPersonIds}
