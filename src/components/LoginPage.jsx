@@ -1,49 +1,49 @@
 import { useState } from 'react'
-import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, checkEmailExists, resetPassword } from '../firebase'
+import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, resetPassword } from '../firebase'
 
-// Steps: 'email' → 'password' (existing) | 'register' (new) | 'reset-sent'
+// Steps: 'email' → 'password' → ('register' if user not found) | 'reset-sent'
 export default function LoginPage() {
-  const [step,      setStep]      = useState('email')
-  const [email,     setEmail]     = useState('')
-  const [password,  setPassword]  = useState('')
-  const [name,      setName]      = useState('')
-  const [error,     setError]     = useState('')
-  const [loading,   setLoading]   = useState(false)
-  const [isNewUser, setIsNewUser] = useState(false)
+  const [step,     setStep]     = useState('email')
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [name,     setName]     = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
 
   const clearError = () => setError('')
 
-  // ── Step 1: check if email exists ────────────────────────────────────────
-  const handleEmailContinue = async (e) => {
+  // ── Step 1: email entered → always go to password step ───────────────────
+  const handleEmailContinue = (e) => {
     e.preventDefault()
     if (!email.trim()) return
-    setLoading(true); setError('')
-    try {
-      const exists = await checkEmailExists(email.trim())
-      setIsNewUser(!exists)
-      setStep(exists ? 'password' : 'register')
-    } catch (err) {
-      setError(friendlyError(err.code))
-    } finally {
-      setLoading(false)
-    }
+    setStep('password')
   }
 
-  // ── Step 2a: sign in existing user ───────────────────────────────────────
+  // ── Step 2: try sign-in; if no account exists, auto-switch to register ───
   const handleSignIn = async (e) => {
     e.preventDefault()
     if (!password) return
     setLoading(true); setError('')
     try {
       await signInEmail(email, password)
+      // success → auth state change handles the rest
     } catch (err) {
-      setError(friendlyError(err.code))
+      const code = err.code
+      // These codes mean "no account with this email"
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        // Check if it might be wrong password vs no account
+        // We'll show a prompt and let user confirm they want to create
+        setStep('register')
+        setError('')
+      } else {
+        setError(friendlyError(code))
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  // ── Step 2b: register new user ───────────────────────────────────────────
+  // ── Step 3: create account ────────────────────────────────────────────────
   const handleRegister = async (e) => {
     e.preventDefault()
     if (!name.trim() || !password) return
@@ -53,13 +53,20 @@ export default function LoginPage() {
       await signUpEmail(email, password)
       await updateUserProfile({ displayName: name.trim() })
     } catch (err) {
-      setError(friendlyError(err.code))
+      const code = err.code
+      if (code === 'auth/email-already-in-use') {
+        // Account exists — they had the wrong password, send them back
+        setStep('password')
+        setError('An account exists with this email. Please enter the correct password.')
+      } else {
+        setError(friendlyError(code))
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  // ── Forgot password ──────────────────────────────────────────────────────
+  // ── Forgot password ───────────────────────────────────────────────────────
   const handleForgotPassword = async () => {
     setLoading(true); setError('')
     try {
@@ -72,36 +79,35 @@ export default function LoginPage() {
     }
   }
 
-  // ── Google ───────────────────────────────────────────────────────────────
+  // ── Google ────────────────────────────────────────────────────────────────
   const handleGoogle = async () => {
     setLoading(true); setError('')
     try { await signInWithGoogle() }
-    catch (err) { setError(friendlyError(err.code)) }
+    catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') setError(friendlyError(err.code))
+    }
     finally { setLoading(false) }
   }
 
   return (
     <div className="login-page">
       <div className="login-card">
-        {/* Logo */}
-        <div className="login-card__logo">
-          <RoadmapLogo />
-        </div>
+        <div className="login-card__logo"><RoadmapLogo /></div>
 
         <h1 className="login-card__title">
-          {step === 'email'    && 'Welcome to RoadMap'}
-          {step === 'password' && 'Welcome back'}
-          {step === 'register' && 'Create your account'}
-          {step === 'reset-sent' && 'Check your email'}
+          {step === 'email'     && 'Welcome to RoadMap'}
+          {step === 'password'  && 'Welcome back'}
+          {step === 'register'  && 'Create your account'}
+          {step === 'reset-sent'&& 'Check your email'}
         </h1>
         <p className="login-card__sub">
-          {step === 'email'    && 'Sign in or join to start your roadmap'}
-          {step === 'password' && `Signing in as ${email}`}
-          {step === 'register' && `Setting up your account for ${email}`}
-          {step === 'reset-sent' && ''}
+          {step === 'email'     && 'Sign in or join to start your roadmap'}
+          {step === 'password'  && `Signing in as ${email}`}
+          {step === 'register'  && `No account found for ${email}`}
+          {step === 'reset-sent'&& ''}
         </p>
 
-        {/* Google — only shown on email step */}
+        {/* Google — only on email step */}
         {step === 'email' && (
           <>
             <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
@@ -112,7 +118,7 @@ export default function LoginPage() {
           </>
         )}
 
-        {/* ── Step: email ─────────────────────────────────────── */}
+        {/* ── Email step ──────────────────────────────────── */}
         {step === 'email' && (
           <form onSubmit={handleEmailContinue}>
             <input
@@ -125,19 +131,17 @@ export default function LoginPage() {
             />
             {error && <div className="login-error">{error}</div>}
             <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
-              {loading ? 'Checking…' : 'Continue'}
+              Continue
             </button>
           </form>
         )}
 
-        {/* ── Step: password (existing user) ─────────────────── */}
+        {/* ── Password step (sign in attempt) ─────────────── */}
         {step === 'password' && (
           <form onSubmit={handleSignIn}>
             <div className="login-email-badge">
               <span>{email}</span>
-              <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>
-                Change
-              </button>
+              <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
             </div>
             <input
               className="login-input"
@@ -151,27 +155,22 @@ export default function LoginPage() {
             <button className="login-submit-btn" type="submit" disabled={loading || !password}>
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
-            <button
-              type="button"
-              className="login-forgot"
-              onClick={handleForgotPassword}
-              disabled={loading}
-            >
+            <button type="button" className="login-forgot" onClick={handleForgotPassword} disabled={loading}>
               Forgot password?
             </button>
           </form>
         )}
 
-        {/* ── Step: register (new user) ───────────────────────── */}
+        {/* ── Register step (no account found) ────────────── */}
         {step === 'register' && (
           <form onSubmit={handleRegister}>
             <div className="login-email-badge">
               <span>{email}</span>
-              <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>
-                Change
-              </button>
+              <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
             </div>
-            <p className="login-new-user-hint">New here! Just set your name and password.</p>
+            <p className="login-new-user-hint">
+              Let's set up your account. Enter your name and choose a password.
+            </p>
             <input
               className="login-input"
               type="text"
@@ -188,23 +187,25 @@ export default function LoginPage() {
               onChange={(e) => { setPassword(e.target.value); clearError() }}
             />
             {error && <div className="login-error">{error}</div>}
-            <button className="login-submit-btn" type="submit" disabled={loading || !name.trim() || !password}>
+            <button className="login-submit-btn" type="submit"
+              disabled={loading || !name.trim() || password.length < 6}>
               {loading ? 'Creating account…' : 'Join RoadMap'}
+            </button>
+            <button type="button" className="login-forgot"
+              onClick={() => { setStep('password'); clearError() }}>
+              Already have an account? Try signing in
             </button>
           </form>
         )}
 
-        {/* ── Step: reset email sent ──────────────────────────── */}
+        {/* ── Reset sent ──────────────────────────────────── */}
         {step === 'reset-sent' && (
           <div className="login-reset-sent">
             <div className="login-reset-sent__icon">📬</div>
             <p>Password reset email sent to <strong>{email}</strong>.</p>
-            <p>Check your inbox and follow the link, then come back to sign in.</p>
-            <button
-              className="login-submit-btn"
-              style={{ marginTop: 16 }}
-              onClick={() => { setStep('password'); clearError() }}
-            >
+            <p>Check your inbox, click the link, then come back to sign in.</p>
+            <button className="login-submit-btn" style={{ marginTop: 16 }}
+              onClick={() => { setStep('password'); setPassword(''); clearError() }}>
               Back to sign in
             </button>
           </div>
@@ -241,21 +242,15 @@ function GoogleIcon() {
 
 function friendlyError(code) {
   switch (code) {
-    case 'auth/user-not-found':
     case 'auth/wrong-password':
-    case 'auth/invalid-credential': return 'Incorrect password. Try again or use "Forgot password".'
-    case 'auth/email-already-in-use': return 'An account with this email already exists.'
-    case 'auth/weak-password': return 'Password must be at least 6 characters.'
-    case 'auth/invalid-email': return 'Please enter a valid email address.'
-    case 'auth/too-many-requests': return 'Too many attempts. Please try again later.'
-    case 'auth/popup-closed-by-user': return ''
+    case 'auth/invalid-credential':  return 'Incorrect password. Try again or use "Forgot password".'
+    case 'auth/email-already-in-use':return 'An account already exists with this email.'
+    case 'auth/weak-password':       return 'Password must be at least 6 characters.'
+    case 'auth/invalid-email':       return 'Please enter a valid email address.'
+    case 'auth/too-many-requests':   return 'Too many attempts. Please try again later.'
     case 'auth/network-request-failed': return 'Network error. Check your connection.'
-    case 'auth/operation-not-allowed':
-      return 'This sign-in method is not enabled. Enable it in Firebase Console → Authentication → Sign-in method.'
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized. Add it in Firebase Console → Authentication → Settings → Authorized domains.'
-    case 'auth/configuration-not-found':
-      return 'Firebase Auth is not set up. Go to Firebase Console → Authentication and click "Get started".'
-    default: return `Error: ${code || 'unknown'}. Check Firebase Console → Authentication is enabled.`
+    case 'auth/operation-not-allowed':  return 'Sign-in method not enabled in Firebase Console.'
+    case 'auth/unauthorized-domain':    return 'This domain is not authorized in Firebase Console.'
+    default: return `Sign-in error (${code || 'unknown'}). Please try again.`
   }
 }

@@ -7,7 +7,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut as fbSignOut, onAuthStateChanged, updateProfile,
-  fetchSignInMethodsForEmail, sendPasswordResetEmail,
+  sendPasswordResetEmail,
 } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -30,8 +30,7 @@ export const signUpEmail        = (email, pw) => createUserWithEmailAndPassword(
 export const signOutUser        = () => fbSignOut(auth)
 export const onAuthChange       = (cb) => onAuthStateChanged(auth, cb)
 export const updateUserProfile  = (data) => updateProfile(auth.currentUser, data)
-export const checkEmailExists   = (email) => fetchSignInMethodsForEmail(auth, email).then((m) => m.length > 0)
-export const resetPassword      = (email) => sendPasswordResetEmail(auth, email)
+export const resetPassword = (email) => sendPasswordResetEmail(auth, email)
 
 // ── Boards ───────────────────────────────────────────────────────────────────
 export const subscribeBoards = (uid, email, cb) => {
