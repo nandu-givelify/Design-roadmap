@@ -237,6 +237,12 @@ function friendlyError(code) {
     case 'auth/too-many-requests': return 'Too many attempts. Please try again later.'
     case 'auth/popup-closed-by-user': return ''
     case 'auth/network-request-failed': return 'Network error. Check your connection.'
-    default: return 'Something went wrong. Please try again.'
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled. Enable it in Firebase Console → Authentication → Sign-in method.'
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized. Add it in Firebase Console → Authentication → Settings → Authorized domains.'
+    case 'auth/configuration-not-found':
+      return 'Firebase Auth is not set up. Go to Firebase Console → Authentication and click "Get started".'
+    default: return `Error: ${code || 'unknown'}. Check Firebase Console → Authentication is enabled.`
   }
 }
