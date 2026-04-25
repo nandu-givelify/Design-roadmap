@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { toDateString, nextWorkday, isWeekend, addMonths, TASK_COLORS, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
-import { addPerson as fbAddPerson, addTeam as fbAddTeam } from '../firebase'
+import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
 
 // ── Shared shell ─────────────────────────────────────────────────────────────
 function ModalShell({ title, onClose, children }) {
@@ -27,7 +26,7 @@ function Field({ label, children }) {
 }
 
 // ── Photo picker ──────────────────────────────────────────────────────────────
-export function PhotoPicker({ value, onChange, isTeam }) {
+export function PhotoPicker({ value, onChange }) {
   const ref = useRef()
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return
@@ -37,11 +36,11 @@ export function PhotoPicker({ value, onChange, isTeam }) {
   }
   return (
     <div className="photo-picker">
-      <div className={`photo-picker__preview${isTeam ? ' photo-picker__preview--team' : ''}`}>
-        {value ? <img src={value} alt="" /> : (isTeam ? '🏷' : '👤')}
+      <div className="photo-picker__preview">
+        {value ? <img src={value} alt="" /> : '👤'}
       </div>
       <button type="button" className="photo-picker__btn" onClick={() => ref.current.click()}>
-        {value ? 'Change' : 'Upload photo'}
+        {value ? 'Change photo' : 'Upload photo'}
       </button>
       {value && <button type="button" className="photo-picker__remove" onClick={() => onChange(null)}>Remove</button>}
       <input ref={ref} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
@@ -49,15 +48,18 @@ export function PhotoPicker({ value, onChange, isTeam }) {
   )
 }
 
-// ── Combobox: choose from existing list or add new inline ─────────────────────
-function Combobox({ value, onChange, options, placeholder, onCreateNew, type = 'person' }) {
+// ── Combobox: choose person from list or create new inline ────────────────────
+// Unified — works for both assignee and PM (no separate teams)
+function PersonCombobox({ value, onChange, options, placeholder, defaultRole, onCreatePerson, onAddRole, roles }) {
   const [open, setOpen]             = useState(false)
   const [query, setQuery]           = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName]       = useState('')
   const [newEmail, setNewEmail]     = useState('')
+  const [newRole, setNewRole]       = useState(defaultRole || 'Designer')
   const [newPhoto, setNewPhoto]     = useState(null)
   const [creating, setCreating]     = useState(false)
+  const [customRole, setCustomRole] = useState('')
   const wrapRef = useRef()
 
   const selected = options.find((o) => o.id === value)
@@ -68,40 +70,44 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const isTeamLike = type === 'team' || type === 'pm'
-  const typeLabel  = type === 'pm' ? 'PM' : type === 'team' ? 'team' : 'person'
-  const namePlaceholder = type === 'person' ? 'Full name' : type === 'pm' ? 'PM name' : 'Team name'
-
   const filtered = query
-    ? options.filter((o) => o.name.toLowerCase().includes(query.toLowerCase()))
+    ? options.filter((o) => o.name?.toLowerCase().includes(query.toLowerCase()))
     : options
+
+  const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
 
   const handleCreate = async () => {
     if (!newName.trim()) return
     setCreating(true)
-    const data = { name: newName.trim(), photo: newPhoto, color: getAvatarColor(newName.trim()) }
-    if (type === 'person') data.email = newEmail
-    const id = await onCreateNew(data)
+    const roleToUse = newRole === '__custom__' ? customRole.trim() : newRole
+    if (roleToUse && !allRoles.includes(roleToUse)) {
+      await onAddRole?.(roleToUse)
+    }
+    const data = {
+      name:  newName.trim(),
+      email: newEmail.trim() || null,
+      photo: newPhoto,
+      role:  roleToUse || 'Designer',
+      color: getAvatarColor(newName.trim()),
+    }
+    const id = await onCreatePerson(data)
     onChange(id)
-    setOpen(false); setShowCreate(false); setNewName(''); setNewEmail(''); setNewPhoto(null); setCreating(false)
+    setOpen(false); setShowCreate(false)
+    setNewName(''); setNewEmail(''); setNewPhoto(null); setCustomRole(''); setCreating(false)
   }
 
   return (
     <div className="combobox" ref={wrapRef}>
       {selected ? (
         <div className="combobox__selected-badge" onClick={() => { setOpen(true); setQuery('') }}>
-          <div
-            className={`combobox__option-avatar${isTeamLike ? ' combobox__option-avatar--team' : ''}`}
-            style={{ background: type === 'person' ? (selected.color || getAvatarColor(selected.name)) : '#6366f1' }}
-          >
+          <div className="combobox__option-avatar" style={{ background: selected.color || getAvatarColor(selected.name) }}>
             {selected.photo ? <img src={selected.photo} alt="" /> : selected.name?.charAt(0)}
           </div>
           <span className="combobox__selected-name">{selected.name}</span>
+          {selected.role && <span style={{ fontSize: 11, color: '#9ca3af' }}>{selected.role}</span>}
           <span className="combobox__selected-change">change ▾</span>
           <button
-            type="button"
-            className="combobox__selected-clear"
-            title="Remove"
+            type="button" className="combobox__selected-clear"
             onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false) }}
           >×</button>
         </div>
@@ -120,51 +126,47 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
       {open && (
         <div className="combobox__dropdown">
           {filtered.map((opt) => (
-            <div
-              key={opt.id}
-              className="combobox__option"
-              onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}
-            >
-              <div
-                className={`combobox__option-avatar${isTeamLike ? ' combobox__option-avatar--team' : ''}`}
-                style={{ background: type === 'person' ? (opt.color || getAvatarColor(opt.name)) : '#6366f1' }}
-              >
+            <div key={opt.id} className="combobox__option" onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}>
+              <div className="combobox__option-avatar" style={{ background: opt.color || getAvatarColor(opt.name) }}>
                 {opt.photo ? <img src={opt.photo} alt="" /> : opt.name?.charAt(0)}
               </div>
               <div>
                 <div className="combobox__option-label">{opt.name}</div>
-                {opt.email && <div className="combobox__option-sub">{opt.email}</div>}
+                <div className="combobox__option-sub">{opt.role}{opt.email ? ` · ${opt.email}` : ''}</div>
               </div>
             </div>
           ))}
 
           {!showCreate ? (
             <div className="combobox__option combobox__option--add" onClick={() => setShowCreate(true)}>
-              + Add new {typeLabel}…
+              + Add new person…
             </div>
           ) : (
             <div className="combobox__inline-form" onClick={(e) => e.stopPropagation()}>
-              <input
+              <input className="field__input" placeholder="Full name" value={newName}
+                onChange={(e) => setNewName(e.target.value)} autoFocus />
+              <input className="field__input" style={{ marginTop: 6 }} placeholder="Email (optional)"
+                value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+              <select
                 className="field__input"
-                placeholder={namePlaceholder}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-              />
-              {type === 'person' && (
-                <input
-                  className="field__input"
-                  style={{ marginTop: 6 }}
-                  placeholder="Email (optional)"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
+                style={{ marginTop: 6 }}
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value)}
+              >
+                {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+                <option value="__custom__">+ New role…</option>
+              </select>
+              {newRole === '__custom__' && (
+                <input className="field__input" style={{ marginTop: 6 }} placeholder="Role name"
+                  value={customRole} onChange={(e) => setCustomRole(e.target.value)} />
               )}
               <div className="combobox__inline-actions" style={{ marginTop: 6 }}>
-                <button className="combobox__inline-add" onClick={handleCreate} disabled={creating || !newName.trim()}>
+                <button className="combobox__inline-add" onClick={handleCreate}
+                  disabled={creating || !newName.trim()}>
                   {creating ? 'Adding…' : 'Add'}
                 </button>
-                <button className="combobox__inline-cancel" onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>
+                <button className="combobox__inline-cancel"
+                  onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>
                   Cancel
                 </button>
               </div>
@@ -176,8 +178,14 @@ function Combobox({ value, onChange, options, placeholder, onCreateNew, type = '
   )
 }
 
-// ── Task fields (shared between Add and Edit modals) ──────────────────────────
-function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, onStartDateChange, onEndDateChange, onTitleEnter }) {
+// ── Task fields (shared between Add and Edit) ─────────────────────────────────
+function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter }) {
+  // For PM field: all people shown, but filtered to PM role first
+  const pmPeople = [
+    ...people.filter((p) => p.role === 'PM'),
+    ...people.filter((p) => p.role !== 'PM'),
+  ]
+
   return (
     <>
       <Field label="Task title *">
@@ -192,98 +200,77 @@ function TaskFields({ form, set, people, teams, onCreatePerson, onCreateTeam, on
       </Field>
 
       <Field label="Assignee">
-        <Combobox
+        <PersonCombobox
           value={form.assigneeId}
           onChange={(v) => set('assigneeId', v)}
           options={people}
           placeholder="Search or add person…"
-          onCreateNew={onCreatePerson}
-          type="person"
+          defaultRole="Designer"
+          onCreatePerson={onCreatePerson}
+          onAddRole={onAddRole}
+          roles={roles}
         />
       </Field>
 
       <Field label="PM">
-        <Combobox
-          value={form.teamId}
-          onChange={(v) => set('teamId', v)}
-          options={teams}
+        <PersonCombobox
+          value={form.pmId}
+          onChange={(v) => set('pmId', v)}
+          options={pmPeople}
           placeholder="Search or add PM…"
-          onCreateNew={onCreateTeam}
-          type="pm"
+          defaultRole="PM"
+          onCreatePerson={onCreatePerson}
+          onAddRole={onAddRole}
+          roles={roles}
         />
       </Field>
 
       <div className="field__row">
         <Field label="Start date">
-          <input
-            className="field__input"
-            type="date"
-            value={form.startDate}
-            onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)}
-          />
+          <input className="field__input" type="date" value={form.startDate}
+            onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)} />
         </Field>
         <Field label="End date">
-          <input
-            className="field__input"
-            type="date"
-            value={form.endDate}
-            min={form.startDate}
-            onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)}
-          />
+          <input className="field__input" type="date" value={form.endDate} min={form.startDate}
+            onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)} />
         </Field>
       </div>
-
     </>
   )
 }
 
-// ── Task Modal (Add) ──────────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreateTeam }) {
+// ── Add Task Modal ────────────────────────────────────────────────────────────
+export function TaskModal({ onClose, onSave, people, roles, defaultAssigneeId, defaultStartDate, onCreatePerson, onAddRole }) {
   const today     = new Date()
   const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
   const endDate   = addMonths(startDate, 1)
 
   const [form, setForm] = useState({
-    title:      '',
-    assigneeId: defaultAssigneeId || '',
-    teamId:     '',
-    startDate:  toDateString(startDate),
-    endDate:    toDateString(endDate),
-    color:      TASK_COLORS[0],
+    title: '', assigneeId: defaultAssigneeId || '', pmId: '',
+    startDate: toDateString(startDate), endDate: toDateString(endDate),
   })
   const [endDateTouched, setEndDateTouched] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  // When start date changes, auto-set end date to 1 month later (unless user already set end date)
   const handleStartDateChange = (v) => {
     set('startDate', v)
-    if (!endDateTouched) {
-      const newEnd = addMonths(parseLocalDate(v), 1)
-      set('endDate', toDateString(newEnd))
-    }
-  }
-
-  const handleEndDateChange = (v) => {
-    setEndDateTouched(true)
-    set('endDate', v)
+    if (!endDateTouched) set('endDate', toDateString(addMonths(parseLocalDate(v), 1)))
   }
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null })
     onClose()
   }
 
   return (
     <ModalShell title="Add Task" onClose={onClose}>
       <TaskFields
-        form={form} set={set}
-        people={people} teams={teams}
-        onCreatePerson={onCreatePerson}
-        onCreateTeam={onCreateTeam}
+        form={form} set={set} people={people} roles={roles}
+        onCreatePerson={onCreatePerson} onAddRole={onAddRole}
         onStartDateChange={handleStartDateChange}
-        onEndDateChange={handleEndDateChange}
+        onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
         onTitleEnter={() => { if (form.title.trim()) handleSave() }}
       />
       <div className="modal-footer">
@@ -295,39 +282,31 @@ export function TaskModal({ onClose, onSave, people, teams, defaultAssigneeId, d
 }
 
 // ── Edit Task Modal ────────────────────────────────────────────────────────────
-export function EditTaskModal({ task, onClose, onSave, onDelete, people, teams, onCreatePerson, onCreateTeam }) {
+export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, onCreatePerson, onAddRole }) {
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
-    teamId:     task.teamId     || '',
+    pmId:       task.pmId       || task.teamId || '',  // support legacy teamId
     startDate:  task.startDate  || '',
     endDate:    task.endDate    || '',
-    color:      task.color      || TASK_COLORS[0],
   })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, teamId: form.teamId || null })
-    onClose()
-  }
-
-  const handleDelete = () => {
-    onDelete()
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null })
     onClose()
   }
 
   return (
     <ModalShell title="Edit Task" onClose={onClose}>
       <TaskFields
-        form={form} set={set}
-        people={people} teams={teams}
-        onCreatePerson={onCreatePerson}
-        onCreateTeam={onCreateTeam}
+        form={form} set={set} people={people} roles={roles}
+        onCreatePerson={onCreatePerson} onAddRole={onAddRole}
         onTitleEnter={() => { if (form.title.trim()) handleSave() }}
       />
       <div className="modal-footer">
-        <button className="btn-danger" onClick={handleDelete}>Delete</button>
+        <button className="btn-danger" onClick={() => { onDelete(); onClose() }}>Delete</button>
         <div style={{ flex: 1 }} />
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Save Changes</button>
@@ -336,79 +315,28 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, teams, 
   )
 }
 
-// ── Person Modal ──────────────────────────────────────────────────────────────
-export function PersonModal({ onClose, onSave, teams }) {
-  const [form, setForm] = useState({ name: '', email: '', photo: null, teamId: '', color: AVATAR_COLORS[0] })
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-
-  return (
-    <ModalShell title="Add Person" onClose={onClose}>
-      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} />
-      <Field label="Name *">
-        <input className="field__input" value={form.name} onChange={(e) => { set('name', e.target.value); set('color', getAvatarColor(e.target.value)) }} placeholder="e.g. Alex Johnson" autoFocus />
-      </Field>
-      <Field label="Email (optional)">
-        <input className="field__input" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="alex@company.com" />
-      </Field>
-      {!form.photo && (
-        <Field label="Avatar color">
-          <div className="color-picker">
-            {AVATAR_COLORS.map((c) => (
-              <button key={c} type="button" className={`color-swatch${form.color === c ? ' color-swatch--selected' : ''}`} style={{ background: c }} onClick={() => set('color', c)} />
-            ))}
-          </div>
-        </Field>
-      )}
-      <div className="modal-footer">
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave({ ...form, teamId: null, color: form.color || getAvatarColor(form.name) }); onClose() } }} disabled={!form.name.trim()}>Add Person</button>
-      </div>
-    </ModalShell>
-  )
-}
-
-// ── Team Modal ────────────────────────────────────────────────────────────────
-export function TeamModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: '', photo: null })
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  return (
-    <ModalShell title="Add PM" onClose={onClose}>
-      <PhotoPicker value={form.photo} onChange={(v) => set('photo', v)} isTeam />
-      <Field label="PM name *">
-        <input className="field__input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Sarah Chen" autoFocus />
-      </Field>
-      <div className="modal-footer">
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={() => { if (form.name.trim()) { onSave(form); onClose() } }} disabled={!form.name.trim()}>Add PM</button>
-      </div>
-    </ModalShell>
-  )
-}
-
 // ── Share Modal ───────────────────────────────────────────────────────────────
-export function ShareModal({ onClose }) {
-  const base    = window.location.origin + window.location.pathname
-  const [copied, setCopied] = useState(null)
-  const copy = (url, key) => {
-    navigator.clipboard.writeText(url).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000) })
+export function ShareModal({ onClose, shareUrl }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    })
   }
-  const LinkRow = ({ label, url, desc, k }) => (
-    <div className="share-link-row">
-      <div className="share-link-row__label">{label}</div>
-      <div className="share-link-row__desc">{desc}</div>
-      <div className="share-link-row__controls">
-        <input readOnly className="share-link-row__input" value={url} onFocus={(e) => e.target.select()} />
-        <button className={`share-copy-btn${copied === k ? ' share-copy-btn--copied' : ''}`} onClick={() => copy(url, k)}>
-          {copied === k ? '✓ Copied!' : 'Copy'}
-        </button>
-      </div>
-    </div>
-  )
   return (
-    <ModalShell title="Share Roadmap" onClose={onClose}>
-      <LinkRow k="view" label="View only" desc="Can view, cannot edit." url={`${base}?mode=view`} />
-      <LinkRow k="edit" label="Full access" desc="Can view and edit." url={`${base}?mode=edit`} />
-      <p className="share-hint">The base URL (no query param) opens in edit mode.</p>
+    <ModalShell title="Share Board" onClose={onClose}>
+      <p style={{ fontSize: 13, color: '#374151', marginBottom: 14 }}>
+        Anyone with this link can view the board. They'll need to sign in to access it.
+      </p>
+      <div className="share-link-row">
+        <div className="share-link-row__label">Board link</div>
+        <div className="share-link-row__controls">
+          <input readOnly className="share-link-row__input" value={shareUrl} onFocus={(e) => e.target.select()} />
+          <button className={`share-copy-btn${copied ? ' share-copy-btn--copied' : ''}`} onClick={copy}>
+            {copied ? '✓ Copied!' : 'Copy'}
+          </button>
+        </div>
+      </div>
     </ModalShell>
   )
 }

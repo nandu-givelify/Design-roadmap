@@ -2,46 +2,73 @@ import { useState } from 'react'
 import { getAvatarColor } from '../utils/dateUtils'
 
 export default function Header({
+  boardName,
   viewMode, setViewMode,
   year, setYear,
   quarter, setQuarter,
   onJumpToday,
-  onAddTask,
   onShare,
-  onSettings,
-  people, teams,
+  people,
   filterPersonIds, setFilterPersonIds,
-  filterTeamIds, setFilterTeamIds,
+  groupBy, setGroupBy,
+  roles,
   readOnly,
 }) {
   const [showFilters, setShowFilters] = useState(false)
+  const [showGroup,   setShowGroup]   = useState(false)
 
   const navPrev = () => {
-    if (viewMode === 'year') { setYear((y) => y - 1) }
+    if (viewMode === 'year') setYear((y) => y - 1)
     else if (quarter === 1) { setYear((y) => y - 1); setQuarter(4) }
     else setQuarter((q) => q - 1)
   }
   const navNext = () => {
-    if (viewMode === 'year') { setYear((y) => y + 1) }
+    if (viewMode === 'year') setYear((y) => y + 1)
     else if (quarter === 4) { setYear((y) => y + 1); setQuarter(1) }
     else setQuarter((q) => q + 1)
   }
 
   const togglePerson = (id) =>
     setFilterPersonIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
-  const toggleTeam = (id) =>
-    setFilterTeamIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
 
-  const activeFilters = filterPersonIds.length + filterTeamIds.length
+  const activeFilters = filterPersonIds.length
   const navLabel = viewMode === 'year' ? `${year}` : `Q${quarter} ${year}`
+
+  const groupLabel = groupBy === 'none' ? 'No grouping' : `By ${groupBy}`
+
+  const groupOptions = ['none', ...(roles || ['Designer', 'PM', 'Dev'])]
 
   return (
     <header className="header">
-      {/* Brand + Add */}
-      <div className="header__brand">
-        <span className="header__title">Design Roadmap</span>
-        {!readOnly && (
-          <button className="header__add-btn" onClick={onAddTask}>+ Add Task</button>
+      {/* Board title */}
+      <span className="header__board-title">{boardName}</span>
+
+      <div className="header__spacer" />
+
+      {/* Group by */}
+      <div style={{ position: 'relative' }}>
+        <button
+          className={`header__group-btn${groupBy !== 'none' ? ' header__group-btn--active' : ''}`}
+          onClick={() => setShowGroup((v) => !v)}
+        >
+          <GroupIcon />
+          {groupLabel}
+        </button>
+        {showGroup && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowGroup(false)} />
+            <div className="header__dropdown">
+              {groupOptions.map((opt) => (
+                <button
+                  key={opt}
+                  className={`header__dropdown-item${groupBy === opt ? ' header__dropdown-item--active' : ''}`}
+                  onClick={() => { setGroupBy(opt); setShowGroup(false) }}
+                >
+                  {opt === 'none' ? 'No grouping' : `By ${opt}`}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -70,8 +97,6 @@ export default function Header({
       {/* Today */}
       <button className="header__today-btn" onClick={onJumpToday}>Today</button>
 
-      <div className="header__spacer" />
-
       {/* Filter */}
       <div style={{ position: 'relative' }}>
         <button
@@ -85,38 +110,29 @@ export default function Header({
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowFilters(false)} />
             <div className="header__filter-popover">
-              {teams.length > 0 && (
-                <>
-                  <div className="header__filter-section-title">PMs</div>
-                  {teams.map((t) => (
-                    <label key={t.id} className="filter-row">
-                      <input type="checkbox" checked={filterTeamIds.includes(t.id)} onChange={() => toggleTeam(t.id)} />
-                      <div className="filter-row__avatar filter-row__avatar--team" style={{ background: '#6366f1' }}>
-                        {t.photo ? <img src={t.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : t.name?.charAt(0)}
-                      </div>
-                      <span className="filter-row__label">{t.name}</span>
-                    </label>
-                  ))}
-                  <div className="header__filter-divider" />
-                </>
-              )}
-              {people.length > 0 && (
-                <>
-                  <div className="header__filter-section-title">People</div>
-                  {people.map((p) => (
-                    <label key={p.id} className="filter-row">
-                      <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
-                      <div className="filter-row__avatar" style={{ background: p.color || getAvatarColor(p.name) }}>
-                        {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.name?.charAt(0)}
-                      </div>
-                      <span className="filter-row__label">{p.name}</span>
-                    </label>
-                  ))}
-                </>
-              )}
+              <div className="header__filter-section-title">People</div>
+              {people.map((p) => (
+                <label key={p.id} className="filter-row">
+                  <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
+                  <div
+                    className="filter-row__avatar"
+                    style={{ background: p.color || getAvatarColor(p.name) }}
+                  >
+                    {p.photo
+                      ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : p.name?.charAt(0)
+                    }
+                  </div>
+                  <span className="filter-row__label">
+                    {p.name}
+                    {p.role && <span style={{ color: '#9ca3af', marginLeft: 4, fontSize: 11 }}>· {p.role}</span>}
+                  </span>
+                </label>
+              ))}
+              {people.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af' }}>No people yet.</div>}
               {activeFilters > 0 && (
-                <button className="header__filter-clear" onClick={() => { setFilterPersonIds([]); setFilterTeamIds([]) }}>
-                  Clear all filters
+                <button className="header__filter-clear" onClick={() => setFilterPersonIds([])}>
+                  Clear filters
                 </button>
               )}
             </div>
@@ -127,12 +143,20 @@ export default function Header({
       {/* Share */}
       <button className="header__share-btn" onClick={onShare}>Share</button>
 
-      {/* Settings */}
-      {!readOnly && (
-        <button className="header__settings-btn" onClick={onSettings}>Settings</button>
-      )}
-
       {readOnly && <div className="header__readonly-badge">View only</div>}
     </header>
+  )
+}
+
+function GroupIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginRight: 5, flexShrink: 0 }}>
+      <line x1="8" y1="6" x2="21" y2="6"/>
+      <line x1="8" y1="12" x2="21" y2="12"/>
+      <line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/>
+      <line x1="3" y1="12" x2="3.01" y2="12"/>
+      <line x1="3" y1="18" x2="3.01" y2="18"/>
+    </svg>
   )
 }

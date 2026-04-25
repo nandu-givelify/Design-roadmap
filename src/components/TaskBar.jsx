@@ -6,20 +6,19 @@ const BAR_H = 34
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
   rowPaddingTop, laneHeight, laneGap,
-  people, teams,
+  people,
   onDelete, onResizeDone, onMoveDragStart, onEdit,
   isGhost, isSelected,
   readOnly,
 }) {
-  const [resizing, setResizing]   = useState(false)
-  const [visual,   setVisual]     = useState(null)
-  const [showMenu, setShowMenu]   = useState(false)
-  // isNarrow = title is clipped >60% → move avatars + title outside
-  const [isNarrow, setIsNarrow]   = useState(false)
+  const [resizing, setResizing] = useState(false)
+  const [visual,   setVisual]   = useState(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(false)
 
-  const barRef        = useRef(null)
-  const dragRef       = useRef(null)
-  const hiddenTitleRef = useRef(null)  // used only to measure natural text width
+  const barRef         = useRef(null)
+  const dragRef        = useRef(null)
+  const hiddenTitleRef = useRef(null)
 
   const snapWorkday = (date, forward = true) =>
     !isWeekend(date) ? date : forward ? nextWorkday(date) : prevWorkday(date)
@@ -27,10 +26,12 @@ export default function TaskBar({
   const dateToX = (date) =>
     diffDays(startOfDay(totalStart), startOfDay(new Date(date))) * dayWidth
 
-  // ── Clipping detection: move outside when >60% of title is hidden ──────────
-  const assignee  = people.find((p) => p.id === task.assigneeId)
-  const pmTeam    = teams.find((t)  => t.id === task.teamId)
+  // Unified people lookup
+  const assignee = people.find((p) => p.id === task.assigneeId)
+  // PM: look up by pmId; fall back to legacy teamId for migrated tasks
+  const pmPerson = people.find((p) => p.id === (task.pmId || task.teamId))
   const assigneeColor = assignee ? (assignee.color || getAvatarColor(assignee.name)) : '#9ca3af'
+  const pmColor       = pmPerson ? (pmPerson.color || getAvatarColor(pmPerson.name)) : '#6366f1'
 
   const dispStart = visual ? visual.startDate : parseLocalDate(task.startDate)
   const dispEnd   = visual ? visual.endDate   : parseLocalDate(task.endDate)
@@ -38,18 +39,16 @@ export default function TaskBar({
   const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
   const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
 
+  // Clipping detection: move outside when >40% clipped
   useLayoutEffect(() => {
     if (!hiddenTitleRef.current) return
     const naturalW = hiddenTitleRef.current.offsetWidth
-    // Available width inside bar: total width minus 4px*2 padding minus avatar stack
-    // Avatars: 24px first, second overlaps by 8px (net +16), plus 6px margin-right
-    const avatarW = (assignee ? 24 : 0) + (pmTeam ? 16 : 0) + ((assignee || pmTeam) ? 6 : 0)
-    const availW = w - 8 - avatarW
-    // Move outside when 40% or more of text would be hidden (only 60% visible)
+    const avatarW  = (assignee ? 24 : 0) + (pmPerson ? 16 : 0) + ((assignee || pmPerson) ? 6 : 0)
+    const availW   = w - 8 - avatarW
     setIsNarrow(availW < naturalW * 0.6)
-  }, [task.title, w, assignee, pmTeam]) // eslint-disable-line
+  }, [task.title, w, assignee, pmPerson]) // eslint-disable-line
 
-  // ── Resize drag (left/right handles) ──────────────────────────────────────
+  // ── Resize drag ────────────────────────────────────────────────────────────
   const startResize = (e, type) => {
     if (readOnly) return
     e.preventDefault(); e.stopPropagation()
@@ -66,11 +65,9 @@ export default function TaskBar({
       if (type === 'left') {
         ns = snapWorkday(addDays(origStart, daysDelta), true)
         if (ns >= origEnd) ns = snapWorkday(addDays(origEnd, -1), false)
-        ne = origEnd
       } else {
         ne = snapWorkday(addDays(origEnd, daysDelta), false)
         if (ne <= origStart) ne = snapWorkday(addDays(origStart, 1), true)
-        ns = origStart
       }
       dragRef.current.curStart = ns
       dragRef.current.curEnd   = ne
@@ -79,13 +76,7 @@ export default function TaskBar({
 
     const onUp = () => {
       const ds = dragRef.current
-      if (ds) {
-        const updates = {
-          startDate: toDateString(ds.curStart),
-          endDate:   toDateString(ds.curEnd),
-        }
-        if (onResizeDone) onResizeDone(updates)
-      }
+      if (ds) onResizeDone?.({ startDate: toDateString(ds.curStart), endDate: toDateString(ds.curEnd) })
       setResizing(false); setVisual(null); dragRef.current = null
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
@@ -95,7 +86,7 @@ export default function TaskBar({
     window.addEventListener('mouseup', onUp)
   }
 
-  // ── Move drag — report to parent (Timeline handles overlay) ───────────────
+  // ── Move drag ─────────────────────────────────────────────────────────────
   const handleMoveDown = (e) => {
     if (readOnly || isGhost) return
     e.preventDefault(); e.stopPropagation()
@@ -104,17 +95,34 @@ export default function TaskBar({
     }
   }
 
+  const renderAvatars = (outside) => {
+    if (!assignee && !pmPerson) return null
+    return (
+      <div className="task-bar__avatars" style={outside ? {} : {}}>
+        {assignee && (
+          <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
+            {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
+          </div>
+        )}
+        {pmPerson && (
+          <div
+            className={`task-bar__avatar${assignee ? ' task-bar__avatar--second' : ''}`}
+            style={{ background: pmColor, zIndex: 1, borderRadius: '5px' }}
+          >
+            {pmPerson.photo ? <img src={pmPerson.photo} alt="" /> : pmPerson.name?.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       ref={barRef}
-      className={[
-        'task-bar',
-        resizing ? 'task-bar--dragging' : '',
-        isGhost  ? 'task-bar--ghost'    : '',
-      ].filter(Boolean).join(' ')}
+      className={['task-bar', resizing ? 'task-bar--dragging' : '', isGhost ? 'task-bar--ghost' : ''].filter(Boolean).join(' ')}
       style={{ left: x, top: y, width: w, height: BAR_H }}
     >
-      {/* Hidden span for measuring natural text width */}
+      {/* Measure natural title width (off-screen) */}
       <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
 
       {/* Left resize handle */}
@@ -124,55 +132,21 @@ export default function TaskBar({
         </div>
       )}
 
-      {/* Main bar — white background, avatars+title inside only when wide enough */}
+      {/* Main inner bar */}
       <div
         className={['task-bar__inner', isSelected ? 'task-bar__inner--selected' : ''].filter(Boolean).join(' ')}
         data-task-id={task.id}
         onMouseDown={handleMoveDown}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
-        {!isNarrow && (assignee || pmTeam) && (
-          <div className="task-bar__avatars">
-            {assignee && (
-              <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
-                {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
-              </div>
-            )}
-            {pmTeam && (
-              <div
-                className={`task-bar__avatar${assignee ? ' task-bar__avatar--second' : ''}`}
-                style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}
-              >
-                {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
-        )}
-        {!isNarrow && (
-          <span className="task-bar__title">{task.title}</span>
-        )}
+        {!isNarrow && renderAvatars(false)}
+        {!isNarrow && <span className="task-bar__title">{task.title}</span>}
       </div>
 
-      {/* Avatars + title outside bar when >60% clipped */}
+      {/* Outside content when bar is too narrow */}
       {isNarrow && (
         <div className="task-bar__outside-content" style={{ left: w + 5 }}>
-          {(assignee || pmTeam) && (
-            <div className="task-bar__avatars">
-              {assignee && (
-                <div className="task-bar__avatar" style={{ background: assigneeColor, zIndex: 2 }}>
-                  {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
-                </div>
-              )}
-              {pmTeam && (
-                <div
-                  className={`task-bar__avatar${assignee ? ' task-bar__avatar--second' : ''}`}
-                  style={{ background: '#6366f1', zIndex: 1, borderRadius: '5px' }}
-                >
-                  {pmTeam.photo ? <img src={pmTeam.photo} alt="" /> : pmTeam.name?.charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-          )}
+          {renderAvatars(true)}
           <span className="task-bar__outside-title">{task.title}</span>
         </div>
       )}
@@ -184,7 +158,7 @@ export default function TaskBar({
         </div>
       )}
 
-      {/* Date tooltips during resize — combined when bar is narrow to avoid overlap */}
+      {/* Resize tooltips */}
       {resizing && (
         w < 260 ? (
           <div className="task-bar__tooltip task-bar__tooltip--center">
@@ -209,14 +183,11 @@ export default function TaskBar({
               </div>
             </div>
             {!readOnly && onEdit && (
-              <button className="task-bar__menu-item" onClick={() => { setShowMenu(false); onEdit() }}>
-                Edit task
-              </button>
+              <button className="task-bar__menu-item" onClick={() => { setShowMenu(false); onEdit() }}>Edit task</button>
             )}
             {!readOnly && (
-              <button className="task-bar__menu-item task-bar__menu-item--delete" onClick={() => { onDelete(); setShowMenu(false) }}>
-                Delete task
-              </button>
+              <button className="task-bar__menu-item task-bar__menu-item--delete"
+                onClick={() => { onDelete(); setShowMenu(false) }}>Delete task</button>
             )}
           </div>
         </div>

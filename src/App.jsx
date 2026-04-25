@@ -1,51 +1,150 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useAuth } from './contexts/AuthContext'
+import LoginPage from './components/LoginPage'
+import LeftNav from './components/LeftNav'
 import Header from './components/Header'
 import Timeline from './components/Timeline'
 import Settings from './components/Settings'
-import { TaskModal, EditTaskModal, PersonModal, TeamModal, ShareModal } from './components/Modals'
+import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
 import {
-  subscribePeople, subscribeTeams, subscribeTasks,
-  addPerson, addTeam, addTask, updateTask, deleteTask,
+  subscribeBoards, createBoard, updateBoard,
+  subscribePeople, subscribeTasks,
+  addPerson, updatePerson, deletePerson,
+  addTask, updateTask, deleteTask,
+  checkAndRunMigration,
 } from './firebase'
 
 const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
 
+const isConfigured = import.meta.env.VITE_FIREBASE_API_KEY &&
+  import.meta.env.VITE_FIREBASE_API_KEY !== 'your_api_key_here'
+
 export default function App() {
-  const params   = new URLSearchParams(window.location.search)
-  const readOnly = params.get('mode') === 'view'
+  const { user } = useAuth()
 
+  if (!isConfigured) return <SetupScreen />
+  if (user === undefined) return <SplashScreen />  // still loading auth
+  if (user === null) return <LoginPage />
+
+  return <AuthenticatedApp user={user} />
+}
+
+function AuthenticatedApp({ user }) {
+  const [boards,        setBoards]        = useState([])
+  const [activeBoardId, setActiveBoardId] = useState(null)
+  const [people,        setPeople]        = useState([])
+  const [tasks,         setTasks]         = useState([])
+  const [loadingBoards, setLoadingBoards] = useState(true)
+  const [migrating,     setMigrating]     = useState(false)
+  const [settingsOpen,  setSettingsOpen]  = useState(false)
+
+  // Timeline controls
   const now = new Date()
-  const [viewMode, setViewMode] = useState('quarter')
-  const [year,     setYear]     = useState(now.getFullYear())
-  const [quarter,  setQuarter]  = useState(getQuarterForDate(now))
+  const [viewMode,  setViewMode]  = useState('quarter')
+  const [year,      setYear]      = useState(now.getFullYear())
+  const [quarter,   setQuarter]   = useState(getQuarterForDate(now))
+  const [groupBy,   setGroupBy]   = useState('none')
 
-  const [people,  setPeople]  = useState([])
-  const [teams,   setTeams]   = useState([])
-  const [tasks,   setTasks]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [firebaseError, setFirebaseError] = useState(false)
+  // Modals
+  const [modal,             setModal]             = useState(null)
+  const [editingTask,       setEditingTask]        = useState(null)
+  const [defaultAssigneeId, setDefaultAssigneeId]  = useState(null)
+  const [defaultStartDate,  setDefaultStartDate]   = useState(null)
 
-  useEffect(() => {
-    const errTimeout = setTimeout(() => setFirebaseError(true), 8000)
-    const unsubs = [
-      subscribePeople((d) => { setPeople(d); clearTimeout(errTimeout); setLoading(false) }),
-      subscribeTeams((d)  => setTeams(d)),
-      subscribeTasks((d)  => setTasks(d)),
-    ]
-    return () => { unsubs.forEach((u) => u()); clearTimeout(errTimeout) }
-  }, [])
-
-  const [filterPersonIds,   setFilterPersonIds]   = useState([])
-  const [filterTeamIds,     setFilterTeamIds]     = useState([])
-  const [modal,             setModal]             = useState(null) // 'task' | 'person' | 'team' | 'share'
-  const [defaultAssigneeId, setDefaultAssigneeId] = useState(null)
-  const [defaultStartDate,  setDefaultStartDate]  = useState(null)
-  const [editingTask,       setEditingTask]       = useState(null) // task object or null
-  const [settingsOpen,      setSettingsOpen]      = useState(false)
+  // Filters
+  const [filterPersonIds, setFilterPersonIds] = useState([])
 
   const timelineRef = useRef(null)
 
-  // Today: update year/quarter to match current date, then scroll to today
+  // ── Active board from URL ────────────────────────────────────────────────
+  const getBoardIdFromUrl = () => new URLSearchParams(window.location.search).get('board')
+  const setBoardIdInUrl   = (id) => {
+    const url = new URL(window.location)
+    if (id) url.searchParams.set('board', id)
+    else url.searchParams.delete('board')
+    window.history.replaceState({}, '', url)
+  }
+
+  // ── Load boards + run migration if needed ───────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    setLoadingBoards(true)
+    const unsub = subscribeBoards(user.uid, user.email, async (bs) => {
+      setBoards(bs)
+      setLoadingBoards(false)
+      if (bs.length > 0) {
+        const urlId = getBoardIdFromUrl()
+        const found = bs.find((b) => b.id === urlId) || bs[0]
+        setActiveBoardId((prev) => {
+          if (prev && bs.find((b) => b.id === prev)) return prev
+          setBoardIdInUrl(found.id)
+          return found.id
+        })
+      } else {
+        // No boards yet — run migration or create empty board
+        setMigrating(true)
+        try {
+          const migratedId = await checkAndRunMigration(user.uid, user.email)
+          if (!migratedId) {
+            // Brand new user — create empty board
+            const ref = await createBoard({ name: 'My Board', ownerId: user.uid, ownerEmail: user.email })
+            setBoardIdInUrl(ref.id)
+            setActiveBoardId(ref.id)
+          }
+        } finally {
+          setMigrating(false)
+        }
+      }
+    })
+    return unsub
+  }, [user]) // eslint-disable-line
+
+  // ── Subscribe to active board's data ────────────────────────────────────
+  useEffect(() => {
+    if (!activeBoardId) return
+    setPeople([])
+    setTasks([])
+    const u1 = subscribePeople(activeBoardId, setPeople)
+    const u2 = subscribeTasks(activeBoardId, setTasks)
+    return () => { u1(); u2() }
+  }, [activeBoardId])
+
+  // ── Active board object ──────────────────────────────────────────────────
+  const activeBoard = boards.find((b) => b.id === activeBoardId) || null
+  const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
+
+  // ── Access level ─────────────────────────────────────────────────────────
+  const isOwner   = activeBoard?.ownerId === user.uid
+  const memberKey = user.email?.replace(/\./g, '_')
+  const memberAccess = activeBoard?.members?.[memberKey]?.access
+  const canEdit   = isOwner || memberAccess === 'edit'
+  const readOnly  = !canEdit
+
+  // ── Board selection ──────────────────────────────────────────────────────
+  const handleSelectBoard = useCallback((id) => {
+    setActiveBoardId(id)
+    setBoardIdInUrl(id)
+    setFilterPersonIds([])
+    setGroupBy('none')
+  }, [])
+
+  // ── New board ────────────────────────────────────────────────────────────
+  const handleNewBoard = useCallback(async () => {
+    const name = window.prompt('Board name:')
+    if (!name?.trim()) return
+    const ref = await createBoard({ name: name.trim(), ownerId: user.uid, ownerEmail: user.email })
+    setBoardIdInUrl(ref.id)
+    setActiveBoardId(ref.id)
+  }, [user])
+
+  // ── View mode ────────────────────────────────────────────────────────────
+  const handleViewModeChange = useCallback((mode) => {
+    const today = new Date()
+    setYear(today.getFullYear())
+    if (mode === 'quarter') setQuarter(getQuarterForDate(today))
+    setViewMode(mode)
+  }, [])
+
   const handleJumpToday = useCallback(() => {
     const today = new Date()
     setYear(today.getFullYear())
@@ -53,120 +152,154 @@ export default function App() {
     setTimeout(() => timelineRef.current?.scrollToToday(), 50)
   }, [])
 
-  // Year view: jump to current year; Quarter view: jump to current quarter
-  const handleViewModeChange = useCallback((mode) => {
-    const today = new Date()
-    if (mode === 'year') {
-      setYear(today.getFullYear())
-    } else {
-      setYear(today.getFullYear())
-      setQuarter(getQuarterForDate(today))
-    }
-    setViewMode(mode)
-  }, [])
+  // ── Firebase task/person helpers ─────────────────────────────────────────
+  const handleAddTask = useCallback((data) => {
+    if (!activeBoardId) return
+    return addTask(activeBoardId, data)
+  }, [activeBoardId])
 
-  // Create person inline (called from task modal combobox)
-  const handleCreatePerson = async (data) => {
-    const ref = await addPerson(data)
+  const handleUpdateTask = useCallback((id, data) => {
+    if (!activeBoardId) return
+    return updateTask(activeBoardId, id, data)
+  }, [activeBoardId])
+
+  const handleDeleteTask = useCallback((id) => {
+    if (!activeBoardId) return
+    return deleteTask(activeBoardId, id)
+  }, [activeBoardId])
+
+  const handleCreatePerson = useCallback(async (data) => {
+    if (!activeBoardId) return null
+    const ref = await addPerson(activeBoardId, data)
     return ref.id
+  }, [activeBoardId])
+
+  // ── Board roles management ───────────────────────────────────────────────
+  const handleAddRole = useCallback(async (role) => {
+    if (!activeBoardId || !activeBoard) return
+    const roles = activeBoard.roles || ['Designer', 'PM', 'Dev']
+    if (roles.includes(role)) return
+    await updateBoard(activeBoardId, { roles: [...roles, role] })
+  }, [activeBoardId, activeBoard])
+
+  // Share: copy ?board=boardId URL
+  const getBoardShareUrl = () => {
+    const url = new URL(window.location)
+    url.searchParams.set('board', activeBoardId)
+    return url.toString()
   }
 
-  // Create team inline
-  const handleCreateTeam = async (data) => {
-    const ref = await addTeam(data)
-    return ref.id
-  }
-
-  const isConfigured = import.meta.env.VITE_FIREBASE_API_KEY &&
-    import.meta.env.VITE_FIREBASE_API_KEY !== 'your_api_key_here'
-
-  if (!isConfigured) return <SetupScreen />
-
-  if (loading) return (
-    <div className="loading-screen">
-      <div className="loading-screen__icon">🗓</div>
-      <div className="loading-screen__text">Loading roadmap…</div>
-    </div>
-  )
-
-  if (firebaseError) return (
-    <div className="loading-screen">
-      <div className="loading-screen__icon">⚠️</div>
-      <div className="loading-screen__text">Could not connect to Firebase. Check your .env file.</div>
-    </div>
-  )
+  if (migrating) return <SplashScreen label="Setting up your board…" />
+  if (loadingBoards) return <SplashScreen />
 
   return (
     <div className="app">
-      <Header
-        viewMode={viewMode} setViewMode={handleViewModeChange}
-        year={year} setYear={setYear}
-        quarter={quarter} setQuarter={setQuarter}
-        onJumpToday={handleJumpToday}
-        onAddTask={() => { setDefaultAssigneeId(null); setModal('task') }}
-        onShare={() => setModal('share')}
+      <LeftNav
+        user={user}
+        boards={boards}
+        activeBoardId={activeBoardId}
+        onSelectBoard={handleSelectBoard}
+        onNewBoard={handleNewBoard}
         onSettings={() => setSettingsOpen(true)}
-        people={people} teams={teams}
-        filterPersonIds={filterPersonIds} setFilterPersonIds={setFilterPersonIds}
-        filterTeamIds={filterTeamIds} setFilterTeamIds={setFilterTeamIds}
-        readOnly={readOnly}
       />
 
-      <Timeline
-        ref={timelineRef}
-        viewMode={viewMode}
-        year={year} quarter={quarter}
-        people={people} teams={teams} tasks={tasks}
-        filterPersonIds={filterPersonIds} filterTeamIds={filterTeamIds}
-        onUpdateTask={(id, data) => updateTask(id, data)}
-        onDeleteTask={(id) => deleteTask(id)}
-        onAddTaskForPerson={(assigneeId, startDate) => { setDefaultAssigneeId(assigneeId); setDefaultStartDate(startDate || null); setModal('task') }}
-        onEditTask={(task) => setEditingTask(task)}
-        readOnly={readOnly}
-      />
-
-      {/* Add Task modal */}
-      {modal === 'task' && (
-        <TaskModal
-          onClose={() => { setModal(null); setDefaultStartDate(null) }}
-          onSave={(data) => addTask(data)}
-          people={people} teams={teams}
-          defaultAssigneeId={defaultAssigneeId}
-          defaultStartDate={defaultStartDate}
-          onCreatePerson={handleCreatePerson}
-          onCreateTeam={handleCreateTeam}
-        />
-      )}
-
-      {/* Edit Task modal */}
-      {editingTask && (
-        <EditTaskModal
-          task={editingTask}
-          onClose={() => setEditingTask(null)}
-          onSave={(data) => updateTask(editingTask.id, data)}
-          onDelete={() => deleteTask(editingTask.id)}
-          people={people} teams={teams}
-          onCreatePerson={handleCreatePerson}
-          onCreateTeam={handleCreateTeam}
-        />
-      )}
-
-      {modal === 'person' && (
-        <PersonModal onClose={() => setModal(null)} onSave={(d) => addPerson(d)} teams={teams} />
-      )}
-      {modal === 'team' && (
-        <TeamModal onClose={() => setModal(null)} onSave={(d) => addTeam(d)} />
-      )}
-      {modal === 'share' && <ShareModal onClose={() => setModal(null)} />}
-
-      {/* Settings panel */}
-      {settingsOpen && (
-        <Settings
-          onClose={() => setSettingsOpen(false)}
+      <div className="main-content">
+        <Header
+          boardName={activeBoard?.name || ''}
+          viewMode={viewMode}
+          setViewMode={handleViewModeChange}
+          year={year} setYear={setYear}
+          quarter={quarter} setQuarter={setQuarter}
+          onJumpToday={handleJumpToday}
+          onShare={() => setModal('share')}
           people={people}
-          teams={teams}
+          filterPersonIds={filterPersonIds}
+          setFilterPersonIds={setFilterPersonIds}
+          groupBy={groupBy}
+          setGroupBy={setGroupBy}
+          roles={boardRoles}
+          readOnly={readOnly}
         />
-      )}
+
+        <Timeline
+          ref={timelineRef}
+          viewMode={viewMode}
+          year={year} quarter={quarter}
+          people={people}
+          tasks={tasks}
+          groupBy={groupBy}
+          filterPersonIds={filterPersonIds}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
+          onAddTaskForPerson={(assigneeId, startDate) => {
+            setDefaultAssigneeId(assigneeId)
+            setDefaultStartDate(startDate || null)
+            setModal('task')
+          }}
+          onEditTask={(task) => setEditingTask(task)}
+          readOnly={readOnly}
+        />
+
+        {/* Add Task modal */}
+        {modal === 'task' && (
+          <TaskModal
+            onClose={() => { setModal(null); setDefaultStartDate(null) }}
+            onSave={handleAddTask}
+            people={people}
+            roles={boardRoles}
+            defaultAssigneeId={defaultAssigneeId}
+            defaultStartDate={defaultStartDate}
+            onCreatePerson={handleCreatePerson}
+            onAddRole={handleAddRole}
+          />
+        )}
+
+        {/* Edit Task modal */}
+        {editingTask && (
+          <EditTaskModal
+            task={editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={(data) => handleUpdateTask(editingTask.id, data)}
+            onDelete={() => handleDeleteTask(editingTask.id)}
+            people={people}
+            roles={boardRoles}
+            onCreatePerson={handleCreatePerson}
+            onAddRole={handleAddRole}
+          />
+        )}
+
+        {/* Share modal */}
+        {modal === 'share' && (
+          <ShareModal
+            onClose={() => setModal(null)}
+            shareUrl={getBoardShareUrl()}
+          />
+        )}
+
+        {/* Settings panel */}
+        {settingsOpen && (
+          <Settings
+            onClose={() => setSettingsOpen(false)}
+            boardId={activeBoardId}
+            people={people}
+            roles={boardRoles}
+            onUpdatePerson={(id, data) => updatePerson(activeBoardId, id, data)}
+            onDeletePerson={(id) => deletePerson(activeBoardId, id)}
+            onAddPerson={(data) => addPerson(activeBoardId, data)}
+            onAddRole={handleAddRole}
+            isOwner={isOwner}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SplashScreen({ label = 'Loading…' }) {
+  return (
+    <div className="loading-screen">
+      <div className="loading-screen__icon">🗓</div>
+      <div className="loading-screen__text">{label}</div>
     </div>
   )
 }
