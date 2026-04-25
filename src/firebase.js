@@ -7,6 +7,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut as fbSignOut, onAuthStateChanged, updateProfile,
+  fetchSignInMethodsForEmail, sendPasswordResetEmail,
 } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -23,12 +24,14 @@ export const db   = getFirestore(app)
 export const auth = getAuth(app)
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
-export const signInWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider())
-export const signInEmail  = (email, pw) => signInWithEmailAndPassword(auth, email, pw)
-export const signUpEmail  = (email, pw) => createUserWithEmailAndPassword(auth, email, pw)
-export const signOutUser  = () => fbSignOut(auth)
-export const onAuthChange = (cb) => onAuthStateChanged(auth, cb)
-export const updateUserProfile = (data) => updateProfile(auth.currentUser, data)
+export const signInWithGoogle   = () => signInWithPopup(auth, new GoogleAuthProvider())
+export const signInEmail        = (email, pw) => signInWithEmailAndPassword(auth, email, pw)
+export const signUpEmail        = (email, pw) => createUserWithEmailAndPassword(auth, email, pw)
+export const signOutUser        = () => fbSignOut(auth)
+export const onAuthChange       = (cb) => onAuthStateChanged(auth, cb)
+export const updateUserProfile  = (data) => updateProfile(auth.currentUser, data)
+export const checkEmailExists   = (email) => fetchSignInMethodsForEmail(auth, email).then((m) => m.length > 0)
+export const resetPassword      = (email) => sendPasswordResetEmail(auth, email)
 
 // ── Boards ───────────────────────────────────────────────────────────────────
 export const subscribeBoards = (uid, email, cb) => {

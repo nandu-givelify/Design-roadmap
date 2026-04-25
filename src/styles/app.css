@@ -659,3 +659,22 @@ input:focus, select:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
   min-height: 200px; color: #9ca3af; font-size: 14px;
   cursor: default;
 }
+
+/* ── Login page additions ─────────────────────────────────────────────────────── */
+.login-email-badge {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; background: #f3f4f6; border-radius: 8px;
+  margin-bottom: 10px; font-size: 13px; color: #374151;
+}
+.login-email-badge button { font-size: 12px; color: #6366f1; font-weight: 600; }
+.login-email-badge button:hover { text-decoration: underline; }
+.login-new-user-hint { font-size: 12px; color: #6b7280; margin-bottom: 12px; }
+.login-forgot {
+  display: block; width: 100%; text-align: center;
+  margin-top: 10px; font-size: 12px; color: #9ca3af;
+  transition: color 0.15s;
+}
+.login-forgot:hover { color: #6366f1; }
+.login-reset-sent { text-align: center; }
+.login-reset-sent__icon { font-size: 36px; margin-bottom: 12px; }
+.login-reset-sent p { font-size: 13px; color: #374151; margin-bottom: 6px; line-height: 1.5; }

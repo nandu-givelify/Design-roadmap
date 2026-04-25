@@ -25,7 +25,7 @@ export default function LeftNav({
               <rect x="6" y="15" width="14" height="3" rx="1.5" fill="white" opacity="0.7"/>
               <rect x="6" y="20" width="17" height="3" rx="1.5" fill="white" opacity="0.5"/>
             </svg>
-            <span className="left-nav__logo-text">Roadmap</span>
+            <span className="left-nav__logo-text">RoadMap</span>
           </div>
         )}
         {collapsed && (
