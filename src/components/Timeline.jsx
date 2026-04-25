@@ -153,7 +153,7 @@ const Timeline = forwardRef(function Timeline({
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
-  // Reset zoom + scroll on view/period change
+  // Reset zoom + scroll on view/period change OR when personColW changes (groupBy switch)
   const hasDayWidth = dayWidth > 0
   useEffect(() => {
     if (!hasDayWidth) return
@@ -167,7 +167,7 @@ const Timeline = forwardRef(function Timeline({
       scrollRef.current.scrollLeft = Math.max(0, idx * resetDayW)
     }
     setZoomScale(1.0)
-  }, [hasDayWidth, viewMode, year, quarter]) // eslint-disable-line
+  }, [hasDayWidth, viewMode, year, quarter, personColW]) // eslint-disable-line
 
   // ── Today line ────────────────────────────────────────────────────────────
   const today    = startOfDay(new Date())
@@ -330,9 +330,14 @@ const Timeline = forwardRef(function Timeline({
     ? tasks.filter((t) => filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId))
     : tasks
 
-  // Unassigned tasks (for grouped mode)
+  // Unassigned tasks (for grouped mode) — depends on what field we're grouping by
   const unassignedTasks = groupBy !== 'none'
-    ? filteredTasks.filter((t) => !t.assigneeId || !people.find((p) => p.id === t.assigneeId))
+    ? groupBy === 'PM'
+      ? filteredTasks.filter((t) => {
+          const pmId = t.pmId || t.teamId
+          return !pmId || !groupedPeople.find((p) => p.id === pmId)
+        })
+      : filteredTasks.filter((t) => !t.assigneeId || !groupedPeople.find((p) => p.id === t.assigneeId))
     : []
 
   const monthGroups = groupDaysByMonth(allDays)
@@ -656,8 +661,14 @@ const Timeline = forwardRef(function Timeline({
               {/* ── Grouped: person rows ────────────────────── */}
               {groupBy !== 'none' && (
                 <>
+                  {/* Full-height person column backdrop */}
+                  <div className="timeline__person-col-fill" style={{ width: PERSON_COL_W }} />
+
                   {groupedPeople.map((person) => {
-                    const rowTasks = filteredTasks.filter((t) => t.assigneeId === person.id)
+                    // PM grouping: match by pmId; all others: match by assigneeId
+                    const rowTasks = groupBy === 'PM'
+                      ? filteredTasks.filter((t) => (t.pmId || t.teamId) === person.id)
+                      : filteredTasks.filter((t) => t.assigneeId === person.id)
                     return renderPersonRow(person, rowTasks)
                   })}
 

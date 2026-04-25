@@ -180,11 +180,8 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
 
 // ── Task fields (shared between Add and Edit) ─────────────────────────────────
 function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter }) {
-  // For PM field: all people shown, but filtered to PM role first
-  const pmPeople = [
-    ...people.filter((p) => p.role === 'PM'),
-    ...people.filter((p) => p.role !== 'PM'),
-  ]
+  // For PM field: only show people with PM role
+  const pmPeople = people.filter((p) => p.role === 'PM')
 
   return (
     <>

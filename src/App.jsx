@@ -7,7 +7,7 @@ import Timeline from './components/Timeline'
 import Settings from './components/Settings'
 import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
 import {
-  subscribeBoards, createBoard, updateBoard,
+  subscribeBoards, createBoard, updateBoard, deleteBoard,
   subscribePeople, subscribeTasks,
   addPerson, updatePerson, deletePerson,
   addTask, updateTask, deleteTask,
@@ -137,6 +137,30 @@ function AuthenticatedApp({ user }) {
     setActiveBoardId(ref.id)
   }, [user])
 
+  // ── Rename board ──────────────────────────────────────────────────────────
+  const handleRenameBoard = useCallback((id, name) => {
+    updateBoard(id, { name })
+  }, [])
+
+  // ── Delete board ──────────────────────────────────────────────────────────
+  const handleDeleteBoard = useCallback((id) => {
+    deleteBoard(id)
+    if (activeBoardId === id) {
+      const next = boards.find(b => b.id !== id)
+      if (next) { setActiveBoardId(next.id); setBoardIdInUrl(next.id) }
+      else { setActiveBoardId(null); setBoardIdInUrl(null) }
+    }
+  }, [activeBoardId, boards])
+
+  // ── Share board ───────────────────────────────────────────────────────────
+  const handleShareBoard = useCallback((id) => {
+    const url = new URL(window.location)
+    url.searchParams.set('board', id)
+    navigator.clipboard.writeText(url.toString())
+      .then(() => alert('Board link copied to clipboard!'))
+      .catch(() => alert(url.toString()))
+  }, [])
+
   // ── View mode ────────────────────────────────────────────────────────────
   const handleViewModeChange = useCallback((mode) => {
     const today = new Date()
@@ -201,6 +225,9 @@ function AuthenticatedApp({ user }) {
         onSelectBoard={handleSelectBoard}
         onNewBoard={handleNewBoard}
         onSettings={() => setSettingsOpen(true)}
+        onRenameBoard={handleRenameBoard}
+        onDeleteBoard={handleDeleteBoard}
+        onShareBoard={handleShareBoard}
       />
 
       <div className="main-content">

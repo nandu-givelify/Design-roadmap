@@ -88,16 +88,29 @@ export default function LoginPage() {
           <RoadmapLogo />
         </div>
 
-        <h1 className="login-card__title">Welcome to RoadMap</h1>
-        <p className="login-card__sub">Sign in or join to start your roadmap</p>
+        <h1 className="login-card__title">
+          {step === 'email'    && 'Welcome to RoadMap'}
+          {step === 'password' && 'Welcome back'}
+          {step === 'register' && 'Create your account'}
+          {step === 'reset-sent' && 'Check your email'}
+        </h1>
+        <p className="login-card__sub">
+          {step === 'email'    && 'Sign in or join to start your roadmap'}
+          {step === 'password' && `Signing in as ${email}`}
+          {step === 'register' && `Setting up your account for ${email}`}
+          {step === 'reset-sent' && ''}
+        </p>
 
-        {/* Google */}
-        <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
-          <GoogleIcon />
-          Continue with Google
-        </button>
-
-        <div className="login-divider"><span>or</span></div>
+        {/* Google — only shown on email step */}
+        {step === 'email' && (
+          <>
+            <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
+              <GoogleIcon />
+              Continue with Google
+            </button>
+            <div className="login-divider"><span>or</span></div>
+          </>
+        )}
 
         {/* ── Step: email ─────────────────────────────────────── */}
         {step === 'email' && (

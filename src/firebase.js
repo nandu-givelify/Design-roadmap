@@ -60,6 +60,9 @@ export const createBoard = (data) =>
 export const updateBoard = (boardId, data) =>
   updateDoc(doc(db, 'boards', boardId), data)
 
+export const deleteBoard = (boardId) =>
+  deleteDoc(doc(db, 'boards', boardId))
+
 export const subscribeBoard = (boardId, cb) =>
   onSnapshot(doc(db, 'boards', boardId), (s) =>
     cb(s.exists() ? { id: s.id, ...s.data() } : null))
