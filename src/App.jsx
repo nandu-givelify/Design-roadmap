@@ -38,6 +38,7 @@ function AuthenticatedApp({ user }) {
   const [loadingBoards, setLoadingBoards] = useState(true)
   const [migrating,     setMigrating]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
+  const [dbError,       setDbError]       = useState(null)
 
   // Timeline controls
   const now = new Date()
@@ -97,6 +98,7 @@ function AuthenticatedApp({ user }) {
     if (!user) return
     setLoadingBoards(true)
     const unsub = subscribeBoards(user.uid, user.email, async (bs) => {
+      setDbError(null)
       setBoards(bs)
       setLoadingBoards(false)
       if (bs.length > 0) {
@@ -125,7 +127,14 @@ function AuthenticatedApp({ user }) {
       }
     })
     return unsub
-  }, [user]) // eslint-disable-line
+  }, [user], (err) => { // eslint-disable-line
+    setLoadingBoards(false)
+    if (err.code === 'permission-denied') {
+      setDbError('permission-denied')
+    } else {
+      setDbError(err.message)
+    }
+  })
 
   // ── Subscribe to active board's data ────────────────────────────────────
   useEffect(() => {
@@ -254,6 +263,7 @@ function AuthenticatedApp({ user }) {
     return url.toString()
   }
 
+  if (dbError === 'permission-denied') return <PermissionErrorScreen />
   if (migrating) return <SplashScreen label="Setting up your board…" />
   if (loadingBoards) return <SplashScreen />
 
@@ -370,6 +380,26 @@ function SplashScreen({ label = 'Loading…' }) {
     <div className="loading-screen">
       <div className="loading-screen__icon">🗓</div>
       <div className="loading-screen__text">{label}</div>
+    </div>
+  )
+}
+
+function PermissionErrorScreen() {
+  return (
+    <div className="setup-screen">
+      <div className="setup-card">
+        <div className="setup-card__icon">🔒</div>
+        <div className="setup-card__title">Firestore rules need updating</div>
+        <div className="setup-card__sub">
+          Your Firebase project is blocking database access. Update the Firestore rules to fix this.
+        </div>
+        <div className="setup-card__code">
+          {'rules_version = \'2\';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n  }\n}'}
+        </div>
+        <div className="setup-card__hint">
+          Go to Firebase Console → Firestore Database → Rules tab → paste the above → Publish.
+        </div>
+      </div>
     </div>
   )
 }

@@ -40,17 +40,22 @@ export const updateUserPrefs = (uid, data) =>
   setDoc(doc(db, 'userPrefs', uid), data, { merge: true })
 
 // ── Boards ───────────────────────────────────────────────────────────────────
-export const subscribeBoards = (uid, email, cb) => {
-  let owned = [], membered = []
+export const subscribeBoards = (uid, email, cb, onError) => {
+  let owned = [], membered = [], q1Done = false, q2Done = false
   const merge = () => {
     const map = {}
     ;[...owned, ...membered].forEach((b) => { map[b.id] = b })
     cb(Object.values(map).sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)))
   }
+  const handleError = (err) => {
+    console.error('Firestore boards error:', err.code, err.message)
+    if (onError) onError(err)
+    else merge() // fire with empty so app doesn't hang
+  }
   const q1 = query(collection(db, 'boards'), where('ownerId', '==', uid))
   const q2 = query(collection(db, 'boards'), where('memberEmails', 'array-contains', email))
-  const u1 = onSnapshot(q1, (s) => { owned    = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() })
-  const u2 = onSnapshot(q2, (s) => { membered = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() })
+  const u1 = onSnapshot(q1, (s) => { owned    = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() }, handleError)
+  const u2 = onSnapshot(q2, (s) => { membered = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() }, handleError)
   return () => { u1(); u2() }
 }
 
