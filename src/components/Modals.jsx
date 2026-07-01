@@ -1,6 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
 import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
 
+// ── Helper functions ──────────────────────────────────────────────────────────
+function getTaskDays(startDate, endDate) {
+  if (!startDate || !endDate) return 28
+  const s = new Date(startDate), e = new Date(endDate)
+  return Math.max(1, Math.round((e - s) / 86400000) + 1)
+}
+
+function normalizePhases(phases, totalDays) {
+  if (!phases || phases.length === 0) return []
+  const n = phases.length
+  const equalDays = Math.max(1, Math.floor(totalDays / n))
+  return phases.map((p, i) => ({
+    ...p,
+    days: i === n - 1 ? Math.max(1, totalDays - equalDays * (n - 1)) : equalDays,
+  }))
+}
+
 // ── Shared shell ─────────────────────────────────────────────────────────────
 function ModalShell({ title, onClose, children }) {
   return (
@@ -179,7 +196,7 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
 }
 
 // ── Task fields (shared between Add and Edit) ─────────────────────────────────
-function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter }) {
+function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases }) {
   // For PM field: only show people with PM role
   const pmPeople = people.filter((p) => p.role === 'PM')
 
@@ -232,20 +249,77 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
             onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)} />
         </Field>
       </div>
+
+      {/* Phases picker */}
+      {boardPhases && boardPhases.length > 0 && (
+        <Field label="Phases">
+          <div className="task-phases-picker">
+            {boardPhases.map(bp => {
+              const isActive = (form.phases || []).some(p => p.id === bp.id)
+              return (
+                <label key={bp.id} className={`phase-checkbox${isActive ? ' phase-checkbox--active' : ''}`}>
+                  <input type="checkbox" checked={isActive} onChange={() => {
+                    const cur = form.phases || []
+                    let newPhases
+                    if (isActive) {
+                      if (cur.length <= 1) return
+                      newPhases = cur.filter(p => p.id !== bp.id)
+                    } else {
+                      const added = [...cur, { id: bp.id, days: 1 }]
+                      const ordered = boardPhases
+                        .filter(b => added.some(p => p.id === b.id))
+                        .map(b => ({ id: b.id, days: 1 }))
+                      newPhases = normalizePhases(ordered, getTaskDays(form.startDate, form.endDate))
+                    }
+                    set('phases', newPhases)
+                  }} />
+                  <span className="phase-checkbox__dot" style={{ background: bp.color }} />
+                  <span className="phase-checkbox__label">{bp.name}</span>
+                </label>
+              )
+            })}
+          </div>
+        </Field>
+      )}
+
+      {/* Task color */}
+      <Field label="Color">
+        <div className="task-color-picker">
+          {[
+            { value: 'white', label: 'White', hex: '#ffffff' },
+            { value: 'gray',  label: 'Gray',  hex: '#eeeeee' },
+          ].map(c => (
+            <button key={c.value} type="button"
+              className={`task-color-swatch${(form.taskColor || 'white') === c.value ? ' task-color-swatch--active' : ''}`}
+              style={{ background: c.hex }}
+              onClick={() => set('taskColor', c.value)}
+              title={c.label}
+            />
+          ))}
+        </div>
+      </Field>
     </>
   )
 }
 
 // ── Add Task Modal ────────────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, roles, defaultAssigneeId, defaultStartDate, onCreatePerson, onAddRole }) {
+export function TaskModal({ onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onAddRole }) {
   const today     = new Date()
   const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
   const endDate   = addMonths(startDate, 1)
 
+  const totalDays = getTaskDays(toDateString(startDate), toDateString(endDate))
+  const defaultPhases = normalizePhases(
+    (boardPhases || []).map(bp => ({ id: bp.id, days: 1 })),
+    totalDays
+  )
+
   const [form, setForm] = useState({
     title: '', assigneeId: defaultAssigneeId || '', pmId: '',
     startDate: toDateString(startDate), endDate: toDateString(endDate),
+    taskColor: 'white',
+    phases: defaultPhases,
   })
   const [endDateTouched, setEndDateTouched] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
@@ -257,7 +331,13 @@ export function TaskModal({ onClose, onSave, people, roles, defaultAssigneeId, d
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null })
+    onSave({
+      ...form,
+      assigneeId: form.assigneeId || null,
+      pmId: form.pmId || null,
+      taskColor: form.taskColor || 'white',
+      phases: form.phases || [],
+    })
     onClose()
   }
 
@@ -265,6 +345,7 @@ export function TaskModal({ onClose, onSave, people, roles, defaultAssigneeId, d
     <ModalShell title="Add Task" onClose={onClose}>
       <TaskFields
         form={form} set={set} people={people} roles={roles}
+        boardPhases={boardPhases}
         onCreatePerson={onCreatePerson} onAddRole={onAddRole}
         onStartDateChange={handleStartDateChange}
         onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
@@ -279,19 +360,27 @@ export function TaskModal({ onClose, onSave, people, roles, defaultAssigneeId, d
 }
 
 // ── Edit Task Modal ────────────────────────────────────────────────────────────
-export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, onCreatePerson, onAddRole }) {
+export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onAddRole }) {
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
     pmId:       task.pmId       || task.teamId || '',  // support legacy teamId
     startDate:  task.startDate  || '',
     endDate:    task.endDate    || '',
+    taskColor:  task.taskColor  || 'white',
+    phases:     task.phases     || [],
   })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null })
+    onSave({
+      ...form,
+      assigneeId: form.assigneeId || null,
+      pmId: form.pmId || null,
+      taskColor: form.taskColor || 'white',
+      phases: form.phases || [],
+    })
     onClose()
   }
 
@@ -299,6 +388,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
     <ModalShell title="Edit Task" onClose={onClose}>
       <TaskFields
         form={form} set={set} people={people} roles={roles}
+        boardPhases={boardPhases}
         onCreatePerson={onCreatePerson} onAddRole={onAddRole}
         onTitleEnter={() => { if (form.title.trim()) handleSave() }}
       />
@@ -313,20 +403,32 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
 }
 
 // ── Share Modal ───────────────────────────────────────────────────────────────
-export function ShareModal({ onClose, shareUrl }) {
+export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
   const [copied, setCopied] = useState(false)
+  const isPublic = board?.isPublic || false
+
   const copy = () => {
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000)
     })
   }
+
   return (
     <ModalShell title="Share Board" onClose={onClose}>
-      <p style={{ fontSize: 13, color: '#374151', marginBottom: 14 }}>
-        Anyone with this link can view the board. They'll need to sign in to access it.
-      </p>
-      <div className="share-link-row">
-        <div className="share-link-row__label">Board link</div>
+      <div className="share-public-row">
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>Public access</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+            {isPublic ? 'Anyone with the link can view without signing in.' : 'Only invited people can access this board.'}
+          </div>
+        </div>
+        <button className={`share-toggle${isPublic ? ' share-toggle--on' : ''}`}
+          onClick={() => onTogglePublic?.(!isPublic)}>
+          <span className="share-toggle__knob" />
+        </button>
+      </div>
+      <div className="share-link-row" style={{ marginTop: 16 }}>
+        <div className="share-link-row__label">{isPublic ? 'Public link' : 'Board link (sign in required)'}</div>
         <div className="share-link-row__controls">
           <input readOnly className="share-link-row__input" value={shareUrl} onFocus={(e) => e.target.select()} />
           <button className={`share-copy-btn${copied ? ' share-copy-btn--copied' : ''}`} onClick={copy}>
@@ -334,6 +436,11 @@ export function ShareModal({ onClose, shareUrl }) {
           </button>
         </div>
       </div>
+      {isPublic && (
+        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 10 }}>
+          Note: Update your Firestore rules to allow public reads. See the setup screen for the correct rules.
+        </p>
+      )}
     </ModalShell>
   )
 }

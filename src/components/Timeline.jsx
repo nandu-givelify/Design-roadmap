@@ -9,7 +9,7 @@ import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 const PERSON_COL_W = 200
-const LANE_H       = 34
+const LANE_H       = 44
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
@@ -30,6 +30,7 @@ const Timeline = forwardRef(function Timeline({
   groupBy,           // 'none' | role string like 'Designer' | 'PM' | 'Dev'
   filterPersonIds,
   onUpdateTask, onDeleteTask, onAddTaskForPerson, onEditTask,
+  boardPhases,
   readOnly,
 }, ref) {
   const scrollRef    = useRef(null)
@@ -368,10 +369,12 @@ const Timeline = forwardRef(function Timeline({
               laneHeight={LANE_H}
               laneGap={LANE_GAP}
               people={people}
+              boardPhases={boardPhases}
               onDelete={() => onDeleteTask(task.id)}
               onResizeDone={(updates) => onUpdateTask(task.id, updates)}
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
+              onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
               readOnly={readOnly}
@@ -454,10 +457,12 @@ const Timeline = forwardRef(function Timeline({
               laneHeight={LANE_H}
               laneGap={LANE_GAP}
               people={people}
+              boardPhases={boardPhases}
               onDelete={() => onDeleteTask(task.id)}
               onResizeDone={(updates) => onUpdateTask(task.id, updates)}
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
+              onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
               readOnly={readOnly}

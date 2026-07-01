@@ -106,14 +106,50 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole }) {
   )
 }
 
+// ── Phase colors palette ──────────────────────────────────────────────────────
+const PHASE_COLORS = ['#60A5FA','#FBBF24','#FB923C','#34D399','#A78BFA','#F87171','#4ADE80','#38BDF8']
+
+function AddPhaseForm({ existingPhases, onSave, onDone }) {
+  const [name,  setName]  = useState('')
+  const usedColors = (existingPhases || []).map(p => p.color)
+  const defaultColor = PHASE_COLORS.find(c => !usedColors.includes(c)) || PHASE_COLORS[0]
+  const [color, setColor] = useState(defaultColor)
+
+  const handleSave = () => {
+    if (!name.trim()) return
+    const id = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    onSave({ id, name: name.trim(), color })
+  }
+
+  return (
+    <div className="settings-inline-form">
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Phase name" autoFocus />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        {PHASE_COLORS.map(c => (
+          <button key={c} type="button" onClick={() => setColor(c)}
+            style={{ width: 20, height: 20, borderRadius: '50%', background: c, cursor: 'pointer',
+              border: color === c ? '2px solid #111827' : '2px solid transparent', padding: 0 }} />
+        ))}
+      </div>
+      <div className="settings-inline-actions">
+        <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }}
+          onClick={handleSave} disabled={!name.trim()}>Add</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onDone}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Settings panel ───────────────────────────────────────────────────────
 export default function Settings({
   onClose, boardId, people, roles,
+  boardPhases, onUpdateBoardPhases,
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
   isOwner,
 }) {
-  const [editingId,    setEditingId]    = useState(null)
-  const [adding,       setAdding]       = useState(false)
+  const [editingId,     setEditingId]     = useState(null)
+  const [adding,        setAdding]        = useState(false)
+  const [addingPhase,   setAddingPhase]   = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
 
   const handleDeleteConfirmed = async () => {
@@ -215,6 +251,44 @@ export default function Settings({
             <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 8 }}>
               Add new roles when creating or editing a person.
             </p>
+          </div>
+
+          {/* ── Phases section ─────────────────────────────────────── */}
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <span className="settings-section__title">Phases</span>
+              {isOwner && (
+                <button className="settings-section__add" onClick={() => setAddingPhase(true)}>
+                  + Add phase
+                </button>
+              )}
+            </div>
+
+            {(boardPhases || []).map((phase) => (
+              <div key={phase.id} className="settings-phase-item">
+                <span className="settings-phase-dot" style={{ background: phase.color }} />
+                <span className="settings-phase-name">{phase.name}</span>
+                <div style={{ flex: 1 }} />
+                {isOwner && (
+                  <button className="settings-item__btn settings-item__btn--delete"
+                    onClick={() => {
+                      if ((boardPhases || []).length <= 1) return
+                      onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phase.id))
+                    }}>Delete</button>
+                )}
+              </div>
+            ))}
+
+            {addingPhase && isOwner && (
+              <AddPhaseForm
+                existingPhases={boardPhases || []}
+                onSave={(phase) => {
+                  onUpdateBoardPhases([...(boardPhases || []), phase])
+                  setAddingPhase(false)
+                }}
+                onDone={() => setAddingPhase(false)}
+              />
+            )}
           </div>
         </div>
 

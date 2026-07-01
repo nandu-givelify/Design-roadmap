@@ -8,12 +8,14 @@ import Settings from './components/Settings'
 import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
 import {
   subscribeBoards, createBoard, updateBoard, deleteBoard,
-  subscribePeople, subscribeTasks,
+  subscribePeople, subscribeTasks, subscribeBoard,
   addPerson, updatePerson, deletePerson,
-  addTask, updateTask, deleteTask,
+  addTask, updateTask, deleteTask, addTaskWithId,
   checkAndRunMigration,
   subscribeUserPrefs, updateUserPrefs,
+  DEFAULT_BOARD_PHASES,
 } from './firebase'
+import { useHistory } from './hooks/useHistory'
 
 const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
 
@@ -23,11 +25,75 @@ const isConfigured = import.meta.env.VITE_FIREBASE_API_KEY &&
 export default function App() {
   const { user } = useAuth()
 
+  const publicBoardId = new URLSearchParams(window.location.search).get('board')
+
   if (!isConfigured) return <SetupScreen />
   if (user === undefined) return <SplashScreen />  // still loading auth
-  if (user === null) return <LoginPage />
+  if (user === null) {
+    if (publicBoardId) return <PublicBoardView boardId={publicBoardId} />
+    return <LoginPage />
+  }
 
   return <AuthenticatedApp user={user} />
+}
+
+function PublicBoardView({ boardId }) {
+  const [board,  setBoard]  = useState(undefined)
+  const [people, setPeople] = useState([])
+  const [tasks,  setTasks]  = useState([])
+  const [error,  setError]  = useState(null)
+  const now = new Date()
+  const [viewMode, setViewMode] = useState('quarter')
+  const [year,     setYear]     = useState(now.getFullYear())
+  const [quarter,  setQuarter]  = useState(Math.floor(now.getMonth() / 3) + 1)
+
+  useEffect(() => {
+    const u1 = subscribeBoard(boardId, (b) => {
+      if (!b) { setError('Board not found.'); return }
+      if (!b.isPublic) { setError('This board is private. Please sign in to access it.'); return }
+      setBoard(b)
+    })
+    const u2 = subscribePeople(boardId, setPeople)
+    const u3 = subscribeTasks(boardId, setTasks)
+    return () => { u1(); u2(); u3() }
+  }, [boardId])
+
+  if (board === undefined && !error) return <div className="loading-screen"><div>Loading board…</div></div>
+  if (error) return (
+    <div className="loading-screen">
+      <div style={{ fontSize: 32 }}>🔒</div>
+      <div style={{ fontSize: 15, color: '#374151', marginTop: 12 }}>{error}</div>
+      <button style={{ marginTop: 16, padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+        onClick={() => { window.location.search = '' }}>Sign in</button>
+    </div>
+  )
+
+  return (
+    <div className="app">
+      <div className="main-content">
+        <header className="header">
+          <span className="header__board-title">{board.name}</span>
+          <div className="header__spacer" />
+          <div className="header__view-toggle">
+            {['year','quarter'].map(m => (
+              <button key={m} className={`header__view-btn${viewMode===m?' header__view-btn--active':''}`}
+                onClick={() => setViewMode(m)}>{m === 'year' ? 'Year' : 'Quarter'}</button>
+            ))}
+          </div>
+          <div className="header__readonly-badge">View only · <a href="/" style={{ color: '#92400e' }}>Sign in to edit</a></div>
+        </header>
+        <Timeline
+          viewMode={viewMode} year={year} quarter={quarter}
+          people={people} tasks={tasks} groupBy="none"
+          filterPersonIds={[]}
+          onUpdateTask={() => {}} onDeleteTask={() => {}}
+          onAddTaskForPerson={() => {}} onEditTask={() => {}}
+          boardPhases={board.boardPhases || DEFAULT_BOARD_PHASES}
+          readOnly
+        />
+      </div>
+    </div>
+  )
 }
 
 function AuthenticatedApp({ user }) {
@@ -62,6 +128,11 @@ function AuthenticatedApp({ user }) {
   const boardSetupStarted = useRef(false)  // prevent double-creation
 
   const timelineRef = useRef(null)
+
+  // Undo/redo
+  const { push: pushHistory, undo: undoHistory, redo: redoHistory } = useHistory()
+  const [undoToast, setUndoToast] = useState(null)
+  const showToast = useCallback((msg) => { setUndoToast(msg); setTimeout(() => setUndoToast(null), 2500) }, [])
 
   // ── Subscribe to user prefs (board order + favourites) ───────────────────
   useEffect(() => {
@@ -125,16 +196,16 @@ function AuthenticatedApp({ user }) {
           setMigrating(false)
         }
       }
+    }, (err) => {
+      setLoadingBoards(false)
+      if (err.code === 'permission-denied') {
+        setDbError('permission-denied')
+      } else {
+        setDbError(err.message)
+      }
     })
     return unsub
-  }, [user], (err) => { // eslint-disable-line
-    setLoadingBoards(false)
-    if (err.code === 'permission-denied') {
-      setDbError('permission-denied')
-    } else {
-      setDbError(err.message)
-    }
-  })
+  }, [user]) // eslint-disable-line
 
   // ── Subscribe to active board's data ────────────────────────────────────
   useEffect(() => {
@@ -149,6 +220,7 @@ function AuthenticatedApp({ user }) {
   // ── Active board object ──────────────────────────────────────────────────
   const activeBoard = boards.find((b) => b.id === activeBoardId) || null
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
+  const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
@@ -190,12 +262,8 @@ function AuthenticatedApp({ user }) {
   }, [activeBoardId, boards])
 
   // ── Share board ───────────────────────────────────────────────────────────
-  const handleShareBoard = useCallback((id) => {
-    const url = new URL(window.location)
-    url.searchParams.set('board', id)
-    navigator.clipboard.writeText(url.toString())
-      .then(() => alert('Board link copied!'))
-      .catch(() => prompt('Copy this link:', url.toString()))
+  const handleShareBoard = useCallback(() => {
+    setModal('share')
   }, [])
 
   // ── Reorder boards ────────────────────────────────────────────────────────
@@ -227,20 +295,46 @@ function AuthenticatedApp({ user }) {
   }, [])
 
   // ── Firebase task/person helpers ─────────────────────────────────────────
-  const handleAddTask = useCallback((data) => {
+  const handleAddTask = useCallback(async (data) => {
     if (!activeBoardId) return
-    return addTask(activeBoardId, data)
-  }, [activeBoardId])
+    const ref = await addTask(activeBoardId, data)
+    pushHistory({
+      description: `Created "${data.title}"`,
+      undo: () => deleteTask(activeBoardId, ref.id),
+      redo: () => addTaskWithId(activeBoardId, ref.id, data),
+    })
+    return ref
+  }, [activeBoardId, pushHistory])
 
-  const handleUpdateTask = useCallback((id, data) => {
+  const handleUpdateTask = useCallback(async (id, data) => {
     if (!activeBoardId) return
-    return updateTask(activeBoardId, id, data)
-  }, [activeBoardId])
+    const prevTask = tasks.find(t => t.id === id)
+    await updateTask(activeBoardId, id, data)
+    if (prevTask) {
+      const prevData = Object.keys(data).reduce((acc, k) => ({
+        ...acc, [k]: prevTask[k] !== undefined ? prevTask[k] : null
+      }), {})
+      pushHistory({
+        description: `Updated "${prevTask.title}"`,
+        undo: () => updateTask(activeBoardId, id, prevData),
+        redo: () => updateTask(activeBoardId, id, data),
+      })
+    }
+  }, [activeBoardId, tasks, pushHistory])
 
-  const handleDeleteTask = useCallback((id) => {
+  const handleDeleteTask = useCallback(async (id) => {
     if (!activeBoardId) return
-    return deleteTask(activeBoardId, id)
-  }, [activeBoardId])
+    const prevTask = tasks.find(t => t.id === id)
+    await deleteTask(activeBoardId, id)
+    if (prevTask) {
+      const { id: _id, ...taskData } = prevTask
+      pushHistory({
+        description: `Deleted "${prevTask.title}"`,
+        undo: () => addTaskWithId(activeBoardId, id, taskData),
+        redo: () => deleteTask(activeBoardId, id),
+      })
+    }
+  }, [activeBoardId, tasks, pushHistory])
 
   const handleCreatePerson = useCallback(async (data) => {
     if (!activeBoardId) return null
@@ -256,12 +350,36 @@ function AuthenticatedApp({ user }) {
     await updateBoard(activeBoardId, { roles: [...roles, role] })
   }, [activeBoardId, activeBoard])
 
-  // Share: copy ?board=boardId URL
+  // ── Board phases management ──────────────────────────────────────────────
+  const handleUpdateBoardPhases = useCallback(async (newPhases) => {
+    if (!activeBoardId) return
+    await updateBoard(activeBoardId, { boardPhases: newPhases })
+  }, [activeBoardId])
+
+  // Share: ?board=boardId URL
   const getBoardShareUrl = () => {
     const url = new URL(window.location)
     url.searchParams.set('board', activeBoardId)
     return url.toString()
   }
+
+  // ── Keyboard shortcuts: undo/redo ────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          const desc = redoHistory()
+          if (desc) showToast(`Redid: ${desc}`)
+        } else {
+          const desc = undoHistory()
+          if (desc) showToast(`Undid: ${desc}`)
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [undoHistory, redoHistory, showToast])
 
   if (dbError === 'permission-denied') return <PermissionErrorScreen />
   if (migrating) return <SplashScreen label="Setting up your board…" />
@@ -289,7 +407,7 @@ function AuthenticatedApp({ user }) {
           year={year} setYear={setYear}
           quarter={quarter} setQuarter={setQuarter}
           onJumpToday={handleJumpToday}
-          onShare={() => handleShareBoard(activeBoardId)}
+          onShare={() => handleShareBoard()}
           onRenameBoard={handleRenameBoard}
           onDeleteBoard={handleDeleteBoard}
           people={people}
@@ -317,6 +435,7 @@ function AuthenticatedApp({ user }) {
             setModal('task')
           }}
           onEditTask={(task) => setEditingTask(task)}
+          boardPhases={boardPhases}
           readOnly={readOnly}
         />
 
@@ -327,6 +446,7 @@ function AuthenticatedApp({ user }) {
             onSave={handleAddTask}
             people={people}
             roles={boardRoles}
+            boardPhases={boardPhases}
             defaultAssigneeId={defaultAssigneeId}
             defaultStartDate={defaultStartDate}
             onCreatePerson={handleCreatePerson}
@@ -343,6 +463,7 @@ function AuthenticatedApp({ user }) {
             onDelete={() => handleDeleteTask(editingTask.id)}
             people={people}
             roles={boardRoles}
+            boardPhases={boardPhases}
             onCreatePerson={handleCreatePerson}
             onAddRole={handleAddRole}
           />
@@ -353,6 +474,8 @@ function AuthenticatedApp({ user }) {
           <ShareModal
             onClose={() => setModal(null)}
             shareUrl={getBoardShareUrl()}
+            board={activeBoard}
+            onTogglePublic={(isPublic) => updateBoard(activeBoardId, { isPublic })}
           />
         )}
 
@@ -363,14 +486,18 @@ function AuthenticatedApp({ user }) {
             boardId={activeBoardId}
             people={people}
             roles={boardRoles}
+            boardPhases={boardPhases}
             onUpdatePerson={(id, data) => updatePerson(activeBoardId, id, data)}
             onDeletePerson={(id) => deletePerson(activeBoardId, id)}
             onAddPerson={(data) => addPerson(activeBoardId, data)}
             onAddRole={handleAddRole}
+            onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
           />
         )}
       </div>
+
+      {undoToast && <div className="undo-toast">{undoToast}</div>}
     </div>
   )
 }

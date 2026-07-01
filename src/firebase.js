@@ -10,6 +10,13 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth'
 
+export const DEFAULT_BOARD_PHASES = [
+  { id: 'discovery', name: 'Discovery', color: '#60A5FA' },
+  { id: 'ux',        name: 'UX',        color: '#FBBF24' },
+  { id: 'ui',        name: 'UI',        color: '#FB923C' },
+  { id: 'handoff',   name: 'Handoff',   color: '#34D399' },
+]
+
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -64,6 +71,8 @@ export const createBoard = (data) =>
     roles: ['Designer', 'PM', 'Dev'],
     memberEmails: [],
     members: {},
+    boardPhases: DEFAULT_BOARD_PHASES,
+    isPublic: false,
     ...data,
     createdAt: serverTimestamp(),
   })
@@ -108,6 +117,10 @@ export const updateTask = (boardId, id, data) =>
 
 export const deleteTask = (boardId, id) =>
   deleteDoc(doc(db, 'boards', boardId, 'tasks', id))
+
+// addTaskWithId — used for undo (restore deleted task with original ID)
+export const addTaskWithId = (boardId, id, data) =>
+  setDoc(doc(db, 'boards', boardId, 'tasks', id), data)
 
 // ── Migration (one-time from root-level legacy data) ─────────────────────────
 // Migrates old top-level people/teams/tasks collections into the first board.

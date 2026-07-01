@@ -219,7 +219,7 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 
 /* Inner bar — white background, neutral border */
 .task-bar__inner {
-  position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+  position: absolute; left: 0; right: 0; top: 0;
   border-radius: 12px; display: flex; align-items: center;
   padding: 4px; overflow: hidden; gap: 0;
   background: #fff;
@@ -764,3 +764,88 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 }
 .left-nav__board-item:hover .left-nav__board-drag-handle { opacity: 1; }
 .left-nav__board-drag-handle:active { cursor: grabbing; }
+
+/* ── Phase strip ─────────────────────────────────────────────────────────── */
+.task-bar__phase-strip {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 10px; display: flex; overflow: hidden;
+  border-radius: 0 0 12px 12px;
+}
+.task-bar__phase-seg {
+  position: relative; height: 100%; flex-shrink: 0;
+}
+.task-bar__phase-divider {
+  position: absolute; right: -6px; top: 0; bottom: 0;
+  width: 12px; cursor: col-resize; z-index: 10;
+}
+.task-bar__phase-divider::after {
+  content: ''; position: absolute;
+  left: 5px; top: 1px; bottom: 1px; width: 2px;
+  background: rgba(255,255,255,0.85); border-radius: 1px;
+}
+.task-bar__phase-divider:hover::after {
+  left: 4px; width: 4px; background: #fff;
+}
+
+/* ── Task color picker ───────────────────────────────────────────────────── */
+.task-color-picker { display: flex; gap: 8px; align-items: center; }
+.task-color-swatch {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid #e5e7eb; cursor: pointer; padding: 0;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.task-color-swatch:hover { transform: scale(1.1); }
+.task-color-swatch--active { border-color: #111827; box-shadow: 0 0 0 2px rgba(17,24,39,0.15); }
+
+/* ── Phases picker in modal ──────────────────────────────────────────────── */
+.task-phases-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.phase-checkbox {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 20px;
+  border: 1.5px solid #e5e7eb; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: #6b7280;
+  transition: all 0.15s; user-select: none;
+}
+.phase-checkbox input { display: none; }
+.phase-checkbox--active { border-color: #111827; color: #111827; background: #f9fafb; }
+.phase-checkbox__dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Settings phases section ─────────────────────────────────────────────── */
+.settings-phase-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid #f3f4f6;
+}
+.settings-phase-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.settings-phase-name { font-size: 13px; font-weight: 500; color: #111827; }
+
+/* ── Share modal toggle ──────────────────────────────────────────────────── */
+.share-public-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 12px 0; border-bottom: 1px solid #f3f4f6;
+}
+.share-toggle {
+  width: 44px; height: 24px; border-radius: 12px; background: #e5e7eb;
+  position: relative; flex-shrink: 0; cursor: pointer; transition: background 0.2s; padding: 0;
+}
+.share-toggle--on { background: #111827; }
+.share-toggle__knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  display: block;
+}
+.share-toggle--on .share-toggle__knob { left: 22px; }
+
+/* ── Undo toast ──────────────────────────────────────────────────────────── */
+.undo-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #111827; color: #fff; padding: 10px 20px; border-radius: 24px;
+  font-size: 13px; font-weight: 500; z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  animation: toast-in 0.2s ease;
+  white-space: nowrap; pointer-events: none;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
