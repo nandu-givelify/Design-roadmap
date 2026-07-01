@@ -205,8 +205,7 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
   position: absolute; user-select: none; z-index: 2;
   border-radius: 12px; border: 1px solid #ddd;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  overflow: hidden; /* clips phase strip to rounded bar */
-  background: #fff;
+  /* background set inline per task color; overflow stays visible so outside-title renders */
   transition: box-shadow 0.15s;
 }
 .task-bar--dragging { z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
@@ -268,7 +267,7 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 
 /* Container for avatars + title shown OUTSIDE the bar (when >50% clipped) */
 .task-bar__outside-content {
-  position: absolute; top: 16px; transform: translateY(-50%);
+  position: absolute; top: 50%; transform: translateY(-50%);
   display: flex; align-items: center; gap: 4px;
   pointer-events: none; z-index: 3; white-space: nowrap;
 }
@@ -775,26 +774,27 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 /* ── Phase strip — inset pill at bottom of task bar ──────────────────────── */
 .task-bar__phase-strip {
   position: absolute;
-  left: 6px; right: 6px; bottom: 5px;  /* even spacing from edges */
+  left: 6px; right: 6px; bottom: 4px;  /* even spacing: 6px sides, 4px bottom */
   height: 4px;
   display: flex; overflow: hidden;
   border-radius: 2px;  /* fully rounded pill */
+  gap: 2px;            /* transparent gaps inherit outer bar background */
 }
 .task-bar__phase-seg {
   position: relative; height: 100%;
   /* flex set inline via style={{ flex: phase.days }} */
 }
+/* Drag handle: centered on the 2px gap between segments */
 .task-bar__phase-divider {
-  position: absolute; right: -6px; top: 0; bottom: 0;
-  width: 12px; cursor: col-resize; z-index: 10;
+  position: absolute; right: -8px; top: 0; bottom: 0;
+  width: 14px; cursor: col-resize; z-index: 10;
 }
-.task-bar__phase-divider::after {
-  content: ''; position: absolute;
-  left: 5px; top: 0; bottom: 0; width: 2px;
-  background: rgba(255,255,255,0.9); border-radius: 1px;
-}
+/* Subtle indicator on hover — no persistent line; the gap provides visual separation */
 .task-bar__phase-divider:hover::after {
-  left: 4px; width: 4px;
+  content: ''; position: absolute;
+  left: 50%; transform: translateX(-50%);
+  top: -1px; bottom: -1px; width: 2px;
+  background: rgba(0,0,0,0.3); border-radius: 1px;
 }
 
 /* ── Task color picker ───────────────────────────────────────────────────── */

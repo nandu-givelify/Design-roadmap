@@ -2,7 +2,7 @@ import { useRef, useState, useLayoutEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 const BAR_H         = 46
-const PHASE_STRIP_H = 14   // room for 4px strip + 5px bottom gap + 5px breathing
+const PHASE_STRIP_H = 10   // 4px strip + 4px bottom gap + 2px above = 10. Gives ~6px gap above strip.
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
@@ -43,10 +43,26 @@ export default function TaskBar({
 
   const totalDays  = Math.max(1, diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1)
 
-  // Default phases: equal distribution across all board phases when task has none saved
+  // Default phases: Discovery & Handoff get 1 week (or proportional); UX+UI split remaining
   const computeDefaultPhases = () => {
     if (!boardPhases || boardPhases.length === 0) return []
     const n = boardPhases.length
+    const ids = boardPhases.map(p => p.id)
+    if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
+      const fixed   = Math.max(1, Math.min(7, Math.round(totalDays / 4)))
+      const remaining = Math.max(2, totalDays - fixed * 2)
+      const ux = Math.max(1, Math.floor(remaining / 2))
+      const ui = Math.max(1, remaining - ux)
+      return boardPhases.map(bp => ({
+        id: bp.id,
+        days: bp.id === 'discovery' ? fixed
+            : bp.id === 'handoff'   ? fixed
+            : bp.id === 'ux'        ? ux
+            : bp.id === 'ui'        ? ui
+            : Math.max(1, Math.floor(totalDays / n)),
+      }))
+    }
+    // General: equal distribution
     const eq = Math.max(1, Math.floor(totalDays / n))
     return boardPhases.map((bp, i) => ({
       id: bp.id,
@@ -180,13 +196,13 @@ export default function TaskBar({
     )
   }
 
-  const innerBg = task.taskColor === 'gray' ? '#eeeeee' : '#ffffff'
+  const barBg = task.taskColor === 'gray' ? '#eeeeee' : '#fff'
 
   return (
     <div
       ref={barRef}
       className={['task-bar', resizing ? 'task-bar--dragging' : '', isGhost ? 'task-bar--ghost' : '', isSelected ? 'task-bar--selected' : ''].filter(Boolean).join(' ')}
-      style={{ left: x, top: y, width: w, height: BAR_H }}
+      style={{ left: x, top: y, width: w, height: BAR_H, background: barBg }}
     >
       <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
 
@@ -198,7 +214,7 @@ export default function TaskBar({
 
       <div
         className={['task-bar__inner', isSelected ? 'task-bar__inner--selected' : ''].filter(Boolean).join(' ')}
-        style={{ bottom: hasPhases ? PHASE_STRIP_H : 0, background: innerBg }}
+        style={{ bottom: hasPhases ? PHASE_STRIP_H : 0 }}
         data-task-id={task.id}
         onMouseDown={handleMoveDown}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}

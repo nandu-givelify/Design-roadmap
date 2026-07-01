@@ -84,7 +84,7 @@ function PublicBoardView({ boardId }) {
         </header>
         <Timeline
           viewMode={viewMode} year={year} quarter={quarter}
-          people={people} tasks={tasks} groupBy="none"
+          people={people} tasks={tasks} groupBy={board.defaultGroupBy || 'none'}
           filterPersonIds={[]}
           onUpdateTask={() => {}} onDeleteTask={() => {}}
           onAddTaskForPerson={() => {}} onEditTask={() => {}}
@@ -229,12 +229,27 @@ function AuthenticatedApp({ user }) {
   const canEdit   = isOwner || memberAccess === 'edit'
   const readOnly  = !canEdit
 
+  // ── GroupBy: persisted to board doc so shared/public viewers see owner's setting ──
+  const activeBoardIdRef = useRef(null)
+  useEffect(() => {
+    // Restore groupBy from board's saved value whenever the active board changes
+    if (!activeBoardId || activeBoardId === activeBoardIdRef.current) return
+    activeBoardIdRef.current = activeBoardId
+    const board = boards.find(b => b.id === activeBoardId)
+    setGroupBy(board?.defaultGroupBy || 'none')
+  }, [activeBoardId, boards]) // eslint-disable-line
+
+  const handleGroupByChange = useCallback((value) => {
+    setGroupBy(value)
+    if (activeBoardId) updateBoard(activeBoardId, { defaultGroupBy: value })
+  }, [activeBoardId])
+
   // ── Board selection ──────────────────────────────────────────────────────
   const handleSelectBoard = useCallback((id) => {
     setActiveBoardId(id)
     setBoardIdInUrl(id)
     setFilterPersonIds([])
-    setGroupBy('none')
+    // groupBy is restored by the activeBoardId effect above
   }, [])
 
   // ── New board ────────────────────────────────────────────────────────────
@@ -356,6 +371,40 @@ function AuthenticatedApp({ user }) {
     await updateBoard(activeBoardId, { boardPhases: newPhases })
   }, [activeBoardId])
 
+  // ── Migrate existing tasks: write smart default phases to tasks that have none ──
+  const migratedBoardsRef = useRef(new Set())
+  useEffect(() => {
+    if (!activeBoardId || migratedBoardsRef.current.has(activeBoardId)) return
+    if (!tasks.length || !boardPhases || !boardPhases.length) return
+    migratedBoardsRef.current.add(activeBoardId)
+    const ids = boardPhases.map(p => p.id)
+    const hasSmart = ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')
+    tasks.forEach(task => {
+      if (task.phases && task.phases.length > 0) return
+      const d = Math.max(1, Math.round((new Date(task.endDate) - new Date(task.startDate)) / 86400000) + 1)
+      const n = boardPhases.length
+      let phases
+      if (hasSmart) {
+        const fixed = Math.max(1, Math.min(7, Math.round(d / 4)))
+        const rem   = Math.max(2, d - fixed * 2)
+        const ux = Math.max(1, Math.floor(rem / 2))
+        const ui = Math.max(1, rem - ux)
+        phases = boardPhases.map(bp => ({
+          id: bp.id,
+          days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
+              : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
+              : Math.max(1, Math.floor(d / n)),
+        }))
+      } else {
+        const eq = Math.max(1, Math.floor(d / n))
+        phases = boardPhases.map((bp, i) => ({
+          id: bp.id, days: i === n - 1 ? Math.max(1, d - eq * (n - 1)) : eq,
+        }))
+      }
+      updateTask(activeBoardId, task.id, { phases })
+    })
+  }, [activeBoardId, tasks, boardPhases]) // eslint-disable-line
+
   // Share: ?board=boardId URL
   const getBoardShareUrl = () => {
     const url = new URL(window.location)
@@ -414,7 +463,7 @@ function AuthenticatedApp({ user }) {
           filterPersonIds={filterPersonIds}
           setFilterPersonIds={setFilterPersonIds}
           groupBy={groupBy}
-          setGroupBy={setGroupBy}
+          setGroupBy={handleGroupByChange}
           roles={boardRoles}
           readOnly={readOnly}
         />

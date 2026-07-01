@@ -322,8 +322,21 @@ const Timeline = forwardRef(function Timeline({
   }
   const bulkDefaultPhases = (task) => {
     if (!boardPhases || !boardPhases.length) return []
-    const n = boardPhases.length
-    const d = bulkTaskDays(task)
+    const n   = boardPhases.length
+    const d   = bulkTaskDays(task)
+    const ids = boardPhases.map(p => p.id)
+    if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
+      const fixed = Math.max(1, Math.min(7, Math.round(d / 4)))
+      const remaining = Math.max(2, d - fixed * 2)
+      const ux = Math.max(1, Math.floor(remaining / 2))
+      const ui = Math.max(1, remaining - ux)
+      return boardPhases.map(bp => ({
+        id: bp.id,
+        days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
+            : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
+            : Math.max(1, Math.floor(d / n)),
+      }))
+    }
     const eq = Math.max(1, Math.floor(d / n))
     return boardPhases.map((bp, i) => ({ id: bp.id, days: i === n-1 ? Math.max(1, d - eq*(n-1)) : eq }))
   }

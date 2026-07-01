@@ -18,6 +18,26 @@ function normalizePhases(phases, totalDays) {
   }))
 }
 
+// Smart defaults: Discovery & Handoff = 1 week (or proportional), UX+UI split remaining
+function smartDefaultPhases(boardPhases, totalDays) {
+  if (!boardPhases || boardPhases.length === 0) return []
+  const n   = boardPhases.length
+  const ids = boardPhases.map(p => p.id)
+  if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
+    const fixed     = Math.max(1, Math.min(7, Math.round(totalDays / 4)))
+    const remaining = Math.max(2, totalDays - fixed * 2)
+    const ux = Math.max(1, Math.floor(remaining / 2))
+    const ui = Math.max(1, remaining - ux)
+    return boardPhases.map(bp => ({
+      id: bp.id,
+      days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
+          : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
+          : Math.max(1, Math.floor(totalDays / n)),
+    }))
+  }
+  return normalizePhases(boardPhases.map(bp => ({ id: bp.id })), totalDays)
+}
+
 // ── Shared shell ─────────────────────────────────────────────────────────────
 function ModalShell({ title, onClose, children }) {
   return (
@@ -310,10 +330,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   const endDate   = addMonths(startDate, 1)
 
   const totalDays = getTaskDays(toDateString(startDate), toDateString(endDate))
-  const defaultPhases = normalizePhases(
-    (boardPhases || []).map(bp => ({ id: bp.id, days: 1 })),
-    totalDays
-  )
+  const defaultPhases = smartDefaultPhases(boardPhases || [], totalDays)
 
   const [form, setForm] = useState({
     title: '', assigneeId: defaultAssigneeId || '', pmId: '',
