@@ -201,8 +201,15 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 .timeline__empty { padding: 60px 0; text-align: center; color: #9ca3af; font-size: 14px; }
 
 /* ── Task Bar ────────────────────────────────────────────────────────────────── */
-.task-bar { position: absolute; user-select: none; z-index: 2; }
-.task-bar--dragging { z-index: 100; }
+.task-bar {
+  position: absolute; user-select: none; z-index: 2;
+  border-radius: 12px; border: 1px solid #ddd;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden; /* clips phase strip to rounded bar */
+  background: #fff;
+  transition: box-shadow 0.15s;
+}
+.task-bar--dragging { z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
 .task-bar--ghost { opacity: 0.22; pointer-events: none; }
 
 /* Resize handles — hidden by default, visible on hover */
@@ -217,17 +224,15 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 .task-bar__handle--right { right: 0; }
 .task-bar__handle-grip { width: 2px; height: 14px; background: rgba(0,0,0,0.25); border-radius: 1px; }
 
-/* Inner bar — white background, neutral border */
+/* Inner bar — no border/shadow (those are on outer .task-bar now) */
 .task-bar__inner {
   position: absolute; left: 0; right: 0; top: 0;
-  border-radius: 12px; display: flex; align-items: center;
+  display: flex; align-items: center;
   padding: 4px; overflow: hidden; gap: 0;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer;
-  transition: box-shadow 0.15s, opacity 0.15s;
-  border: 1px solid #ddd;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
-.task-bar--dragging .task-bar__inner { cursor: grabbing; box-shadow: 0 4px 16px rgba(0,0,0,0.15); opacity: 0.88; }
+.task-bar--dragging .task-bar__inner { cursor: grabbing; opacity: 0.88; }
 
 /* Avatar stack inside bar */
 .task-bar__avatars {
@@ -263,7 +268,7 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 
 /* Container for avatars + title shown OUTSIDE the bar (when >50% clipped) */
 .task-bar__outside-content {
-  position: absolute; top: 50%; transform: translateY(-50%);
+  position: absolute; top: 16px; transform: translateY(-50%);
   display: flex; align-items: center; gap: 4px;
   pointer-events: none; z-index: 3; white-space: nowrap;
 }
@@ -298,11 +303,13 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 .task-bar__menu-item--delete { color: #ef4444; }
 .task-bar__menu-item--delete:hover { background: #fef2f2; }
 
-/* Selected task bar */
-.task-bar__inner--selected {
+/* Selected task bar — outline on outer .task-bar */
+.task-bar--selected {
   outline: 2px solid #111827;
   box-shadow: 0 0 0 3px rgba(0,0,0,0.1) !important;
 }
+/* Keep inner class for backward compat (rendered by TaskBar.jsx) */
+.task-bar__inner--selected { /* handled by parent .task-bar--selected */ }
 
 /* ── Drag overlay — fixed floating clone ─────────────────────────────────────── */
 .task-drag-overlay {
@@ -765,14 +772,17 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 .left-nav__board-item:hover .left-nav__board-drag-handle { opacity: 1; }
 .left-nav__board-drag-handle:active { cursor: grabbing; }
 
-/* ── Phase strip ─────────────────────────────────────────────────────────── */
+/* ── Phase strip — inset pill at bottom of task bar ──────────────────────── */
 .task-bar__phase-strip {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  height: 10px; display: flex; overflow: hidden;
-  border-radius: 0 0 12px 12px;
+  position: absolute;
+  left: 6px; right: 6px; bottom: 5px;  /* even spacing from edges */
+  height: 4px;
+  display: flex; overflow: hidden;
+  border-radius: 2px;  /* fully rounded pill */
 }
 .task-bar__phase-seg {
-  position: relative; height: 100%; flex-shrink: 0;
+  position: relative; height: 100%;
+  /* flex set inline via style={{ flex: phase.days }} */
 }
 .task-bar__phase-divider {
   position: absolute; right: -6px; top: 0; bottom: 0;
@@ -780,11 +790,11 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
 }
 .task-bar__phase-divider::after {
   content: ''; position: absolute;
-  left: 5px; top: 1px; bottom: 1px; width: 2px;
-  background: rgba(255,255,255,0.85); border-radius: 1px;
+  left: 5px; top: 0; bottom: 0; width: 2px;
+  background: rgba(255,255,255,0.9); border-radius: 1px;
 }
 .task-bar__phase-divider:hover::after {
-  left: 4px; width: 4px; background: #fff;
+  left: 4px; width: 4px;
 }
 
 /* ── Task color picker ───────────────────────────────────────────────────── */

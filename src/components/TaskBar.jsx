@@ -1,8 +1,8 @@
 import { useRef, useState, useLayoutEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
-const BAR_H         = 44
-const PHASE_STRIP_H = 10
+const BAR_H         = 46
+const PHASE_STRIP_H = 14   // room for 4px strip + 5px bottom gap + 5px breathing
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,
@@ -41,9 +41,21 @@ export default function TaskBar({
   const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
   const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
 
-  const rawPhases  = visualPhases || task.phases || []
-  const taskPhases = rawPhases.filter(p => (boardPhases || []).some(bp => bp.id === p.id))
   const totalDays  = Math.max(1, diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1)
+
+  // Default phases: equal distribution across all board phases when task has none saved
+  const computeDefaultPhases = () => {
+    if (!boardPhases || boardPhases.length === 0) return []
+    const n = boardPhases.length
+    const eq = Math.max(1, Math.floor(totalDays / n))
+    return boardPhases.map((bp, i) => ({
+      id: bp.id,
+      days: i === n - 1 ? Math.max(1, totalDays - eq * (n - 1)) : eq,
+    }))
+  }
+
+  const rawPhases  = visualPhases || (task.phases && task.phases.length > 0 ? task.phases : computeDefaultPhases())
+  const taskPhases = rawPhases.filter(p => (boardPhases || []).some(bp => bp.id === p.id))
   const hasPhases  = taskPhases.length > 0
 
   useLayoutEffect(() => {
@@ -173,7 +185,7 @@ export default function TaskBar({
   return (
     <div
       ref={barRef}
-      className={['task-bar', resizing ? 'task-bar--dragging' : '', isGhost ? 'task-bar--ghost' : ''].filter(Boolean).join(' ')}
+      className={['task-bar', resizing ? 'task-bar--dragging' : '', isGhost ? 'task-bar--ghost' : '', isSelected ? 'task-bar--selected' : ''].filter(Boolean).join(' ')}
       style={{ left: x, top: y, width: w, height: BAR_H }}
     >
       <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
@@ -198,11 +210,10 @@ export default function TaskBar({
       {hasPhases && (
         <div className="task-bar__phase-strip">
           {taskPhases.map((phase, i) => {
-            const def  = (boardPhases || []).find(bp => bp.id === phase.id)
-            const segW = (phase.days / totalDays) * w
+            const def = (boardPhases || []).find(bp => bp.id === phase.id)
             return (
               <div key={phase.id} className="task-bar__phase-seg"
-                style={{ width: segW, background: def?.color || '#9ca3af' }}
+                style={{ flex: phase.days, background: def?.color || '#9ca3af' }}
                 title={def?.name || phase.id}>
                 {i < taskPhases.length - 1 && !readOnly && (
                   <div className="task-bar__phase-divider" onMouseDown={(e) => startPhaseDrag(e, i)} />

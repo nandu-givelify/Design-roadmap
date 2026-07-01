@@ -9,7 +9,7 @@ import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 const PERSON_COL_W = 200
-const LANE_H       = 44
+const LANE_H       = 46
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
 const ROW_PAD_BOT  = 10
@@ -315,6 +315,55 @@ const Timeline = forwardRef(function Timeline({
     setBulkAssignOpen(null); setSelectedTaskIds(new Set())
   }
 
+  // helpers for phases
+  const bulkTaskDays = (task) => {
+    if (!task.startDate || !task.endDate) return 28
+    return Math.max(1, Math.round((new Date(task.endDate) - new Date(task.startDate)) / 86400000) + 1)
+  }
+  const bulkDefaultPhases = (task) => {
+    if (!boardPhases || !boardPhases.length) return []
+    const n = boardPhases.length
+    const d = bulkTaskDays(task)
+    const eq = Math.max(1, Math.floor(d / n))
+    return boardPhases.map((bp, i) => ({ id: bp.id, days: i === n-1 ? Math.max(1, d - eq*(n-1)) : eq }))
+  }
+  const bulkNormalize = (phases, task) => {
+    const d = bulkTaskDays(task)
+    const n = phases.length
+    const eq = Math.max(1, Math.floor(d / n))
+    return phases.map((p, i) => ({ ...p, days: i === n-1 ? Math.max(1, d - eq*(n-1)) : eq }))
+  }
+
+  const handleBulkTogglePhase = (phaseId) => {
+    const selected = [...selectedTaskIds].map(id => tasks.find(t => t.id === id)).filter(Boolean)
+    const allHave  = selected.every(t => {
+      const ph = t.phases && t.phases.length > 0 ? t.phases : bulkDefaultPhases(t)
+      return ph.some(p => p.id === phaseId)
+    })
+    selected.forEach(task => {
+      const cur = task.phases && task.phases.length > 0 ? task.phases : bulkDefaultPhases(task)
+      let next
+      if (allHave) {
+        if (cur.length <= 1) return
+        next = bulkNormalize(cur.filter(p => p.id !== phaseId), task)
+      } else {
+        if (cur.some(p => p.id === phaseId)) return
+        const added = [...cur, { id: phaseId, days: 1 }]
+        const ordered = (boardPhases || [])
+          .filter(bp => added.some(p => p.id === bp.id))
+          .map(bp => ({ id: bp.id, days: 1 }))
+        next = bulkNormalize(ordered, task)
+      }
+      onUpdateTask(task.id, { phases: next })
+    })
+    setBulkAssignOpen(null)
+  }
+
+  const handleBulkSetColor = (color) => {
+    selectedTaskIds.forEach((id) => onUpdateTask(id, { taskColor: color }))
+    setBulkAssignOpen(null)
+  }
+
   // ── Filter logic ──────────────────────────────────────────────────────────
   let visiblePeople = people
   if (filterPersonIds.length > 0) {
@@ -570,6 +619,57 @@ const Timeline = forwardRef(function Timeline({
                   </div>
                   {p.name} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{p.role}</span>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Phases */}
+        {boardPhases && boardPhases.length > 0 && (
+          <div className="timeline__bulk-action-wrap">
+            <button className="timeline__bulk-btn" onClick={() => setBulkAssignOpen(bulkAssignOpen === 'phases' ? null : 'phases')}>
+              Phases
+            </button>
+            {bulkAssignOpen === 'phases' && (
+              <div className="timeline__bulk-dropdown">
+                {boardPhases.map(bp => {
+                  const selected = [...selectedTaskIds].map(id => tasks.find(t => t.id === id)).filter(Boolean)
+                  const allHave  = selected.every(t => {
+                    const ph = t.phases && t.phases.length > 0 ? t.phases : bulkDefaultPhases(t)
+                    return ph.some(p => p.id === bp.id)
+                  })
+                  const noneHave = selected.every(t => {
+                    const ph = t.phases && t.phases.length > 0 ? t.phases : bulkDefaultPhases(t)
+                    return !ph.some(p => p.id === bp.id)
+                  })
+                  return (
+                    <div key={bp.id} className="timeline__bulk-dropdown-item" onClick={() => handleBulkTogglePhase(bp.id)}>
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: bp.color, display: 'inline-block', flexShrink: 0, marginRight: 6 }} />
+                      {bp.name}
+                      <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af', paddingLeft: 8 }}>
+                        {allHave ? '✓ all' : noneHave ? '' : 'partial'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Color */}
+        <div className="timeline__bulk-action-wrap">
+          <button className="timeline__bulk-btn" onClick={() => setBulkAssignOpen(bulkAssignOpen === 'color' ? null : 'color')}>
+            Color
+          </button>
+          {bulkAssignOpen === 'color' && (
+            <div className="timeline__bulk-dropdown" style={{ padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#6b7280', marginRight: 4 }}>Pick color:</span>
+              {[{ value: 'white', hex: '#ffffff', label: 'White' }, { value: 'gray', hex: '#eeeeee', label: 'Gray' }].map(c => (
+                <button key={c.value} type="button" title={c.label}
+                  style={{ width: 26, height: 26, borderRadius: '50%', background: c.hex, border: '2px solid #ddd', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+                  onClick={() => handleBulkSetColor(c.value)}
+                />
               ))}
             </div>
           )}
