@@ -83,14 +83,20 @@ export const updateBoard = (boardId, data) =>
 export const deleteBoard = (boardId) =>
   deleteDoc(doc(db, 'boards', boardId))
 
-export const subscribeBoard = (boardId, cb) =>
-  onSnapshot(doc(db, 'boards', boardId), (s) =>
-    cb(s.exists() ? { id: s.id, ...s.data() } : null))
+export const subscribeBoard = (boardId, cb, onError) =>
+  onSnapshot(
+    doc(db, 'boards', boardId),
+    (s) => cb(s.exists() ? { id: s.id, ...s.data() } : null),
+    onError || (() => {})
+  )
 
 // ── People (board-scoped) ────────────────────────────────────────────────────
-export const subscribePeople = (boardId, cb) =>
-  onSnapshot(collection(db, 'boards', boardId, 'people'), (s) =>
-    cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))))
+export const subscribePeople = (boardId, cb, onError) =>
+  onSnapshot(
+    collection(db, 'boards', boardId, 'people'),
+    (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError || (() => {})
+  )
 
 export const addPerson = (boardId, data) =>
   addDoc(collection(db, 'boards', boardId, 'people'), { ...data, createdAt: serverTimestamp() })
@@ -105,9 +111,12 @@ export const deletePerson = (boardId, id) =>
   deleteDoc(doc(db, 'boards', boardId, 'people', id))
 
 // ── Tasks (board-scoped) ─────────────────────────────────────────────────────
-export const subscribeTasks = (boardId, cb) =>
-  onSnapshot(collection(db, 'boards', boardId, 'tasks'), (s) =>
-    cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))))
+export const subscribeTasks = (boardId, cb, onError) =>
+  onSnapshot(
+    collection(db, 'boards', boardId, 'tasks'),
+    (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError || (() => {})
+  )
 
 export const addTask = (boardId, data) =>
   addDoc(collection(db, 'boards', boardId, 'tasks'), { ...data, createdAt: serverTimestamp() })

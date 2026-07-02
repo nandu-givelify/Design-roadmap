@@ -47,22 +47,69 @@ function PublicBoardView({ boardId }) {
   const [year,     setYear]     = useState(now.getFullYear())
   const [quarter,  setQuarter]  = useState(Math.floor(now.getMonth() / 3) + 1)
 
+  const PUBLIC_RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /boards/{boardId} {
+      allow read: if request.auth != null
+                  || resource.data.isPublic == true;
+      allow write: if request.auth != null;
+      match /{subcol}/{docId} {
+        allow read: if request.auth != null
+                    || get(/databases/$(database)/documents/boards/$(boardId))
+                         .data.isPublic == true;
+        allow write: if request.auth != null;
+      }
+    }
+    match /userPrefs/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+  }
+}`
+
   useEffect(() => {
+    const handleError = (err) => {
+      if (err.code === 'permission-denied') setError('rules-needed')
+      else setError(err.message || 'Unknown error')
+    }
     const u1 = subscribeBoard(boardId, (b) => {
       if (!b) { setError('Board not found.'); return }
-      if (!b.isPublic) { setError('This board is private. Please sign in to access it.'); return }
+      if (!b.isPublic) { setError('private'); return }
       setBoard(b)
-    })
-    const u2 = subscribePeople(boardId, setPeople)
-    const u3 = subscribeTasks(boardId, setTasks)
+    }, handleError)
+    const u2 = subscribePeople(boardId, setPeople, handleError)
+    const u3 = subscribeTasks(boardId, setTasks, handleError)
     return () => { u1(); u2(); u3() }
   }, [boardId])
 
   if (board === undefined && !error) return <div className="loading-screen"><div>Loading board…</div></div>
+
+  if (error === 'rules-needed') return (
+    <div className="loading-screen" style={{ maxWidth: 560, textAlign: 'left', padding: '32px 24px' }}>
+      <div style={{ fontSize: 28, marginBottom: 12 }}>🔧</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 8 }}>Firestore rules need updating</div>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+        To allow public board access, update your rules in the{' '}
+        <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
+           style={{ color: '#2563eb' }}>Firebase Console</a>
+        {' '}→ Firestore → Rules:
+      </div>
+      <pre style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', fontSize: 11,
+                    color: '#111827', overflowX: 'auto', whiteSpace: 'pre', marginBottom: 16 }}>
+        {PUBLIC_RULES}
+      </pre>
+      <button style={{ padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+        onClick={() => { window.location.search = '' }}>Sign in instead</button>
+    </div>
+  )
+
   if (error) return (
     <div className="loading-screen">
       <div style={{ fontSize: 32 }}>🔒</div>
-      <div style={{ fontSize: 15, color: '#374151', marginTop: 12 }}>{error}</div>
+      <div style={{ fontSize: 15, color: '#374151', marginTop: 12 }}>
+        {error === 'private' ? 'This board is private. Please sign in to access it.' : error}
+      </div>
       <button style={{ marginTop: 16, padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
         onClick={() => { window.location.search = '' }}>Sign in</button>
     </div>

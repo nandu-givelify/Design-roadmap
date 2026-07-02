@@ -420,13 +420,42 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
 }
 
 // ── Share Modal ───────────────────────────────────────────────────────────────
+const PUBLIC_FIRESTORE_RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /boards/{boardId} {
+      allow read: if request.auth != null
+                  || resource.data.isPublic == true;
+      allow write: if request.auth != null;
+      match /{subcol}/{docId} {
+        allow read: if request.auth != null
+                    || get(/databases/$(database)/documents/boards/$(boardId))
+                         .data.isPublic == true;
+        allow write: if request.auth != null;
+      }
+    }
+    match /userPrefs/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+  }
+}`
+
 export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
-  const [copied, setCopied] = useState(false)
+  const [copied,       setCopied]       = useState(false)
+  const [copiedRules,  setCopiedRules]  = useState(false)
+  const [showRules,    setShowRules]    = useState(false)
   const isPublic = board?.isPublic || false
 
   const copy = () => {
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const copyRules = () => {
+    navigator.clipboard.writeText(PUBLIC_FIRESTORE_RULES).then(() => {
+      setCopiedRules(true); setTimeout(() => setCopiedRules(false), 2000)
     })
   }
 
@@ -444,6 +473,7 @@ export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
           <span className="share-toggle__knob" />
         </button>
       </div>
+
       <div className="share-link-row" style={{ marginTop: 16 }}>
         <div className="share-link-row__label">{isPublic ? 'Public link' : 'Board link (sign in required)'}</div>
         <div className="share-link-row__controls">
@@ -453,10 +483,40 @@ export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
           </button>
         </div>
       </div>
+
       {isPublic && (
-        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 10 }}>
-          Note: Update your Firestore rules to allow public reads. See the setup screen for the correct rules.
-        </p>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>
+              ⚠️ Firestore rules required for public access
+            </span>
+            <button
+              style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              onClick={() => setShowRules(r => !r)}>
+              {showRules ? 'Hide' : 'Show rules'}
+            </button>
+          </div>
+          {showRules && (
+            <>
+              <pre style={{ background: '#f3f4f6', borderRadius: 6, padding: '10px 12px', fontSize: 10,
+                            color: '#111827', overflowX: 'auto', whiteSpace: 'pre', margin: 0, lineHeight: 1.5 }}>
+                {PUBLIC_FIRESTORE_RULES}
+              </pre>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                <button className={`share-copy-btn${copiedRules ? ' share-copy-btn--copied' : ''}`} onClick={copyRules}>
+                  {copiedRules ? '✓ Copied!' : 'Copy rules'}
+                </button>
+                <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
+                   style={{ fontSize: 11, color: '#6b7280' }}>
+                  Open Firebase Console →
+                </a>
+              </div>
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, marginBottom: 0 }}>
+                Paste these rules in Firebase Console → Firestore → Rules, then publish.
+              </p>
+            </>
+          )}
+        </div>
       )}
     </ModalShell>
   )
