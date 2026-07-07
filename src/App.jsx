@@ -37,6 +37,40 @@ export default function App() {
   return <AuthenticatedApp user={user} />
 }
 
+// Shared constant — also used in ShareModal
+export const PUBLIC_FIRESTORE_RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /boards/{boardId} {
+      // Board doc: readable if signed in, or board is publicly accessible
+      allow read: if request.auth != null
+                  || resource.data.publicAccess in ['view', 'edit']
+                  || resource.data.isPublic == true;
+      // Only signed-in users can change board settings
+      allow write: if request.auth != null;
+
+      // Subcollections (tasks, people):
+      match /{subcol}/{docId} {
+        allow read: if request.auth != null
+                    || get(/databases/$(database)/documents/boards/$(boardId))
+                         .data.publicAccess in ['view', 'edit']
+                    || get(/databases/$(database)/documents/boards/$(boardId))
+                         .data.isPublic == true;
+        // Write allowed if signed in, or board has public edit access
+        allow write: if request.auth != null
+                     || get(/databases/$(database)/documents/boards/$(boardId))
+                          .data.publicAccess == 'edit';
+      }
+    }
+
+    match /userPrefs/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+  }
+}`
+
 function PublicBoardView({ boardId }) {
   const [board,  setBoard]  = useState(undefined)
   const [people, setPeople] = useState([])
@@ -46,27 +80,8 @@ function PublicBoardView({ boardId }) {
   const [viewMode, setViewMode] = useState('quarter')
   const [year,     setYear]     = useState(now.getFullYear())
   const [quarter,  setQuarter]  = useState(Math.floor(now.getMonth() / 3) + 1)
-
-  const PUBLIC_RULES = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /boards/{boardId} {
-      allow read: if request.auth != null
-                  || resource.data.isPublic == true;
-      allow write: if request.auth != null;
-      match /{subcol}/{docId} {
-        allow read: if request.auth != null
-                    || get(/databases/$(database)/documents/boards/$(boardId))
-                         .data.isPublic == true;
-        allow write: if request.auth != null;
-      }
-    }
-    match /userPrefs/{uid} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == uid;
-    }
-  }
-}`
+  const [editingTask, setEditingTask] = useState(null)
+  const [modal, setModal] = useState(null)
 
   useEffect(() => {
     const handleError = (err) => {
@@ -75,7 +90,9 @@ service cloud.firestore {
     }
     const u1 = subscribeBoard(boardId, (b) => {
       if (!b) { setError('Board not found.'); return }
-      if (!b.isPublic) { setError('private'); return }
+      // Support both new publicAccess field and legacy isPublic
+      const accessible = b.publicAccess === 'view' || b.publicAccess === 'edit' || b.isPublic === true
+      if (!accessible) { setError('private'); return }
       setBoard(b)
     }, handleError)
     const u2 = subscribePeople(boardId, setPeople, handleError)
@@ -86,21 +103,26 @@ service cloud.firestore {
   if (board === undefined && !error) return <div className="loading-screen"><div>Loading board…</div></div>
 
   if (error === 'rules-needed') return (
-    <div className="loading-screen" style={{ maxWidth: 560, textAlign: 'left', padding: '32px 24px' }}>
+    <div className="loading-screen" style={{ maxWidth: 580, textAlign: 'left', padding: '32px 24px' }}>
       <div style={{ fontSize: 28, marginBottom: 12 }}>🔧</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 8 }}>Firestore rules need updating</div>
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-        To allow public board access, update your rules in the{' '}
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, lineHeight: 1.6 }}>
+        Public board access requires updated Firestore security rules.
+        Open your{' '}
         <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
            style={{ color: '#2563eb' }}>Firebase Console</a>
-        {' '}→ Firestore → Rules:
+        , go to <strong>Firestore Database → Rules</strong>, replace everything with:
       </div>
-      <pre style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', fontSize: 11,
-                    color: '#111827', overflowX: 'auto', whiteSpace: 'pre', marginBottom: 16 }}>
-        {PUBLIC_RULES}
+      <pre style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', fontSize: 10.5,
+                    color: '#111827', overflowX: 'auto', whiteSpace: 'pre', marginBottom: 12, lineHeight: 1.6 }}>
+        {PUBLIC_FIRESTORE_RULES}
       </pre>
-      <button style={{ padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
-        onClick={() => { window.location.search = '' }}>Sign in instead</button>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button style={{ padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          onClick={() => navigator.clipboard.writeText(PUBLIC_FIRESTORE_RULES)}>Copy rules</button>
+        <button style={{ padding: '8px 16px', background: 'transparent', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+          onClick={() => { window.location.search = '' }}>Sign in instead</button>
+      </div>
     </div>
   )
 
@@ -110,10 +132,17 @@ service cloud.firestore {
       <div style={{ fontSize: 15, color: '#374151', marginTop: 12 }}>
         {error === 'private' ? 'This board is private. Please sign in to access it.' : error}
       </div>
-      <button style={{ marginTop: 16, padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+      <button style={{ marginTop: 16, padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         onClick={() => { window.location.search = '' }}>Sign in</button>
     </div>
   )
+
+  const canEdit   = board.publicAccess === 'edit'
+  const boardPhases = board.boardPhases || DEFAULT_BOARD_PHASES
+
+  const handleUpdateTask = canEdit ? (id, data) => updateTask(boardId, id, data) : () => {}
+  const handleDeleteTask = canEdit ? (id)       => deleteTask(boardId, id)        : () => {}
+  const handleAddTask    = canEdit ? async (data) => { await addTask(boardId, data) } : () => {}
 
   return (
     <div className="app">
@@ -127,17 +156,54 @@ service cloud.firestore {
                 onClick={() => setViewMode(m)}>{m === 'year' ? 'Year' : 'Quarter'}</button>
             ))}
           </div>
-          <div className="header__readonly-badge">View only · <a href="/" style={{ color: '#92400e' }}>Sign in to edit</a></div>
+          {canEdit
+            ? <div className="header__readonly-badge" style={{ background: '#ecfdf5', color: '#065f46', borderColor: '#6ee7b7' }}>
+                Editing as guest · <a href="/" style={{ color: '#065f46' }}>Sign in</a>
+              </div>
+            : <div className="header__readonly-badge">
+                View only · <a href="/" style={{ color: '#92400e' }}>Sign in to edit</a>
+              </div>
+          }
         </header>
+
         <Timeline
           viewMode={viewMode} year={year} quarter={quarter}
           people={people} tasks={tasks} groupBy={board.defaultGroupBy || 'none'}
           filterPersonIds={[]}
-          onUpdateTask={() => {}} onDeleteTask={() => {}}
-          onAddTaskForPerson={() => {}} onEditTask={() => {}}
-          boardPhases={board.boardPhases || DEFAULT_BOARD_PHASES}
-          readOnly
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
+          onAddTaskForPerson={canEdit ? (assigneeId, startDate) => setModal({ type: 'task', assigneeId, startDate }) : () => {}}
+          onEditTask={canEdit ? (task) => setEditingTask(task) : () => {}}
+          boardPhases={boardPhases}
+          readOnly={!canEdit}
         />
+
+        {canEdit && modal?.type === 'task' && (
+          <TaskModal
+            onClose={() => setModal(null)}
+            onSave={handleAddTask}
+            people={people}
+            roles={board.roles || ['Designer', 'PM', 'Dev']}
+            boardPhases={boardPhases}
+            defaultAssigneeId={modal.assigneeId}
+            defaultStartDate={modal.startDate}
+            onCreatePerson={() => {}}
+            onAddRole={() => {}}
+          />
+        )}
+        {canEdit && editingTask && (
+          <EditTaskModal
+            task={editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={(data) => handleUpdateTask(editingTask.id, data)}
+            onDelete={() => handleDeleteTask(editingTask.id)}
+            people={people}
+            roles={board.roles || ['Designer', 'PM', 'Dev']}
+            boardPhases={boardPhases}
+            onCreatePerson={() => {}}
+            onAddRole={() => {}}
+          />
+        )}
       </div>
     </div>
   )
@@ -571,7 +637,7 @@ function AuthenticatedApp({ user }) {
             onClose={() => setModal(null)}
             shareUrl={getBoardShareUrl()}
             board={activeBoard}
-            onTogglePublic={(isPublic) => updateBoard(activeBoardId, { isPublic })}
+            onSetPublicAccess={(access) => updateBoard(activeBoardId, { publicAccess: access })}
           />
         )}
 

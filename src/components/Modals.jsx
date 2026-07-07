@@ -420,32 +420,42 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
 }
 
 // ── Share Modal ───────────────────────────────────────────────────────────────
-const PUBLIC_FIRESTORE_RULES = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /boards/{boardId} {
-      allow read: if request.auth != null
-                  || resource.data.isPublic == true;
-      allow write: if request.auth != null;
-      match /{subcol}/{docId} {
-        allow read: if request.auth != null
-                    || get(/databases/$(database)/documents/boards/$(boardId))
-                         .data.isPublic == true;
-        allow write: if request.auth != null;
-      }
-    }
-    match /userPrefs/{uid} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == uid;
-    }
-  }
-}`
+// Import the shared rules constant from App — re-defined here for the modal
+import { PUBLIC_FIRESTORE_RULES } from '../App'
 
-export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
-  const [copied,       setCopied]       = useState(false)
-  const [copiedRules,  setCopiedRules]  = useState(false)
-  const [showRules,    setShowRules]    = useState(false)
-  const isPublic = board?.isPublic || false
+const ACCESS_OPTIONS = [
+  {
+    value: 'off',
+    icon: '🔒',
+    label: 'Private',
+    desc: 'Only signed-in members can view or edit.',
+  },
+  {
+    value: 'view',
+    icon: '👁',
+    label: 'View only',
+    desc: 'Anyone with the link can view — no account needed.',
+  },
+  {
+    value: 'edit',
+    icon: '✏️',
+    label: 'Edit',
+    desc: 'Anyone with the link can view and edit — no account needed.',
+  },
+]
+
+export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
+  // Support legacy isPublic flag
+  const currentAccess = board?.publicAccess || (board?.isPublic ? 'view' : 'off')
+  const [access,      setAccess]      = useState(currentAccess)
+  const [copied,      setCopied]      = useState(false)
+  const [copiedRules, setCopiedRules] = useState(false)
+  const [showRules,   setShowRules]   = useState(false)
+
+  const handleAccess = (val) => {
+    setAccess(val)
+    onSetPublicAccess?.(val)
+  }
 
   const copy = () => {
     navigator.clipboard.writeText(shareUrl).then(() => {
@@ -459,47 +469,80 @@ export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
     })
   }
 
+  const isPublic = access !== 'off'
+
   return (
     <ModalShell title="Share Board" onClose={onClose}>
-      <div className="share-public-row">
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>Public access</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-            {isPublic ? 'Anyone with the link can view without signing in.' : 'Only invited people can access this board.'}
-          </div>
+
+      {/* ── Access level selector ── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase',
+                      letterSpacing: '0.05em', marginBottom: 10 }}>Access level</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {ACCESS_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => handleAccess(opt.value)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                border: access === opt.value ? '2px solid #111827' : '1.5px solid #e5e7eb',
+                background: access === opt.value ? '#f9fafb' : '#fff',
+                transition: 'all 0.12s',
+              }}>
+              <span style={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{opt.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>{opt.desc}</div>
+              </div>
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                border: access === opt.value ? '5px solid #111827' : '1.5px solid #d1d5db',
+                background: '#fff',
+                transition: 'all 0.12s',
+              }} />
+            </button>
+          ))}
         </div>
-        <button className={`share-toggle${isPublic ? ' share-toggle--on' : ''}`}
-          onClick={() => onTogglePublic?.(!isPublic)}>
-          <span className="share-toggle__knob" />
-        </button>
       </div>
 
-      <div className="share-link-row" style={{ marginTop: 16 }}>
-        <div className="share-link-row__label">{isPublic ? 'Public link' : 'Board link (sign in required)'}</div>
+      {/* ── Board link ── */}
+      <div style={{ marginBottom: isPublic ? 16 : 0 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase',
+                      letterSpacing: '0.05em', marginBottom: 8 }}>
+          {isPublic ? 'Shareable link' : 'Board link (sign in required)'}
+        </div>
         <div className="share-link-row__controls">
           <input readOnly className="share-link-row__input" value={shareUrl} onFocus={(e) => e.target.select()} />
           <button className={`share-copy-btn${copied ? ' share-copy-btn--copied' : ''}`} onClick={copy}>
-            {copied ? '✓ Copied!' : 'Copy'}
+            {copied ? '✓ Copied!' : 'Copy link'}
           </button>
         </div>
       </div>
 
+      {/* ── Firestore rules notice (only when public) ── */}
       {isPublic && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>
-              ⚠️ Firestore rules required for public access
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>
+              ⚠️ Firestore rules update required
             </span>
             <button
-              style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-              onClick={() => setShowRules(r => !r)}>
-              {showRules ? 'Hide' : 'Show rules'}
+              onClick={() => setShowRules(r => !r)}
+              style={{ fontSize: 11, color: '#92400e', background: 'none', border: 'none', cursor: 'pointer',
+                       padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
+              {showRules ? 'Hide ▲' : 'Show ▼'}
             </button>
           </div>
+          <div style={{ fontSize: 11, color: '#78350f', marginTop: 4 }}>
+            Public access won't work until you update your Firestore security rules.
+          </div>
+
           {showRules && (
-            <>
-              <pre style={{ background: '#f3f4f6', borderRadius: 6, padding: '10px 12px', fontSize: 10,
-                            color: '#111827', overflowX: 'auto', whiteSpace: 'pre', margin: 0, lineHeight: 1.5 }}>
+            <div style={{ marginTop: 10 }}>
+              <pre style={{ background: '#fff', borderRadius: 6, padding: '10px 12px', fontSize: 10,
+                            color: '#111827', overflowX: 'auto', whiteSpace: 'pre', margin: 0,
+                            border: '1px solid #e5e7eb', lineHeight: 1.6 }}>
                 {PUBLIC_FIRESTORE_RULES}
               </pre>
               <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -507,14 +550,11 @@ export function ShareModal({ onClose, shareUrl, board, onTogglePublic }) {
                   {copiedRules ? '✓ Copied!' : 'Copy rules'}
                 </button>
                 <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
-                   style={{ fontSize: 11, color: '#6b7280' }}>
+                   style={{ fontSize: 11, color: '#92400e', fontWeight: 500 }}>
                   Open Firebase Console →
                 </a>
               </div>
-              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, marginBottom: 0 }}>
-                Paste these rules in Firebase Console → Firestore → Rules, then publish.
-              </p>
-            </>
+            </div>
           )}
         </div>
       )}
