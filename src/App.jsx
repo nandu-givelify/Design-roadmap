@@ -102,37 +102,19 @@ function PublicBoardView({ boardId }) {
 
   if (board === undefined && !error) return <div className="loading-screen"><div>Loading board…</div></div>
 
-  if (error === 'rules-needed') return (
-    <div className="loading-screen" style={{ maxWidth: 580, textAlign: 'left', padding: '32px 24px' }}>
-      <div style={{ fontSize: 28, marginBottom: 12 }}>🔧</div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 8 }}>Firestore rules need updating</div>
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16, lineHeight: 1.6 }}>
-        Public board access requires updated Firestore security rules.
-        Open your{' '}
-        <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
-           style={{ color: '#2563eb' }}>Firebase Console</a>
-        , go to <strong>Firestore Database → Rules</strong>, replace everything with:
-      </div>
-      <pre style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', fontSize: 10.5,
-                    color: '#111827', overflowX: 'auto', whiteSpace: 'pre', marginBottom: 12, lineHeight: 1.6 }}>
-        {PUBLIC_FIRESTORE_RULES}
-      </pre>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <button style={{ padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-          onClick={() => navigator.clipboard.writeText(PUBLIC_FIRESTORE_RULES)}>Copy rules</button>
-        <button style={{ padding: '8px 16px', background: 'transparent', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
-          onClick={() => { window.location.search = '' }}>Sign in instead</button>
-      </div>
-    </div>
-  )
-
   if (error) return (
     <div className="loading-screen">
       <div style={{ fontSize: 32 }}>🔒</div>
-      <div style={{ fontSize: 15, color: '#374151', marginTop: 12 }}>
-        {error === 'private' ? 'This board is private. Please sign in to access it.' : error}
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginTop: 12 }}>
+        Sign in to access this board
       </div>
-      <button style={{ marginTop: 16, padding: '8px 18px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+      <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6, marginBottom: 20 }}>
+        {error === 'private'
+          ? 'This board is private.'
+          : 'This board isn\'t publicly accessible.'}
+        {' '}Sign in to request access.
+      </div>
+      <button style={{ padding: '10px 24px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
         onClick={() => { window.location.search = '' }}>Sign in</button>
     </div>
   )
