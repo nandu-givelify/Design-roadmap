@@ -76,45 +76,30 @@ const Timeline = forwardRef(function Timeline({
   // ── Container width ───────────────────────────────────────────────────────
   useLayoutEffect(() => {
     if (!containerRef.current) return
-    let restoreRaf = null
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
 
-      // ── Center-day capture ──────────────────────────────────────────────
-      // At this point layout is done: el.clientWidth is ALREADY the new size,
-      // but dayWidthRef/viewDaysRef still hold the PRE-resize values.
-      //   oldGridViewportW = oldDayWidth × viewDays   (= old containerW − personColW)
-      // This gives us the correct old viewport WITHOUT reading el.clientWidth.
-      let savedCenter = null
+      // ── Center-preserving scroll ────────────────────────────────────────
+      // At callback time dayWidthRef/viewDaysRef are still PRE-resize values.
+      // oldViewportW = dayWidth × viewDays = containerW_old − personColW.
+      // newViewportW = newW − personColW  (browser has already laid out new size).
+      // Correct scroll to preserve center = scrollLeft × (newViewportW / oldViewportW).
+      // This is a pure ratio — no dependency on React re-rendering at all.
       if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
         const el = scrollRef.current
         const oldViewportW = dayWidthRef.current * viewDaysRef.current
-        savedCenter = (el.scrollLeft + oldViewportW / 2) / dayWidthRef.current
+        const newViewportW = newW - personColWRef.current
+        const ratio = oldViewportW > 0 ? newViewportW / oldViewportW : 1
+        el.scrollLeft = Math.max(0, el.scrollLeft * ratio)
+        centerDayRef.current = (el.scrollLeft + newViewportW / 2) / (newViewportW / viewDaysRef.current)
       }
 
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
-
-      // ── Scroll restoration ─────────────────────────────────────────────
-      // requestAnimationFrame fires after React's microtask re-render, so
-      // dayWidthRef.current is already the new dayWidth and el.clientWidth
-      // is the new viewport — both correct for the formula.
-      if (savedCenter !== null) {
-        if (restoreRaf) cancelAnimationFrame(restoreRaf)
-        restoreRaf = requestAnimationFrame(() => {
-          restoreRaf = null
-          const el = scrollRef.current
-          if (!el || dayWidthRef.current <= 0) return
-          const newViewportW = el.clientWidth - personColWRef.current
-          el.scrollLeft = Math.max(0, savedCenter * dayWidthRef.current - newViewportW / 2)
-          // Update centerDayRef so subsequent resizes chain correctly
-          centerDayRef.current = savedCenter
-        })
-      }
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
-    return () => { ro.disconnect(); if (restoreRaf) cancelAnimationFrame(restoreRaf) }
+    return () => ro.disconnect()
   }, []) // eslint-disable-line
 
   // Update --cw when personColW changes (groupBy switch)
