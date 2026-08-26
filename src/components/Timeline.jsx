@@ -68,19 +68,53 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
+  // viewDaysRef: ResizeObserver callback needs the current viewDays to derive old viewport width
+  const viewDaysRef = useRef(viewDays)
+  viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
 
-  // ── Container width (useLayoutEffect so setContainerW re-renders before first paint) ──
+  // ── Container width ───────────────────────────────────────────────────────
   useLayoutEffect(() => {
     if (!containerRef.current) return
+    let restoreRaf = null
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
+
+      // ── Center-day capture ──────────────────────────────────────────────
+      // At this point layout is done: el.clientWidth is ALREADY the new size,
+      // but dayWidthRef/viewDaysRef still hold the PRE-resize values.
+      //   oldGridViewportW = oldDayWidth × viewDays   (= old containerW − personColW)
+      // This gives us the correct old viewport WITHOUT reading el.clientWidth.
+      let savedCenter = null
+      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
+        const el = scrollRef.current
+        const oldViewportW = dayWidthRef.current * viewDaysRef.current
+        savedCenter = (el.scrollLeft + oldViewportW / 2) / dayWidthRef.current
+      }
+
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
+
+      // ── Scroll restoration ─────────────────────────────────────────────
+      // requestAnimationFrame fires after React's microtask re-render, so
+      // dayWidthRef.current is already the new dayWidth and el.clientWidth
+      // is the new viewport — both correct for the formula.
+      if (savedCenter !== null) {
+        if (restoreRaf) cancelAnimationFrame(restoreRaf)
+        restoreRaf = requestAnimationFrame(() => {
+          restoreRaf = null
+          const el = scrollRef.current
+          if (!el || dayWidthRef.current <= 0) return
+          const newViewportW = el.clientWidth - personColWRef.current
+          el.scrollLeft = Math.max(0, savedCenter * dayWidthRef.current - newViewportW / 2)
+          // Update centerDayRef so subsequent resizes chain correctly
+          centerDayRef.current = savedCenter
+        })
+      }
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
-    return () => ro.disconnect()
+    return () => { ro.disconnect(); if (restoreRaf) cancelAnimationFrame(restoreRaf) }
   }, []) // eslint-disable-line
 
   // Update --cw when personColW changes (groupBy switch)
@@ -88,25 +122,14 @@ const Timeline = forwardRef(function Timeline({
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
 
-  // Restore center on resize / nav collapse/expand (containerW changes).
-  // Using [containerW] means this fires ONLY on width changes, not on viewMode/zoom changes.
-  // centerDayRef is kept current by the scroll listener below.
-  useLayoutEffect(() => {
-    if (containerW <= 0 || dayWidth <= 0 || centerDayRef.current == null) return
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollLeft = Math.max(0, centerDayRef.current * dayWidth - el.clientWidth / 2)
-  }, [containerW]) // eslint-disable-line
-
-  // Scroll listener — also tracks center day so resize can restore it
+  // Scroll listener — tracks center day for use by the ResizeObserver rAF above
   useEffect(() => {
     const el = scrollRef.current; if (!el) return
     let rafId
     const handler = () => {
       el.style.setProperty('--sl', el.scrollLeft + 'px')
-      // Keep centerDayRef current so resize centering always has the latest value
       if (dayWidthRef.current > 0) {
-        centerDayRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
+        centerDayRef.current = (el.scrollLeft + (el.clientWidth - personColWRef.current) / 2) / dayWidthRef.current
       }
       cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => setScrollLeft(el.scrollLeft))
