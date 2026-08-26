@@ -24,13 +24,14 @@ function smartDefaultPhases(boardPhases, totalDays) {
   const n   = boardPhases.length
   const ids = boardPhases.map(p => p.id)
   if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
-    const fixed     = Math.max(1, Math.min(7, Math.round(totalDays / 4)))
-    const remaining = Math.max(2, totalDays - fixed * 2)
+    const discovery = Math.max(1, Math.min(7, Math.round(totalDays * 0.25)))
+    const handoff   = Math.max(1, Math.min(3, Math.round(totalDays * 0.1)))
+    const remaining = Math.max(2, totalDays - discovery - handoff)
     const ux = Math.max(1, Math.floor(remaining / 2))
     const ui = Math.max(1, remaining - ux)
     return boardPhases.map(bp => ({
       id: bp.id,
-      days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
+      days: bp.id === 'discovery' ? discovery : bp.id === 'handoff' ? handoff
           : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
           : Math.max(1, Math.floor(totalDays / n)),
     }))

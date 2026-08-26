@@ -925,3 +925,35 @@ input:focus, select:focus { outline: 2px solid #111827; outline-offset: 1px; }
   font-size: 10px; font-weight: 600; color: #fff; overflow: hidden; flex-shrink: 0;
 }
 .settings-recent-chip__avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── Nav overlay & backdrop ──────────────────────────────────────────────── */
+.left-nav--overlay {
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 200;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+}
+.nav-backdrop {
+  position: fixed; inset: 0; z-index: 199; background: rgba(0,0,0,0.3);
+}
+
+/* ── Hamburger button in header ──────────────────────────────────────────── */
+.header__hamburger {
+  font-size: 18px; line-height: 1; padding: 4px 8px;
+  border-radius: 6px; color: #374151; flex-shrink: 0;
+  transition: background 0.12s;
+}
+.header__hamburger:hover { background: #f3f4f6; }
+
+/* ── Period nav label as clickable button ────────────────────────────────── */
+.header__nav-label--clickable {
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; min-width: 72px; text-align: center;
+  transition: background 0.12s; display: inline-flex; align-items: center; gap: 2px; justify-content: center;
+}
+.header__nav-label--clickable:hover { background: #f3f4f6; }
+
+/* ── Mobile responsive header ────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .header { flex-wrap: wrap; height: auto; padding: 8px 12px; row-gap: 6px; }
+  .header__spacer { width: 100%; height: 0; flex: none; }
+  .header__board-title { font-size: 14px; }
+}

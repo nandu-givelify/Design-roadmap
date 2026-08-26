@@ -44,8 +44,8 @@ export default function LeftNav({
   user, userProfile, onUpdateProfile,
   boards, activeBoardId, favoriteBoardIds = [],
   onSelectBoard, onNewBoard, onReorderBoards, onToggleFavorite,
+  isOverlay, onClose, onDock,
 }) {
-  const [collapsed,      setCollapsed]      = useState(false)
   const [showUserMenu,   setShowUserMenu]   = useState(false)
   const [showProfile,    setShowProfile]    = useState(false)
   const [draggedId,      setDraggedId]      = useState(null)
@@ -107,40 +107,42 @@ export default function LeftNav({
       <div className={`left-nav__board-row${board.id === activeBoardId ? ' left-nav__board-row--active' : ''}${draggedId === board.id ? ' left-nav__board-row--dragging' : ''}`}>
         <button
           className="left-nav__board-btn"
-          onClick={() => onSelectBoard(board.id)}
+          onClick={() => { onSelectBoard(board.id); if (isOverlay) onClose?.() }}
           title={board.name}
         >
-          {!collapsed && <span className="left-nav__board-name">{board.name}</span>}
-          {collapsed && <span className="left-nav__board-initial">{board.name.charAt(0).toUpperCase()}</span>}
+          <span className="left-nav__board-name">{board.name}</span>
         </button>
 
-        {!collapsed && (
-          <button
-            className={`left-nav__star-btn${favoriteBoardIds.includes(board.id) ? ' left-nav__star-btn--active' : ''}`}
-            onClick={e => { e.stopPropagation(); onToggleFavorite(board.id) }}
-            title={favoriteBoardIds.includes(board.id) ? 'Remove from favourites' : 'Add to favourites'}
-          >
-            <StarIcon filled={favoriteBoardIds.includes(board.id)} />
-          </button>
-        )}
+        <button
+          className={`left-nav__star-btn${favoriteBoardIds.includes(board.id) ? ' left-nav__star-btn--active' : ''}`}
+          onClick={e => { e.stopPropagation(); onToggleFavorite(board.id) }}
+          title={favoriteBoardIds.includes(board.id) ? 'Remove from favourites' : 'Add to favourites'}
+        >
+          <StarIcon filled={favoriteBoardIds.includes(board.id)} />
+        </button>
       </div>
     </div>
   )
 
   return (
-    <nav className={`left-nav${collapsed ? ' left-nav--collapsed' : ''}`}>
+    <nav className={`left-nav${isOverlay ? ' left-nav--overlay' : ''}`}>
 
       {/* ── Header ── */}
       <div className="left-nav__header">
-        {!collapsed && (
-          <div className="left-nav__brand">
-            <NavLogo />
-            <span className="left-nav__brand-name">RoadMap</span>
-          </div>
-        )}
-        <button className="left-nav__toggle" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Expand' : 'Collapse'}>
-          {collapsed ? <ChevronRight /> : <ChevronLeft />}
-        </button>
+        <div className="left-nav__brand">
+          <NavLogo />
+          <span className="left-nav__brand-name">RoadMap</span>
+        </div>
+        <div style={{ display: 'flex', gap: 2 }}>
+          {isOverlay && onDock && (
+            <button className="left-nav__toggle" onClick={onDock} title="Pin navigation">
+              <PinIcon />
+            </button>
+          )}
+          <button className="left-nav__toggle" onClick={onClose} title="Collapse navigation">
+            <ChevronLeft />
+          </button>
+        </div>
       </div>
 
       {/* ── Scrollable body ── */}
@@ -149,7 +151,7 @@ export default function LeftNav({
         {/* Favourites section — only when at least one board is starred */}
         {hasFavorites && (
           <div className="left-nav__section">
-            {!collapsed && <div className="left-nav__section-label">Favourites</div>}
+            <div className="left-nav__section-label">Favourites</div>
             <div className="left-nav__boards-list">
               {favoriteBoards.map(renderBoardItem)}
             </div>
@@ -158,28 +160,23 @@ export default function LeftNav({
 
         {/* All Boards section */}
         <div className="left-nav__section">
-          {!collapsed && (
-            <div className="left-nav__section-label">
-              <span>Boards</span>
-              <button className="left-nav__new-btn" onClick={onNewBoard} title="New board"><PlusIcon /></button>
-            </div>
-          )}
-          {collapsed && (
-            <button className="left-nav__icon-btn" onClick={onNewBoard} title="New board"><PlusIcon /></button>
-          )}
+          <div className="left-nav__section-label">
+            <span>Boards</span>
+            <button className="left-nav__new-btn" onClick={onNewBoard} title="New board"><PlusIcon /></button>
+          </div>
           <div className="left-nav__boards-list">
             {boards.map(renderBoardItem)}
-            {boards.length === 0 && !collapsed && (
+            {boards.length === 0 && (
               <div className="left-nav__empty-boards">No boards yet</div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Footer (user profile only — settings moved to header) ── */}
+      {/* ── Footer (user profile) ── */}
       <div className="left-nav__footer">
         <div className="left-nav__user-wrap" style={{ position: 'relative' }}>
-          {showProfile && !collapsed && (
+          {showProfile && (
             <ProfilePanel
               user={user}
               profile={userProfile}
@@ -192,21 +189,17 @@ export default function LeftNav({
             <div className="left-nav__avatar" style={{ background: photoUrl ? 'transparent' : avatarColor }}>
               {photoUrl ? <img src={photoUrl} alt="" /> : avatarLetter}
             </div>
-            {!collapsed && (
-              <div className="left-nav__user-text">
-                <span className="left-nav__user-name">{displayName}</span>
-                <span className="left-nav__user-email">{user?.email}</span>
-              </div>
-            )}
-            {!collapsed && (
-              <button
-                className="left-nav__edit-profile-btn"
-                title="Edit profile"
-                onClick={e => { e.stopPropagation(); setShowUserMenu(false); setShowProfile(v => !v) }}
-              >
-                <PencilIcon />
-              </button>
-            )}
+            <div className="left-nav__user-text">
+              <span className="left-nav__user-name">{displayName}</span>
+              <span className="left-nav__user-email">{user?.email}</span>
+            </div>
+            <button
+              className="left-nav__edit-profile-btn"
+              title="Edit profile"
+              onClick={e => { e.stopPropagation(); setShowUserMenu(false); setShowProfile(v => !v) }}
+            >
+              <PencilIcon />
+            </button>
           </button>
 
           {showUserMenu && (
@@ -246,7 +239,7 @@ function NavLogo() {
   )
 }
 const ChevronLeft  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+const PinIcon      = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17H19V13C19 10.239 16.761 8 14 8H10C7.239 8 5 10.239 5 13V17Z"/><line x1="12" y1="8" x2="12" y2="3"/></svg>
 const PlusIcon     = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
 const PencilIcon   = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
 const StarIcon     = ({ filled }) => (

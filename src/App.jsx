@@ -204,6 +204,10 @@ function AuthenticatedApp({ user }) {
   const [dbError,       setDbError]       = useState(null)
   const [userProfile,   setUserProfile_]  = useState(null)
 
+  // Nav state
+  const [navOpen,   setNavOpen]   = useState(true)
+  const [navDocked, setNavDocked] = useState(true)
+
   // Timeline controls
   const now = new Date()
   const [viewMode,  setViewMode]  = useState('quarter')
@@ -515,18 +519,29 @@ function AuthenticatedApp({ user }) {
     const ids = boardPhases.map(p => p.id)
     const hasSmart = ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')
     tasks.forEach(task => {
-      if (task.phases && task.phases.length > 0) return
+      if (task.phases && task.phases.length > 0) {
+        // Migrate old handoff default of 7 → 3
+        const handoffPhase = task.phases.find(p => p.id === 'handoff')
+        if (handoffPhase && handoffPhase.days === 7) {
+          const newPhases = task.phases.map(p =>
+            p.id === 'handoff' ? { ...p, days: 3 } : p
+          )
+          updateTask(activeBoardId, task.id, { phases: newPhases })
+        }
+        return
+      }
       const d = Math.max(1, Math.round((new Date(task.endDate) - new Date(task.startDate)) / 86400000) + 1)
       const n = boardPhases.length
       let phases
       if (hasSmart) {
-        const fixed = Math.max(1, Math.min(7, Math.round(d / 4)))
-        const rem   = Math.max(2, d - fixed * 2)
+        const discovery = Math.max(1, Math.min(7, Math.round(d * 0.25)))
+        const handoff   = Math.max(1, Math.min(3, Math.round(d * 0.1)))
+        const rem = Math.max(2, d - discovery - handoff)
         const ux = Math.max(1, Math.floor(rem / 2))
         const ui = Math.max(1, rem - ux)
         phases = boardPhases.map(bp => ({
           id: bp.id,
-          days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
+          days: bp.id === 'discovery' ? discovery : bp.id === 'handoff' ? handoff
               : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
               : Math.max(1, Math.floor(d / n)),
         }))
@@ -569,20 +584,32 @@ function AuthenticatedApp({ user }) {
   if (migrating) return <SplashScreen label="Setting up your board…" />
   if (loadingBoards) return <SplashScreen />
 
+  const isNavHidden  = !navOpen
+  const isNavOverlay = navOpen && !navDocked
+
   return (
     <div className="app">
-      <LeftNav
-        user={user}
-        userProfile={userProfile}
-        onUpdateProfile={handleUpdateProfile}
-        boards={sortedBoards}
-        activeBoardId={activeBoardId}
-        favoriteBoardIds={favoriteBoardIds}
-        onSelectBoard={handleSelectBoard}
-        onNewBoard={handleNewBoard}
-        onReorderBoards={handleReorderBoards}
-        onToggleFavorite={handleToggleFavorite}
-      />
+      {!isNavHidden && (
+        <LeftNav
+          user={user}
+          userProfile={userProfile}
+          onUpdateProfile={handleUpdateProfile}
+          boards={sortedBoards}
+          activeBoardId={activeBoardId}
+          favoriteBoardIds={favoriteBoardIds}
+          onSelectBoard={handleSelectBoard}
+          onNewBoard={handleNewBoard}
+          onReorderBoards={handleReorderBoards}
+          onToggleFavorite={handleToggleFavorite}
+          isOverlay={isNavOverlay}
+          onClose={() => { setNavOpen(false); setNavDocked(false) }}
+          onDock={() => setNavDocked(true)}
+        />
+      )}
+
+      {isNavOverlay && (
+        <div className="nav-backdrop" onClick={() => setNavOpen(false)} />
+      )}
 
       <div className="main-content">
         <Header
@@ -603,6 +630,8 @@ function AuthenticatedApp({ user }) {
           setGroupBy={handleGroupByChange}
           roles={boardRoles}
           readOnly={readOnly}
+          navCollapsed={isNavHidden}
+          onOpenNav={() => { setNavOpen(true); setNavDocked(false) }}
         />
 
         <Timeline
@@ -671,6 +700,7 @@ function AuthenticatedApp({ user }) {
           <Settings
             onClose={() => setSettingsOpen(false)}
             boardId={activeBoardId}
+            board={activeBoard}
             people={people}
             roles={boardRoles}
             boardPhases={boardPhases}
@@ -681,6 +711,8 @@ function AuthenticatedApp({ user }) {
             onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
             recentPeople={recentPeople}
+            onRenameBoard={handleRenameBoard}
+            onDeleteBoard={handleDeleteBoard}
           />
         )}
       </div>

@@ -45,6 +45,7 @@ const Timeline = forwardRef(function Timeline({
   const zoomScaleRef    = useRef(1.0)
   const pendingScrollRef = useRef(null)
   const centerDateRef   = useRef(null)
+  const dayWidthRef     = useRef(0)
 
   // Multi-select
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
@@ -66,15 +67,21 @@ const Timeline = forwardRef(function Timeline({
   const MAX_VD = 730
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
+  dayWidthRef.current = dayWidth
   const totalW   = dayWidth * allDays.length
 
   // ── Container width ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver(() => {
-      const w = containerRef.current?.clientWidth || 0
-      setContainerW(w)
-      if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (w - personColWRef.current) + 'px')
+      const newW = containerRef.current?.clientWidth || 0
+      // Save center date before dayWidth recalculates (handles nav collapse/expand too)
+      if (scrollRef.current && dayWidthRef.current > 0) {
+        const el = scrollRef.current
+        centerDateRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
+      }
+      setContainerW(newW)
+      if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
@@ -86,20 +93,7 @@ const Timeline = forwardRef(function Timeline({
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
 
-  // Save center date before resize so we can restore viewport position after dayWidth recalculates
-  useEffect(() => {
-    if (dayWidth <= 0) return
-    const el = scrollRef.current
-    if (!el) return
-    const onResize = () => {
-      const centerX = el.scrollLeft + el.clientWidth / 2
-      centerDateRef.current = centerX / dayWidth
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [dayWidth])
-
-  // After dayWidth changes due to resize, restore the center position
+  // After dayWidth changes due to resize/nav-collapse, restore the center position
   useEffect(() => {
     if (centerDateRef.current == null || dayWidth <= 0) return
     const el = scrollRef.current
@@ -351,14 +345,17 @@ const Timeline = forwardRef(function Timeline({
     const d   = bulkTaskDays(task)
     const ids = boardPhases.map(p => p.id)
     if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
-      const fixed = Math.max(1, Math.min(7, Math.round(d / 4)))
-      const remaining = Math.max(2, d - fixed * 2)
+      const discovery = Math.max(1, Math.min(7, Math.round(d * 0.25)))
+      const handoff   = Math.max(1, Math.min(3, Math.round(d * 0.1)))
+      const remaining = Math.max(2, d - discovery - handoff)
       const ux = Math.max(1, Math.floor(remaining / 2))
       const ui = Math.max(1, remaining - ux)
       return boardPhases.map(bp => ({
         id: bp.id,
-        days: bp.id === 'discovery' ? fixed : bp.id === 'handoff' ? fixed
-            : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
+        days: bp.id === 'discovery' ? discovery
+            : bp.id === 'handoff'   ? handoff
+            : bp.id === 'ux'        ? ux
+            : bp.id === 'ui'        ? ui
             : Math.max(1, Math.floor(d / n)),
       }))
     }
