@@ -44,7 +44,7 @@ const Timeline = forwardRef(function Timeline({
   const [zoomScale,       setZoomScale]        = useState(1.0)
   const zoomScaleRef    = useRef(1.0)
   const pendingScrollRef = useRef(null)
-  const centerDateRef   = useRef(null)
+  const centerDayRef    = useRef(null)   // always-current center day, updated on scroll
   const dayWidthRef     = useRef(0)
 
   // Multi-select
@@ -68,25 +68,13 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
-  // viewDaysRef lets the ResizeObserver read the current viewDays without a stale closure
-  const viewDaysRef = useRef(viewDays)
-  viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
 
-  // ── Container width ───────────────────────────────────────────────────────
-  useEffect(() => {
+  // ── Container width (useLayoutEffect so setContainerW re-renders before first paint) ──
+  useLayoutEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
-      // When the ResizeObserver fires, layout is already updated, so el.clientWidth is
-      // already the NEW viewport width — we must NOT use it for the old-center calculation.
-      // Instead derive the old viewport width from refs that still hold PRE-resize values:
-      //   oldViewportW = oldDayWidth × viewDays  (because dayWidth = viewportW / viewDays)
-      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
-        const el = scrollRef.current
-        const oldViewportW = dayWidthRef.current * viewDaysRef.current
-        centerDateRef.current = (el.scrollLeft + oldViewportW / 2) / dayWidthRef.current
-      }
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
     })
@@ -95,29 +83,31 @@ const Timeline = forwardRef(function Timeline({
     return () => ro.disconnect()
   }, []) // eslint-disable-line
 
-  // Update --cw when groupBy changes (personColW changes)
+  // Update --cw when personColW changes (groupBy switch)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
 
-  // Restore center after dayWidth changes (resize, nav collapse, zoom, viewMode switch).
-  // useLayoutEffect fires after DOM updates but BEFORE paint, so el.clientWidth is already
-  // the new viewport width and setting scrollLeft here causes zero visual flash.
+  // Restore center on resize / nav collapse/expand (containerW changes).
+  // Using [containerW] means this fires ONLY on width changes, not on viewMode/zoom changes.
+  // centerDayRef is kept current by the scroll listener below.
   useLayoutEffect(() => {
-    if (centerDateRef.current == null || dayWidth <= 0) return
+    if (containerW <= 0 || dayWidth <= 0 || centerDayRef.current == null) return
     const el = scrollRef.current
     if (!el) return
-    const newX = centerDateRef.current * dayWidth - el.clientWidth / 2
-    el.scrollLeft = Math.max(0, newX)
-    centerDateRef.current = null
-  }, [dayWidth])
+    el.scrollLeft = Math.max(0, centerDayRef.current * dayWidth - el.clientWidth / 2)
+  }, [containerW]) // eslint-disable-line
 
-  // Scroll listener
+  // Scroll listener — also tracks center day so resize can restore it
   useEffect(() => {
     const el = scrollRef.current; if (!el) return
     let rafId
     const handler = () => {
       el.style.setProperty('--sl', el.scrollLeft + 'px')
+      // Keep centerDayRef current so resize centering always has the latest value
+      if (dayWidthRef.current > 0) {
+        centerDayRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
+      }
       cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => setScrollLeft(el.scrollLeft))
     }
@@ -182,9 +172,10 @@ const Timeline = forwardRef(function Timeline({
 
   useImperativeHandle(ref, () => ({ scrollToToday, scrollToDate }), [scrollToToday, scrollToDate])
 
-  // Reset zoom + scroll on view/period change OR when personColW changes (groupBy switch)
+  // Reset zoom + scroll on view/period change or groupBy switch.
+  // useLayoutEffect = runs before paint so no initial-position flash.
   const hasDayWidth = dayWidth > 0
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hasDayWidth) return
     zoomScaleRef.current = 1.0
     pendingScrollRef.current = null
@@ -193,7 +184,11 @@ const Timeline = forwardRef(function Timeline({
     if (resetDayW > 0 && scrollRef.current) {
       const { start } = viewMode === 'year' ? getYearRange(year) : getQuarterRange(year, quarter)
       const idx = diffDays(startOfDay(totalStart), startOfDay(addDays(start, -VIEW_PAD_DAYS)))
-      scrollRef.current.scrollLeft = Math.max(0, idx * resetDayW)
+      const newSL = Math.max(0, idx * resetDayW)
+      scrollRef.current.scrollLeft = newSL
+      // Seed centerDayRef so the first resize after load preserves this position
+      const viewportW = containerW - pcw
+      centerDayRef.current = (newSL + viewportW / 2) / resetDayW
     }
     setZoomScale(1.0)
   }, [hasDayWidth, viewMode, year, quarter, personColW]) // eslint-disable-line
