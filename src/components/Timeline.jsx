@@ -68,18 +68,26 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
+  // Keep viewDays in a ref so the ResizeObserver closure can read the current value
+  const viewDaysRef = useRef(viewDays)
+  viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
 
   // ── Container width ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver((entries) => {
-      // Use entry.contentRect for reliable new width (containerRef.current may still hold old value)
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
-      // Save center day-index before dayWidth recalculates (covers resize AND nav collapse/expand)
-      if (scrollRef.current && dayWidthRef.current > 0) {
+      // Synchronously correct scroll position so the center day stays centered.
+      // This avoids the React state→effect timing gap that causes visible drift.
+      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
         const el = scrollRef.current
-        centerDateRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
+        const oldDayW = dayWidthRef.current
+        const newDayW = (newW - personColWRef.current) / viewDaysRef.current
+        if (newDayW > 0) {
+          const centerDay = (el.scrollLeft + el.clientWidth / 2) / oldDayW
+          el.scrollLeft = Math.max(0, centerDay * newDayW - (newW - personColWRef.current) / 2)
+        }
       }
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
@@ -89,12 +97,12 @@ const Timeline = forwardRef(function Timeline({
     return () => ro.disconnect()
   }, []) // eslint-disable-line
 
-  // Update --pcol when groupBy changes
+  // Update --cw when groupBy changes (personColW changes)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
 
-  // After dayWidth changes due to resize/nav-collapse, restore the center position
+  // Restore center after zoom or viewMode changes (centerDateRef set by ctrl+wheel handler)
   useEffect(() => {
     if (centerDateRef.current == null || dayWidth <= 0) return
     const el = scrollRef.current

@@ -581,7 +581,7 @@ function AuthenticatedApp({ user }) {
   }, [undoHistory, redoHistory, showToast])
 
   if (dbError === 'permission-denied') return <PermissionErrorScreen />
-  if (migrating) return <SplashScreen label="Setting up your board…" />
+  if (migrating) return <SplashScreen />
   if (loadingBoards) return <SplashScreen />
 
   const isNavHidden  = !navOpen
