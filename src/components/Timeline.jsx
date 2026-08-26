@@ -68,6 +68,9 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
+  // viewDaysRef lets the ResizeObserver read the current viewDays without a stale closure
+  const viewDaysRef = useRef(viewDays)
+  viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
 
   // ── Container width ───────────────────────────────────────────────────────
@@ -75,11 +78,14 @@ const Timeline = forwardRef(function Timeline({
     if (!containerRef.current) return
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
-      // Save the center day-index BEFORE containerW (and therefore dayWidth) changes.
-      // We use the current dayWidthRef which still holds the old dayWidth at this point.
-      if (scrollRef.current && dayWidthRef.current > 0) {
+      // When the ResizeObserver fires, layout is already updated, so el.clientWidth is
+      // already the NEW viewport width — we must NOT use it for the old-center calculation.
+      // Instead derive the old viewport width from refs that still hold PRE-resize values:
+      //   oldViewportW = oldDayWidth × viewDays  (because dayWidth = viewportW / viewDays)
+      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
         const el = scrollRef.current
-        centerDateRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
+        const oldViewportW = dayWidthRef.current * viewDaysRef.current
+        centerDateRef.current = (el.scrollLeft + oldViewportW / 2) / dayWidthRef.current
       }
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
