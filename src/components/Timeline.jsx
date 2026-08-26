@@ -1,4 +1,5 @@
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { flushSync } from 'react-dom'
 import {
   getDaysInRange, groupDaysByMonth, isWeekend, startOfDay, diffDays,
   getTotalRange, getYearRange, getQuarterRange,
@@ -69,7 +70,6 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
-  // viewDaysRef: ResizeObserver callback needs the current viewDays to derive old viewport width
   const viewDaysRef = useRef(viewDays)
   viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
@@ -77,33 +77,36 @@ const Timeline = forwardRef(function Timeline({
   // ── Container width ───────────────────────────────────────────────────────
   useLayoutEffect(() => {
     if (!containerRef.current) return
-    // Initialize viewportWRef with the actual current viewport width
     viewportWRef.current = containerRef.current.clientWidth - personColWRef.current
 
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
       const newViewportW = newW - personColWRef.current
 
-      // ── Center-preserving scroll ────────────────────────────────────────
-      // ResizeObserver fires many times during a drag-resize, often before
-      // React re-renders. dayWidthRef/viewDaysRef would be stale after the
-      // first callback. Instead we track the ACTUAL viewport width in
-      // viewportWRef, updated synchronously after each callback — so the
-      // ratio is always correct even across rapid successive resize events.
+      // Compute target scrollLeft BEFORE React re-renders (el.scrollLeft and
+      // viewportWRef are still at the previous step's values, so the ratio is correct
+      // even across rapid successive callbacks before React has a chance to render).
+      let targetSL = null
       if (scrollRef.current && viewportWRef.current > 0) {
-        const el = scrollRef.current
-        const ratio = newViewportW / viewportWRef.current
-        el.scrollLeft = Math.max(0, el.scrollLeft * ratio)
-        if (viewDaysRef.current > 0) {
-          centerDayRef.current = (el.scrollLeft + newViewportW / 2) / (newViewportW / viewDaysRef.current)
-        }
+        targetSL = Math.max(0, scrollRef.current.scrollLeft * (newViewportW / viewportWRef.current))
       }
 
-      // Update AFTER computing ratio so next callback uses the new width as its "old"
+      // Update viewportWRef BEFORE flushSync so any nested callbacks see the new width
       viewportWRef.current = newViewportW
 
-      setContainerW(newW)
-      if (scrollRef.current) scrollRef.current.style.setProperty('--cw', newViewportW + 'px')
+      // Force a synchronous React commit so dayWidth/totalW update immediately.
+      // This ensures el.scrollLeft and the grid content are always set together
+      // before the browser paints — eliminating the jitter from an async render.
+      flushSync(() => setContainerW(newW))
+
+      // Apply scroll AFTER React committed — scrollLeft and totalW are now consistent
+      if (targetSL !== null && scrollRef.current) {
+        scrollRef.current.scrollLeft = targetSL
+        scrollRef.current.style.setProperty('--cw', newViewportW + 'px')
+        if (viewDaysRef.current > 0) {
+          centerDayRef.current = (targetSL + newViewportW / 2) / (newViewportW / viewDaysRef.current)
+        }
+      }
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
