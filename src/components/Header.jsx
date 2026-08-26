@@ -187,9 +187,6 @@ export default function Header({
         )}
       </div>
 
-      {/* Share */}
-      <button className="header__share-btn" onClick={onShare}>Share</button>
-
       {readOnly && <div className="header__readonly-badge">View only</div>}
     </header>
   )

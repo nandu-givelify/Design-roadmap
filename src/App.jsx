@@ -722,11 +722,10 @@ function AuthenticatedApp({ user }) {
   )
 }
 
-function SplashScreen({ label = 'Loading…' }) {
+function SplashScreen() {
   return (
     <div className="loading-screen">
-      <div className="loading-screen__icon">🗓</div>
-      <div className="loading-screen__text">{label}</div>
+      <div className="loading-screen__spinner" />
     </div>
   )
 }

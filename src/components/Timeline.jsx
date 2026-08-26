@@ -73,9 +73,10 @@ const Timeline = forwardRef(function Timeline({
   // ── Container width ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return
-    const ro = new ResizeObserver(() => {
-      const newW = containerRef.current?.clientWidth || 0
-      // Save center date before dayWidth recalculates (handles nav collapse/expand too)
+    const ro = new ResizeObserver((entries) => {
+      // Use entry.contentRect for reliable new width (containerRef.current may still hold old value)
+      const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
+      // Save center day-index before dayWidth recalculates (covers resize AND nav collapse/expand)
       if (scrollRef.current && dayWidthRef.current > 0) {
         const el = scrollRef.current
         centerDateRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
