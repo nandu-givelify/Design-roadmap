@@ -46,6 +46,7 @@ const Timeline = forwardRef(function Timeline({
   const pendingScrollRef = useRef(null)
   const centerDayRef    = useRef(null)   // always-current center day, updated on scroll
   const dayWidthRef     = useRef(0)
+  const viewportWRef    = useRef(0)      // actual current grid viewport width, updated in ResizeObserver
 
   // Multi-select
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
@@ -76,26 +77,33 @@ const Timeline = forwardRef(function Timeline({
   // ── Container width ───────────────────────────────────────────────────────
   useLayoutEffect(() => {
     if (!containerRef.current) return
+    // Initialize viewportWRef with the actual current viewport width
+    viewportWRef.current = containerRef.current.clientWidth - personColWRef.current
+
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
+      const newViewportW = newW - personColWRef.current
 
       // ── Center-preserving scroll ────────────────────────────────────────
-      // At callback time dayWidthRef/viewDaysRef are still PRE-resize values.
-      // oldViewportW = dayWidth × viewDays = containerW_old − personColW.
-      // newViewportW = newW − personColW  (browser has already laid out new size).
-      // Correct scroll to preserve center = scrollLeft × (newViewportW / oldViewportW).
-      // This is a pure ratio — no dependency on React re-rendering at all.
-      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
+      // ResizeObserver fires many times during a drag-resize, often before
+      // React re-renders. dayWidthRef/viewDaysRef would be stale after the
+      // first callback. Instead we track the ACTUAL viewport width in
+      // viewportWRef, updated synchronously after each callback — so the
+      // ratio is always correct even across rapid successive resize events.
+      if (scrollRef.current && viewportWRef.current > 0) {
         const el = scrollRef.current
-        const oldViewportW = dayWidthRef.current * viewDaysRef.current
-        const newViewportW = newW - personColWRef.current
-        const ratio = oldViewportW > 0 ? newViewportW / oldViewportW : 1
+        const ratio = newViewportW / viewportWRef.current
         el.scrollLeft = Math.max(0, el.scrollLeft * ratio)
-        centerDayRef.current = (el.scrollLeft + newViewportW / 2) / (newViewportW / viewDaysRef.current)
+        if (viewDaysRef.current > 0) {
+          centerDayRef.current = (el.scrollLeft + newViewportW / 2) / (newViewportW / viewDaysRef.current)
+        }
       }
 
+      // Update AFTER computing ratio so next callback uses the new width as its "old"
+      viewportWRef.current = newViewportW
+
       setContainerW(newW)
-      if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
+      if (scrollRef.current) scrollRef.current.style.setProperty('--cw', newViewportW + 'px')
     })
     ro.observe(containerRef.current)
     setContainerW(containerRef.current.clientWidth)
@@ -194,9 +202,10 @@ const Timeline = forwardRef(function Timeline({
       const idx = diffDays(startOfDay(totalStart), startOfDay(addDays(start, -VIEW_PAD_DAYS)))
       const newSL = Math.max(0, idx * resetDayW)
       scrollRef.current.scrollLeft = newSL
-      // Seed centerDayRef so the first resize after load preserves this position
+      // Seed centerDayRef and viewportWRef so the first resize preserves this position
       const viewportW = containerW - pcw
       centerDayRef.current = (newSL + viewportW / 2) / resetDayW
+      viewportWRef.current = viewportW
     }
     setZoomScale(1.0)
   }, [hasDayWidth, viewMode, year, quarter, personColW]) // eslint-disable-line
