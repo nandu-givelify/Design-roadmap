@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import {
   getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp, query, where, getDocs, setDoc, getDoc,
+  doc, serverTimestamp, query, where, getDocs, setDoc, getDoc, arrayUnion,
 } from 'firebase/firestore'
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
@@ -38,6 +38,29 @@ export const signOutUser        = () => fbSignOut(auth)
 export const onAuthChange       = (cb) => onAuthStateChanged(auth, cb)
 export const updateUserProfile  = (data) => updateProfile(auth.currentUser, data)
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email)
+
+// ── User Profiles (global, cross-board) ──────────────────────────────────────
+export const getUserProfile = (uid) =>
+  getDoc(doc(db, 'userProfiles', uid)).then(s => s.exists() ? { id: s.id, ...s.data() } : null)
+
+export const subscribeUserProfile = (uid, cb) =>
+  onSnapshot(doc(db, 'userProfiles', uid), s =>
+    cb(s.exists() ? { id: s.id, ...s.data() } : null))
+
+export const setUserProfile = (uid, data) =>
+  setDoc(doc(db, 'userProfiles', uid), data, { merge: true })
+
+export const findProfileByEmail = async (email) => {
+  const q = query(collection(db, 'userProfiles'), where('email', '==', email))
+  const snap = await getDocs(q)
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
+}
+
+export const findBoardsByMemberEmail = async (email) => {
+  const q = query(collection(db, 'boards'), where('memberEmails', 'array-contains', email))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
 
 // ── User prefs (board order, etc.) ───────────────────────────────────────────
 export const subscribeUserPrefs = (uid, cb) =>
@@ -98,8 +121,13 @@ export const subscribePeople = (boardId, cb, onError) =>
     onError || (() => {})
   )
 
-export const addPerson = (boardId, data) =>
-  addDoc(collection(db, 'boards', boardId, 'people'), { ...data, createdAt: serverTimestamp() })
+export const addPerson = async (boardId, data) => {
+  const ref = await addDoc(collection(db, 'boards', boardId, 'people'), { ...data, createdAt: serverTimestamp() })
+  if (data.email) {
+    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+  }
+  return ref
+}
 
 export const addPersonWithId = (boardId, id, data) =>
   setDoc(doc(db, 'boards', boardId, 'people', id), { ...data, createdAt: serverTimestamp() })

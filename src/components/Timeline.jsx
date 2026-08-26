@@ -32,6 +32,7 @@ const Timeline = forwardRef(function Timeline({
   onUpdateTask, onDeleteTask, onAddTaskForPerson, onEditTask,
   boardPhases,
   readOnly,
+  loading,
 }, ref) {
   const scrollRef    = useRef(null)
   const containerRef = useRef(null)
@@ -43,6 +44,7 @@ const Timeline = forwardRef(function Timeline({
   const [zoomScale,       setZoomScale]        = useState(1.0)
   const zoomScaleRef    = useRef(1.0)
   const pendingScrollRef = useRef(null)
+  const centerDateRef   = useRef(null)
 
   // Multi-select
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
@@ -83,6 +85,29 @@ const Timeline = forwardRef(function Timeline({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
+
+  // Save center date before resize so we can restore viewport position after dayWidth recalculates
+  useEffect(() => {
+    if (dayWidth <= 0) return
+    const el = scrollRef.current
+    if (!el) return
+    const onResize = () => {
+      const centerX = el.scrollLeft + el.clientWidth / 2
+      centerDateRef.current = centerX / dayWidth
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [dayWidth])
+
+  // After dayWidth changes due to resize, restore the center position
+  useEffect(() => {
+    if (centerDateRef.current == null || dayWidth <= 0) return
+    const el = scrollRef.current
+    if (!el) return
+    const newX = centerDateRef.current * dayWidth - el.clientWidth / 2
+    el.scrollLeft = Math.max(0, newX)
+    centerDateRef.current = null
+  }, [dayWidth])
 
   // Scroll listener
   useEffect(() => {
@@ -807,6 +832,12 @@ const Timeline = forwardRef(function Timeline({
       {renderDragOverlay()}
       {renderSelectionBox()}
       {renderBulkBar()}
+      {loading && (
+        <div className="timeline-loading">
+          <div className="timeline-loading__spinner" />
+          <div className="timeline-loading__text">Loading tasks…</div>
+        </div>
+      )}
     </>
   )
 })

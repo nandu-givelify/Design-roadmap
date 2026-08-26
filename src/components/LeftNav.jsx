@@ -1,21 +1,59 @@
 import { useState } from 'react'
-import { signOutUser } from '../firebase'
+import { signOutUser, setUserProfile } from '../firebase'
 import { getAvatarColor } from '../utils/dateUtils'
+import { PhotoPicker } from './Modals'
 
 // Transparent 1×1 GIF — used as invisible drag image so browser shows nothing
 const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
-export default function LeftNav({
-  user, boards, activeBoardId, favoriteBoardIds = [],
-  onSelectBoard, onNewBoard, onSettings, onReorderBoards, onToggleFavorite,
-}) {
-  const [collapsed,    setCollapsed]    = useState(false)
-  const [showUserMenu, setShowUserMenu] = useState(false)
-  const [draggedId,    setDraggedId]    = useState(null)
-  const [dragOverId,   setDragOverId]   = useState(null)
-  const [dragPosition, setDragPosition] = useState(null)
+// ── Profile editor panel ──────────────────────────────────────────────────────
+function ProfilePanel({ user, profile, onSave, onClose }) {
+  const [name,  setName]  = useState(profile?.name  || user?.displayName || '')
+  const [photo, setPhoto] = useState(profile?.photo || user?.photoURL    || null)
+  const [saving, setSaving] = useState(false)
 
-  const displayName  = user?.displayName || user?.email?.split('@')[0] || 'You'
+  const handleSave = async () => {
+    setSaving(true)
+    try { await onSave({ name: name.trim() || null, photo: photo || null }) } finally { setSaving(false) }
+    onClose()
+  }
+
+  return (
+    <div className="left-nav__profile-panel">
+      <div className="left-nav__profile-panel__title">Edit profile</div>
+      <PhotoPicker value={photo} onChange={setPhoto} />
+      <input
+        className="left-nav__profile-input"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Display name"
+      />
+      <div className="left-nav__profile-actions">
+        <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function LeftNav({
+  user, userProfile, onUpdateProfile,
+  boards, activeBoardId, favoriteBoardIds = [],
+  onSelectBoard, onNewBoard, onReorderBoards, onToggleFavorite,
+}) {
+  const [collapsed,      setCollapsed]      = useState(false)
+  const [showUserMenu,   setShowUserMenu]   = useState(false)
+  const [showProfile,    setShowProfile]    = useState(false)
+  const [draggedId,      setDraggedId]      = useState(null)
+  const [dragOverId,     setDragOverId]     = useState(null)
+  const [dragPosition,   setDragPosition]   = useState(null)
+
+  const displayName  = userProfile?.name || user?.displayName || user?.email?.split('@')[0] || 'You'
+  const photoUrl     = userProfile?.photo || user?.photoURL || null
   const avatarLetter = displayName.charAt(0).toUpperCase()
   const avatarColor  = getAvatarColor(user?.email || displayName)
 
@@ -138,23 +176,36 @@ export default function LeftNav({
         </div>
       </div>
 
-      {/* ── Footer ── */}
+      {/* ── Footer (user profile only — settings moved to header) ── */}
       <div className="left-nav__footer">
-        <button className="left-nav__footer-btn" onClick={onSettings} title="Settings">
-          <GearIcon />
-          {!collapsed && <span>Settings</span>}
-        </button>
+        <div className="left-nav__user-wrap" style={{ position: 'relative' }}>
+          {showProfile && !collapsed && (
+            <ProfilePanel
+              user={user}
+              profile={userProfile}
+              onSave={onUpdateProfile}
+              onClose={() => setShowProfile(false)}
+            />
+          )}
 
-        <div className="left-nav__user-wrap">
           <button className="left-nav__user-btn" onClick={() => setShowUserMenu(v => !v)} title={displayName}>
-            <div className="left-nav__avatar" style={{ background: user?.photoURL ? 'transparent' : avatarColor }}>
-              {user?.photoURL ? <img src={user.photoURL} alt="" /> : avatarLetter}
+            <div className="left-nav__avatar" style={{ background: photoUrl ? 'transparent' : avatarColor }}>
+              {photoUrl ? <img src={photoUrl} alt="" /> : avatarLetter}
             </div>
             {!collapsed && (
               <div className="left-nav__user-text">
                 <span className="left-nav__user-name">{displayName}</span>
                 <span className="left-nav__user-email">{user?.email}</span>
               </div>
+            )}
+            {!collapsed && (
+              <button
+                className="left-nav__edit-profile-btn"
+                title="Edit profile"
+                onClick={e => { e.stopPropagation(); setShowUserMenu(false); setShowProfile(v => !v) }}
+              >
+                <PencilIcon />
+              </button>
             )}
           </button>
 
@@ -166,6 +217,10 @@ export default function LeftNav({
                   <div className="left-nav__user-menu-name">{displayName}</div>
                   <div className="left-nav__user-menu-email">{user?.email}</div>
                 </div>
+                <button className="left-nav__user-menu-item"
+                  onClick={() => { setShowUserMenu(false); setShowProfile(true) }}>
+                  Edit profile
+                </button>
                 <button className="left-nav__user-menu-item left-nav__user-menu-item--danger"
                   onClick={() => { signOutUser(); setShowUserMenu(false) }}>
                   Sign out
@@ -193,7 +248,7 @@ function NavLogo() {
 const ChevronLeft  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
 const ChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
 const PlusIcon     = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-const GearIcon     = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+const PencilIcon   = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
 const StarIcon     = ({ filled }) => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>

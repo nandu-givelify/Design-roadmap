@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getAvatarColor, AVATAR_COLORS } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
+import { findProfileByEmail } from '../firebase'
 
 // ── Inline edit form for a person ─────────────────────────────────────────────
 function PersonEditForm({ person, roles, onSave, onDone, onAddRole }) {
@@ -55,15 +56,45 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole }) {
 }
 
 // ── Add person form ───────────────────────────────────────────────────────────
-function AddPersonForm({ roles, onSave, onDone, onAddRole }) {
-  const [name,       setName]       = useState('')
-  const [email,      setEmail]      = useState('')
-  const [role,       setRole]       = useState('Designer')
-  const [photo,      setPhoto]      = useState(null)
-  const [customRole, setCustomRole] = useState('')
-  const [saving,     setSaving]     = useState(false)
+function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) {
+  const [name,          setName]          = useState('')
+  const [email,         setEmail]         = useState('')
+  const [role,          setRole]          = useState('Designer')
+  const [photo,         setPhoto]         = useState(null)
+  const [customRole,    setCustomRole]    = useState('')
+  const [saving,        setSaving]        = useState(false)
+  const [profileFound,  setProfileFound]  = useState(false)
+  const debounceRef = useRef(null)
 
   const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
+
+  // Debounced email lookup
+  const handleEmailChange = (val) => {
+    setEmail(val)
+    setProfileFound(false)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!val.trim() || !val.includes('@')) return
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const profile = await findProfileByEmail(val.trim())
+        if (profile) {
+          if (!name.trim() && profile.name) setName(profile.name)
+          if (!photo && profile.photo)      setPhoto(profile.photo)
+          setProfileFound(true)
+        }
+      } catch {}
+    }, 400)
+  }
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
+
+  const prefillPerson = (p) => {
+    setName(p.name  || '')
+    setEmail(p.email || '')
+    setPhoto(p.photo || null)
+    if (p.role && allRoles.includes(p.role)) setRole(p.role)
+    setProfileFound(false)
+  }
 
   const handleSave = async () => {
     if (!name.trim()) return
@@ -83,9 +114,48 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole }) {
 
   return (
     <div className="settings-inline-form">
+      {/* Recent people suggestions */}
+      {recentPeople.length > 0 && (
+        <div className="settings-recent-people">
+          <div className="settings-recent-people__label">Recently added</div>
+          <div className="settings-recent-people__chips">
+            {recentPeople.slice(0, 6).map((p) => (
+              <button
+                key={p.email}
+                className="settings-recent-chip"
+                onClick={() => prefillPerson(p)}
+                type="button"
+                title={p.email}
+              >
+                <div
+                  className="settings-recent-chip__avatar"
+                  style={{ background: p.photo ? 'transparent' : getAvatarColor(p.name) }}
+                >
+                  {p.photo ? <img src={p.photo} alt="" /> : p.name?.charAt(0)?.toUpperCase()}
+                </div>
+                <span>{p.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <PhotoPicker value={photo} onChange={setPhoto} />
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus />
-      <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" type="email" />
+      <div style={{ position: 'relative' }}>
+        <input
+          value={email}
+          onChange={(e) => handleEmailChange(e.target.value)}
+          placeholder="Email (optional)"
+          type="email"
+          style={{ width: '100%' }}
+        />
+        {profileFound && (
+          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#059669', whiteSpace: 'nowrap' }}>
+            Profile found
+          </span>
+        )}
+      </div>
       <select value={role} onChange={(e) => setRole(e.target.value)}>
         {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
         <option value="__custom__">+ New role…</option>
@@ -145,7 +215,7 @@ export default function Settings({
   onClose, boardId, people, roles,
   boardPhases, onUpdateBoardPhases,
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
-  isOwner,
+  isOwner, recentPeople = [],
 }) {
   const [editingId,     setEditingId]     = useState(null)
   const [adding,        setAdding]        = useState(false)
@@ -191,6 +261,7 @@ export default function Settings({
                 onSave={onAddPerson}
                 onDone={() => setAdding(false)}
                 onAddRole={onAddRole}
+                recentPeople={recentPeople}
               />
             )}
 

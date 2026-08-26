@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './components/LoginPage'
 import LeftNav from './components/LeftNav'
@@ -14,6 +14,7 @@ import {
   checkAndRunMigration,
   subscribeUserPrefs, updateUserPrefs,
   DEFAULT_BOARD_PHASES,
+  getUserProfile, setUserProfile, findBoardsByMemberEmail, subscribeUserProfile,
 } from './firebase'
 import { useHistory } from './hooks/useHistory'
 
@@ -196,10 +197,12 @@ function AuthenticatedApp({ user }) {
   const [activeBoardId, setActiveBoardId] = useState(null)
   const [people,        setPeople]        = useState([])
   const [tasks,         setTasks]         = useState([])
+  const [tasksLoaded,   setTasksLoaded]   = useState(false)
   const [loadingBoards, setLoadingBoards] = useState(true)
   const [migrating,     setMigrating]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [dbError,       setDbError]       = useState(null)
+  const [userProfile,   setUserProfile_]  = useState(null)
 
   // Timeline controls
   const now = new Date()
@@ -237,6 +240,17 @@ function AuthenticatedApp({ user }) {
       setFavoriteBoardIds(prefs.favoriteBoardIds || [])
     })
   }, [user])
+
+  // ── Sync user profile on login ────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    setUserProfile(user.uid, {
+      email: user.email,
+      name:  user.displayName || null,
+      photo: user.photoURL    || null,
+    })
+    return subscribeUserProfile(user.uid, setUserProfile_)
+  }, [user]) // eslint-disable-line
 
   // ── Sorted boards (by user-defined order) ────────────────────────────────
   const sortedBoards = boardOrder.length > 0
@@ -305,10 +319,21 @@ function AuthenticatedApp({ user }) {
   // ── Subscribe to active board's data ────────────────────────────────────
   useEffect(() => {
     if (!activeBoardId) return
+    setTasksLoaded(false)
     setPeople([])
     setTasks([])
-    const u1 = subscribePeople(activeBoardId, setPeople)
-    const u2 = subscribeTasks(activeBoardId, setTasks)
+    const u1 = subscribePeople(activeBoardId, (ps) => {
+      setPeople(ps)
+      // Cache people to localStorage for "recently added" suggestions
+      try {
+        const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
+        ps.forEach(p => {
+          if (p.email) cache[p.email] = { name: p.name, email: p.email, photo: p.photo || null, role: p.role || null }
+        })
+        localStorage.setItem('recentPeople', JSON.stringify(cache))
+      } catch {}
+    })
+    const u2 = subscribeTasks(activeBoardId, (ts) => { setTasks(ts); setTasksLoaded(true) })
     return () => { u1(); u2() }
   }, [activeBoardId])
 
@@ -316,6 +341,21 @@ function AuthenticatedApp({ user }) {
   const activeBoard = boards.find((b) => b.id === activeBoardId) || null
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
   const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
+
+  // ── Recent people (from localStorage cache, excluding current board members) ──
+  const recentPeople = useMemo(() => {
+    try {
+      const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
+      const currentEmails = new Set(people.map(p => p.email).filter(Boolean))
+      return Object.values(cache).filter(p => p.email && !currentEmails.has(p.email))
+    } catch { return [] }
+  }, [people, activeBoardId]) // eslint-disable-line
+
+  // ── Profile update handler ────────────────────────────────────────────────
+  const handleUpdateProfile = useCallback((data) => {
+    if (!user) return
+    setUserProfile(user.uid, data)
+  }, [user])
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
@@ -533,12 +573,13 @@ function AuthenticatedApp({ user }) {
     <div className="app">
       <LeftNav
         user={user}
+        userProfile={userProfile}
+        onUpdateProfile={handleUpdateProfile}
         boards={sortedBoards}
         activeBoardId={activeBoardId}
         favoriteBoardIds={favoriteBoardIds}
         onSelectBoard={handleSelectBoard}
         onNewBoard={handleNewBoard}
-        onSettings={() => setSettingsOpen(true)}
         onReorderBoards={handleReorderBoards}
         onToggleFavorite={handleToggleFavorite}
       />
@@ -552,6 +593,7 @@ function AuthenticatedApp({ user }) {
           quarter={quarter} setQuarter={setQuarter}
           onJumpToday={handleJumpToday}
           onShare={() => handleShareBoard()}
+          onSettings={() => setSettingsOpen(true)}
           onRenameBoard={handleRenameBoard}
           onDeleteBoard={handleDeleteBoard}
           people={people}
@@ -581,6 +623,7 @@ function AuthenticatedApp({ user }) {
           onEditTask={(task) => setEditingTask(task)}
           boardPhases={boardPhases}
           readOnly={readOnly}
+          loading={!tasksLoaded}
         />
 
         {/* Add Task modal */}
@@ -637,6 +680,7 @@ function AuthenticatedApp({ user }) {
             onAddRole={handleAddRole}
             onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
+            recentPeople={recentPeople}
           />
         )}
       </div>
