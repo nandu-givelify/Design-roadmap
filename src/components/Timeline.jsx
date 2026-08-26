@@ -68,9 +68,6 @@ const Timeline = forwardRef(function Timeline({
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
   const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
   dayWidthRef.current = dayWidth
-  // Keep viewDays in a ref so the ResizeObserver closure can read the current value
-  const viewDaysRef = useRef(viewDays)
-  viewDaysRef.current = viewDays
   const totalW   = dayWidth * allDays.length
 
   // ── Container width ───────────────────────────────────────────────────────
@@ -78,16 +75,11 @@ const Timeline = forwardRef(function Timeline({
     if (!containerRef.current) return
     const ro = new ResizeObserver((entries) => {
       const newW = entries[0]?.contentRect.width ?? containerRef.current?.clientWidth ?? 0
-      // Synchronously correct scroll position so the center day stays centered.
-      // This avoids the React state→effect timing gap that causes visible drift.
-      if (scrollRef.current && dayWidthRef.current > 0 && viewDaysRef.current > 0) {
+      // Save the center day-index BEFORE containerW (and therefore dayWidth) changes.
+      // We use the current dayWidthRef which still holds the old dayWidth at this point.
+      if (scrollRef.current && dayWidthRef.current > 0) {
         const el = scrollRef.current
-        const oldDayW = dayWidthRef.current
-        const newDayW = (newW - personColWRef.current) / viewDaysRef.current
-        if (newDayW > 0) {
-          const centerDay = (el.scrollLeft + el.clientWidth / 2) / oldDayW
-          el.scrollLeft = Math.max(0, centerDay * newDayW - (newW - personColWRef.current) / 2)
-        }
+        centerDateRef.current = (el.scrollLeft + el.clientWidth / 2) / dayWidthRef.current
       }
       setContainerW(newW)
       if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (newW - personColWRef.current) + 'px')
@@ -102,8 +94,10 @@ const Timeline = forwardRef(function Timeline({
     if (scrollRef.current) scrollRef.current.style.setProperty('--cw', (containerW - personColW) + 'px')
   }, [personColW, containerW])
 
-  // Restore center after zoom or viewMode changes (centerDateRef set by ctrl+wheel handler)
-  useEffect(() => {
+  // Restore center after dayWidth changes (resize, nav collapse, zoom, viewMode switch).
+  // useLayoutEffect fires after DOM updates but BEFORE paint, so el.clientWidth is already
+  // the new viewport width and setting scrollLeft here causes zero visual flash.
+  useLayoutEffect(() => {
     if (centerDateRef.current == null || dayWidth <= 0) return
     const el = scrollRef.current
     if (!el) return
