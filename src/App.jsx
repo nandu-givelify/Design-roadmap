@@ -355,11 +355,64 @@ function AuthenticatedApp({ user }) {
     } catch { return [] }
   }, [people, activeBoardId]) // eslint-disable-line
 
-  // ── Profile update handler ────────────────────────────────────────────────
+  // ── Profile update handler — syncs to matching board person by email ──────
   const handleUpdateProfile = useCallback((data) => {
     if (!user) return
     setUserProfile(user.uid, data)
-  }, [user])
+    // Mirror name/photo to the user's board person record (matched by email)
+    const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+    if (myPerson && activeBoardId) {
+      const patch = {}
+      if (data.name  !== undefined) patch.name  = data.name
+      if (data.photo !== undefined) patch.photo = data.photo
+      if (Object.keys(patch).length) updatePerson(activeBoardId, myPerson.id, patch)
+    }
+  }, [user, people, activeBoardId]) // eslint-disable-line
+
+  // ── Board person → profile sync handler ──────────────────────────────────
+  const handleUpdatePerson = useCallback((id, data) => {
+    updatePerson(activeBoardId, id, data)
+    // If this person is the logged-in user, also update their profile
+    const person = people.find(p => p.id === id)
+    if (person?.email?.toLowerCase() === user?.email?.toLowerCase()) {
+      const patch = {}
+      if (data.name  !== undefined) patch.name  = data.name
+      if (data.photo !== undefined) patch.photo = data.photo
+      if (Object.keys(patch).length) setUserProfile(user.uid, patch)
+    }
+  }, [user, people, activeBoardId]) // eslint-disable-line
+
+  // ── "Whichever comes first" — reconcile photo/name on load ───────────────
+  // If profile has a photo but the board person doesn't (or vice versa), sync once.
+  const reconciledRef = useRef(new Set())
+  useEffect(() => {
+    if (!user || !activeBoardId || !people.length) return
+    const key = `${user.uid}:${activeBoardId}`
+    if (reconciledRef.current.has(key)) return   // already reconciled this board
+    const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+    if (!myPerson) return
+    reconciledRef.current.add(key)
+    const profilePhoto = userProfile?.photo || null
+    const profileName  = userProfile?.name  || null
+    const boardPhoto   = myPerson.photo || null
+    const boardName    = myPerson.name  || null
+    // Determine the "best" values — prefer whichever side already has data
+    const bestPhoto = profilePhoto || boardPhoto
+    const bestName  = profileName  || boardName
+    const needsProfileUpdate = (bestPhoto && bestPhoto !== profilePhoto) || (bestName && bestName !== profileName)
+    const needsBoardUpdate   = (bestPhoto && bestPhoto !== boardPhoto)   || (bestName && bestName !== boardName)
+    if (needsProfileUpdate) setUserProfile(user.uid, { photo: bestPhoto, name: bestName })
+    if (needsBoardUpdate)   updatePerson(activeBoardId, myPerson.id, { photo: bestPhoto, name: bestName })
+  }, [people, userProfile, activeBoardId]) // eslint-disable-line
+
+  // ── Effective profile — merges userProfile + matching board person ────────
+  // Lets LeftNav show the right photo/name immediately (no Firestore round-trip wait)
+  const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+  const effectiveProfile = {
+    ...userProfile,
+    photo: userProfile?.photo || myBoardPerson?.photo || null,
+    name:  userProfile?.name  || myBoardPerson?.name  || null,
+  }
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
@@ -592,7 +645,7 @@ function AuthenticatedApp({ user }) {
       {!isNavHidden && (
         <LeftNav
           user={user}
-          userProfile={userProfile}
+          userProfile={effectiveProfile}
           onUpdateProfile={handleUpdateProfile}
           boards={sortedBoards}
           activeBoardId={activeBoardId}
@@ -704,7 +757,7 @@ function AuthenticatedApp({ user }) {
             people={people}
             roles={boardRoles}
             boardPhases={boardPhases}
-            onUpdatePerson={(id, data) => updatePerson(activeBoardId, id, data)}
+            onUpdatePerson={handleUpdatePerson}
             onDeletePerson={(id) => deletePerson(activeBoardId, id)}
             onAddPerson={(data) => addPerson(activeBoardId, data)}
             onAddRole={handleAddRole}
