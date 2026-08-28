@@ -540,6 +540,24 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .setup-card__hint { font-size: 12px; color: var(--m3-on-surface-variant); }
 
 /* ── Left Navigation ─────────────────────────────────────────────────────────── */
+
+/* Dark navy skin — scoped token overrides for the entire nav tree */
+.left-nav {
+  --m3-surface-container:         #1E2433;
+  --m3-surface-container-low:     #1A1F2E;
+  --m3-surface-container-high:    #2D3347;
+  --m3-surface-container-highest: #3A4460;
+  --m3-outline-variant:           #2D3347;
+  --m3-on-surface:                #FFFFFF;
+  --m3-on-surface-variant:        rgba(255,255,255,0.55);
+  --m3-secondary-container:       #3D4A73;
+  --m3-on-secondary-container:    #FFFFFF;
+  --m3-primary:                   #A5B4FC;
+  --m3-primary-container:         rgba(165,180,252,0.15);
+  --m3-on-primary-container:      #A5B4FC;
+  --m3-surface:                   #253046;
+}
+
 .left-nav {
   width: 232px; flex-shrink: 0;
   background: var(--m3-surface-container); border-right: 1px solid var(--m3-outline-variant);
@@ -665,8 +683,8 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .left-nav__user-menu-email { font-size: 11px; color: var(--m3-on-surface-variant); margin-top: 2px; }
 .left-nav__user-menu-item { display: block; width: 100%; text-align: left; padding: 11px 16px; font-size: 13px; color: var(--m3-on-surface-variant); transition: background 0.08s; }
 .left-nav__user-menu-item:hover { background: var(--m3-surface-container-high); color: var(--m3-on-surface); }
-.left-nav__user-menu-item--danger { color: var(--m3-error); }
-.left-nav__user-menu-item--danger:hover { background: var(--m3-error-container); }
+.left-nav__user-menu-item--danger { color: #F87171; }
+.left-nav__user-menu-item--danger:hover { background: rgba(248,113,113,0.15); }
 /* ── Login Page ──────────────────────────────────────────────────────────────── */
 .login-page {
   height: 100vh; display: flex; align-items: center; justify-content: center;
