@@ -98,7 +98,7 @@ export default function Header({
       <div className="header__spacer" />
 
       {/* Today */}
-      <button className="header__today-btn" onClick={onJumpToday}>Today</button>
+      <button className="header__today-btn" onClick={onJumpToday} title="Jump to today"><TodayIcon /></button>
 
       {/* Period navigation */}
       <div className="header__nav">
@@ -138,7 +138,8 @@ export default function Header({
           className={`header__filter-btn${activeFilters > 0 ? ' header__filter-btn--active' : ''}`}
           onClick={() => setShowFilters((v) => !v)}
         >
-          Filter{activeFilters > 0 ? ` (${activeFilters})` : ''}
+          <FilterIcon />
+          {activeFilters > 0 && <span className="header__filter-count">{activeFilters}</span>}
         </button>
 
         {showFilters && (
@@ -189,6 +190,28 @@ export default function Header({
 
       {readOnly && <div className="header__readonly-badge">View only</div>}
     </header>
+  )
+}
+
+function TodayIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+      <circle cx="12" cy="16" r="1" fill="currentColor"/>
+    </svg>
+  )
+}
+
+function FilterIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <line x1="4" y1="6" x2="20" y2="6"/>
+      <line x1="7" y1="12" x2="17" y2="12"/>
+      <line x1="10" y1="18" x2="14" y2="18"/>
+    </svg>
   )
 }
 

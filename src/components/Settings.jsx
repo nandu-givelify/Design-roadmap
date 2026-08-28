@@ -395,10 +395,11 @@ export default function Settings({
                 <div style={{ flex: 1 }} />
                 {isOwner && (
                   <button className="settings-item__btn settings-item__btn--delete"
+                    title="Delete phase"
                     onClick={() => {
                       if ((boardPhases || []).length <= 1) return
                       onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phase.id))
-                    }}>Delete</button>
+                    }}><DeleteIcon size={16} /></button>
                 )}
               </div>
             ))}
