@@ -252,7 +252,7 @@ const Timeline = forwardRef(function Timeline({
         const ddx = d.cursorX - d.startCursorX
         const ddy = d.cursorY - d.startCursorY
         if (Math.sqrt(ddx * ddx + ddy * ddy) < 5) {
-          if (onEditTask) onEditTask(d.task)
+          // single click — dates shown by TaskBar's own click handler
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
           const updates = {}

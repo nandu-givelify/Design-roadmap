@@ -18,6 +18,8 @@ export default function TaskBar({
   const [visualPhases, setVisualPhases] = useState(null)
   const [showMenu,     setShowMenu]     = useState(false)
   const [isNarrow,     setIsNarrow]     = useState(false)
+  const [showDates,    setShowDates]    = useState(false)
+  const showDatesTimerRef = useRef(null)
 
   const barRef       = useRef(null)
   const dragRef      = useRef(null)
@@ -140,9 +142,21 @@ export default function TaskBar({
   const handleMoveDown = (e) => {
     if (readOnly || isGhost) return
     e.preventDefault(); e.stopPropagation()
+    const startX = e.clientX, startY = e.clientY
     if (onMoveDragStart && barRef.current) {
       onMoveDragStart(task, e, barRef.current.getBoundingClientRect())
     }
+    // Detect single click (no drag) → show dates briefly
+    const onUp = (ue) => {
+      const dx = ue.clientX - startX, dy = ue.clientY - startY
+      if (Math.sqrt(dx * dx + dy * dy) < 5) {
+        clearTimeout(showDatesTimerRef.current)
+        setShowDates(true)
+        showDatesTimerRef.current = setTimeout(() => setShowDates(false), 2000)
+      }
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mouseup', onUp)
   }
 
   // ── Phase divider drag ───────────────────────────────────────────────────
@@ -218,6 +232,7 @@ export default function TaskBar({
         style={{ bottom: hasPhases ? PHASE_STRIP_H : 0 }}
         data-task-id={task.id}
         onMouseDown={handleMoveDown}
+        onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly && !isGhost && onEdit) { setShowDates(false); onEdit() } }}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
         {!isNarrow && renderAvatars()}
@@ -254,7 +269,7 @@ export default function TaskBar({
         </div>
       )}
 
-      {resizing && (
+      {(resizing || showDates) && (
         w < 260 ? (
           <div className="task-bar__tooltip task-bar__tooltip--center">
             {formatDateWithDay(dispStart)} → {formatDateWithDay(dispEnd)}
