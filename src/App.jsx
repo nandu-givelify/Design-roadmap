@@ -382,27 +382,22 @@ function AuthenticatedApp({ user }) {
     }
   }, [user, people, activeBoardId]) // eslint-disable-line
 
-  // ── "Whichever comes first" — reconcile photo/name on load ───────────────
-  // If profile has a photo but the board person doesn't (or vice versa), sync once.
-  const reconciledRef = useRef(new Set())
+  // ── Photo/name sync — keep userProfile and all board persons in sync ─────
   useEffect(() => {
     if (!user || !activeBoardId || !people.length) return
-    const key = `${user.uid}:${activeBoardId}`
-    if (reconciledRef.current.has(key)) return   // already reconciled this board
     const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
     if (!myPerson) return
-    reconciledRef.current.add(key)
     const profilePhoto = userProfile?.photo || null
     const profileName  = userProfile?.name  || null
     const boardPhoto   = myPerson.photo || null
     const boardName    = myPerson.name  || null
-    // Determine the "best" values — prefer whichever side already has data
     const bestPhoto = profilePhoto || boardPhoto
     const bestName  = profileName  || boardName
-    const needsProfileUpdate = (bestPhoto && bestPhoto !== profilePhoto) || (bestName && bestName !== profileName)
-    const needsBoardUpdate   = (bestPhoto && bestPhoto !== boardPhoto)   || (bestName && bestName !== boardName)
-    if (needsProfileUpdate) setUserProfile(user.uid, { photo: bestPhoto, name: bestName })
-    if (needsBoardUpdate)   updatePerson(activeBoardId, myPerson.id, { photo: bestPhoto, name: bestName })
+    // Only write if there's an actual mismatch (prevents loops)
+    if (bestPhoto && bestPhoto !== profilePhoto) setUserProfile(user.uid, { photo: bestPhoto, name: bestName || profileName })
+    if (bestName  && bestName  !== profileName)  setUserProfile(user.uid, { name: bestName, photo: bestPhoto || profilePhoto })
+    if (bestPhoto && bestPhoto !== boardPhoto)   updatePerson(activeBoardId, myPerson.id, { photo: bestPhoto })
+    if (bestName  && bestName  !== boardName)    updatePerson(activeBoardId, myPerson.id, { name: bestName })
   }, [people, userProfile, activeBoardId]) // eslint-disable-line
 
   // ── Effective profile — merges userProfile + matching board person ────────

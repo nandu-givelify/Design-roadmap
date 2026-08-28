@@ -58,6 +58,7 @@ export default function LeftNav({
   const avatarColor  = getAvatarColor(user?.email || displayName)
 
   const favoriteBoards = boards.filter(b => favoriteBoardIds.includes(b.id))
+  const regularBoards  = boards.filter(b => !favoriteBoardIds.includes(b.id))
   const hasFavorites   = favoriteBoards.length > 0
 
   // ── Drag handlers ─────────────────────────────────────────────────────────
@@ -164,7 +165,10 @@ export default function LeftNav({
             <button className="left-nav__new-btn" onClick={onNewBoard} title="New board"><PlusIcon /></button>
           </div>
           <div className="left-nav__boards-list">
-            {boards.map(renderBoardItem)}
+            {regularBoards.map(renderBoardItem)}
+            {regularBoards.length === 0 && boards.length > 0 && (
+              <div className="left-nav__empty-boards">All boards are in Favourites</div>
+            )}
             {boards.length === 0 && (
               <div className="left-nav__empty-boards">No boards yet</div>
             )}
