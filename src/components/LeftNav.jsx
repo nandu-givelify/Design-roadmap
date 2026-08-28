@@ -192,13 +192,6 @@ export default function LeftNav({
               <span className="left-nav__user-name">{displayName}</span>
               <span className="left-nav__user-email">{user?.email}</span>
             </div>
-            <button
-              className="left-nav__edit-profile-btn"
-              title="Edit profile"
-              onClick={e => { e.stopPropagation(); setShowUserMenu(false); setShowProfile(v => !v) }}
-            >
-              <PencilIcon />
-            </button>
           </button>
 
           {showUserMenu && (
