@@ -150,7 +150,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   display: flex; align-items: center; padding-left: 8px;
   font-size: 10px; font-weight: 400; text-transform: uppercase; color: #666;
   letter-spacing: 0.04em;
-  border-right: 1px solid #c8c8c8; flex-shrink: 0; overflow: hidden;
+  border-right: 1px solid #c0c0c0; flex-shrink: 0; overflow: hidden;
 }
 
 /* Body */
@@ -207,14 +207,14 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   position: absolute; top: 0; bottom: 0; width: 1px;
   background: repeating-linear-gradient(
     to bottom,
-    #e8e8e8 0px, #e8e8e8 4px,
+    #c0c0c0 0px, #c0c0c0 4px,
     transparent 4px, transparent 8px
   );
   z-index: 0; pointer-events: none;
 }
 /* Quarter boundary months (Jan/Apr/Jul/Oct) — solid line */
 .timeline__month-line--quarter {
-  background: #e8e8e8;
+  background: #c0c0c0;
 }
 /* Today line */
 .timeline__today-line {
