@@ -126,13 +126,13 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 /* Sticky header */
 .timeline__header {
   position: sticky; top: 0; z-index: 30;
-  background: #fff; border-bottom: 2px solid #e5e7eb;
+  background: #fff; border-bottom: 1px solid #ccc;
   display: flex;
 }
 .timeline__header-person-col {
   width: var(--pcol); flex-shrink: 0;
   position: sticky; left: 0; z-index: 31;
-  background: #fff; border-right: 1px solid #e5e7eb;
+  background: #fff; border-right: 1px solid #ccc;
   display: flex; align-items: flex-end; padding: 0 12px 6px;
   font-size: 11px; font-weight: 600; color: #9ca3af;
   letter-spacing: 0.05em; text-transform: uppercase;
@@ -142,7 +142,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .timeline__quarter-cell {
   display: flex; align-items: center; padding-left: 8px;
   font-size: 11px; font-weight: 700; color: #6b7280;
-  border-right: 1px solid #d1d5db; flex-shrink: 0;
+  border-right: 1px solid #ccc; flex-shrink: 0;
 }
 .timeline__quarter-cell--even { background: #f9fafb; }
 .timeline__month-row { display: flex; height: 28px; }
@@ -150,7 +150,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   display: flex; align-items: center; padding-left: 8px;
   font-size: 10px; font-weight: 400; text-transform: uppercase; color: #666;
   letter-spacing: 0.04em;
-  border-right: 1px solid #c0c0c0; flex-shrink: 0; overflow: hidden;
+  border-right: 1px solid #ccc; flex-shrink: 0; overflow: hidden;
 }
 
 /* Body */
@@ -158,7 +158,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 
 /* Person rows */
 .timeline__person-row {
-  display: flex; border-bottom: 1px solid #e5e7eb; position: relative;
+  display: flex; border-bottom: 1px solid #ccc; position: relative;
   transition: min-height 0.18s ease;
 }
 .timeline__person-row--drop-target { background: transparent; }
@@ -169,7 +169,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   width: var(--pcol); flex-shrink: 0;
   position: sticky; left: 0; z-index: 10;
   background: #fff;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid #ccc;
   display: flex; align-items: center; padding: 8px 12px; gap: 10px;
 }
 /* Drop target: highlight only the person col, not the grid area */
@@ -616,9 +616,9 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   text-transform: uppercase; letter-spacing: 0.08em;
 }
 .left-nav__new-btn {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: var(--m3-on-surface-variant); transition: background 0.12s, color 0.12s;
+  color: var(--m3-on-surface-variant); transition: background 0.15s, color 0.15s;
 }
 .left-nav__new-btn:hover { background: var(--m3-surface-container-high); color: var(--m3-on-surface); }
 .left-nav__icon-btn {
