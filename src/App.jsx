@@ -15,6 +15,7 @@ import {
   subscribeUserPrefs, updateUserPrefs,
   DEFAULT_BOARD_PHASES,
   getUserProfile, setUserProfile, findBoardsByMemberEmail, subscribeUserProfile,
+  getPeopleOnce,
 } from './firebase'
 import { useHistory } from './hooks/useHistory'
 
@@ -382,7 +383,7 @@ function AuthenticatedApp({ user }) {
     }
   }, [user, people, activeBoardId]) // eslint-disable-line
 
-  // ── Photo/name sync — keep userProfile and all board persons in sync ─────
+  // ── Photo/name sync — keep userProfile and current board person in sync ──
   useEffect(() => {
     if (!user || !activeBoardId || !people.length) return
     const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
@@ -400,11 +401,39 @@ function AuthenticatedApp({ user }) {
     if (bestName  && bestName  !== boardName)    updatePerson(activeBoardId, myPerson.id, { name: bestName })
   }, [people, userProfile, activeBoardId]) // eslint-disable-line
 
+  // ── Retroactive sync — push photo/name to ALL boards when profile is set ──
+  const retroSyncedRef = useRef(null)
+  useEffect(() => {
+    if (!user || !userProfile?.photo) return
+    const key = `${user.uid}:${userProfile.photo}`
+    if (retroSyncedRef.current === key) return   // already ran for this photo
+    retroSyncedRef.current = key
+    ;(async () => {
+      try {
+        const allBoards = await findBoardsByMemberEmail(user.email)
+        await Promise.all(allBoards.map(async (board) => {
+          const boardPeople = await getPeopleOnce(board.id)
+          const match = boardPeople.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+          if (!match) return
+          const updates = {}
+          if (userProfile.photo && userProfile.photo !== match.photo) updates.photo = userProfile.photo
+          if (userProfile.name  && userProfile.name  !== match.name)  updates.name  = userProfile.name
+          if (Object.keys(updates).length) await updatePerson(board.id, match.id, updates)
+        }))
+      } catch (e) { console.warn('Retroactive sync failed:', e) }
+    })()
+  }, [userProfile?.photo, userProfile?.name]) // eslint-disable-line
+
   // ── Effective profile — merges userProfile + matching board person ────────
   // Lets LeftNav show the right photo/name immediately (no Firestore round-trip wait)
   const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-  // Use userProfile (global) for left nav — consistent across all boards
-  const effectiveProfile = userProfile || {}
+  // Merge: prefer userProfile fields but fall back to board person if missing
+  const effectiveProfile = {
+    ...(myBoardPerson || {}),
+    ...(userProfile   || {}),
+    photo: userProfile?.photo || myBoardPerson?.photo || null,
+    name:  userProfile?.name  || myBoardPerson?.name  || null,
+  }
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid

@@ -1,4 +1,4 @@
-import { useRef, useState, useLayoutEffect } from 'react'
+import { useRef, useState, useLayoutEffect, useEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 const BAR_H         = 46
@@ -19,7 +19,6 @@ export default function TaskBar({
   const [showMenu,     setShowMenu]     = useState(false)
   const [isNarrow,     setIsNarrow]     = useState(false)
   const [showDates,    setShowDates]    = useState(false)
-  const showDatesTimerRef = useRef(null)
 
   const barRef       = useRef(null)
   const dragRef      = useRef(null)
@@ -138,25 +137,23 @@ export default function TaskBar({
     window.addEventListener('mouseup', onUp)
   }
 
+  // ── Dismiss dates on Escape / outside click ──────────────────────────────
+  useEffect(() => {
+    if (!showDates) return
+    const onKey  = (e) => { if (e.key === 'Escape') setShowDates(false) }
+    const onDown = (e) => { if (barRef.current && !barRef.current.contains(e.target)) setShowDates(false) }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown) }
+  }, [showDates])
+
   // ── Move drag ────────────────────────────────────────────────────────────
   const handleMoveDown = (e) => {
     if (readOnly || isGhost) return
     e.preventDefault(); e.stopPropagation()
-    const startX = e.clientX, startY = e.clientY
     if (onMoveDragStart && barRef.current) {
       onMoveDragStart(task, e, barRef.current.getBoundingClientRect())
     }
-    // Detect single click (no drag) → show dates briefly
-    const onUp = (ue) => {
-      const dx = ue.clientX - startX, dy = ue.clientY - startY
-      if (Math.sqrt(dx * dx + dy * dy) < 5) {
-        clearTimeout(showDatesTimerRef.current)
-        setShowDates(true)
-        showDatesTimerRef.current = setTimeout(() => setShowDates(false), 2000)
-      }
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mouseup', onUp)
   }
 
   // ── Phase divider drag ───────────────────────────────────────────────────
@@ -232,7 +229,7 @@ export default function TaskBar({
         style={{ bottom: hasPhases ? PHASE_STRIP_H : 0 }}
         data-task-id={task.id}
         onMouseDown={handleMoveDown}
-        onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly && !isGhost && onEdit) { setShowDates(false); onEdit() } }}
+        onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly && !isGhost) setShowDates(v => !v) }}
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
         {!isNarrow && renderAvatars()}

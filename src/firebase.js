@@ -138,6 +138,10 @@ export const updatePerson = (boardId, id, data) =>
 export const deletePerson = (boardId, id) =>
   deleteDoc(doc(db, 'boards', boardId, 'people', id))
 
+export const getPeopleOnce = (boardId) =>
+  getDocs(collection(db, 'boards', boardId, 'people'))
+    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
+
 // ── Tasks (board-scoped) ─────────────────────────────────────────────────────
 export const subscribeTasks = (boardId, cb, onError) =>
   onSnapshot(

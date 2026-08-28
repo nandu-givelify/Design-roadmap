@@ -252,7 +252,7 @@ const Timeline = forwardRef(function Timeline({
         const ddx = d.cursorX - d.startCursorX
         const ddy = d.cursorY - d.startCursorY
         if (Math.sqrt(ddx * ddx + ddy * ddy) < 5) {
-          // single click — dates shown by TaskBar's own click handler
+          if (onEditTask) onEditTask(d.task)
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
           const updates = {}
@@ -844,6 +844,12 @@ const Timeline = forwardRef(function Timeline({
                       No {groupBy}s added yet. Go to Settings to add people.
                     </div>
                   )}
+
+                  {/* Fill remaining vertical space so the border extends to the bottom */}
+                  <div className="timeline__group-fill-row">
+                    <div className="timeline__person-col timeline__person-col--fill" style={{ width: PERSON_COL_W }} />
+                    <div className="timeline__grid-area timeline__grid-area--fill" />
+                  </div>
                 </>
               )}
             </div>
