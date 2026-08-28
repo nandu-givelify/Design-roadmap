@@ -498,6 +498,22 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .settings-item__btn { font-size: 12px; color: var(--m3-on-surface-variant); padding: 4px 10px; border-radius: 50px; border: 1px solid var(--m3-outline-variant); transition: all 0.15s; }
 .settings-item__btn:hover { border-color: var(--m3-primary); color: var(--m3-primary); background: var(--m3-primary-container); }
 .settings-item__btn--delete:hover { border-color: var(--m3-error); color: var(--m3-error); background: var(--m3-error-container); }
+/* Direct action list items (board rename/delete, etc.) */
+.settings-action-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 11px 4px; font-size: 13px; font-weight: 500;
+  color: var(--m3-on-surface-variant); background: none; border: none;
+  cursor: pointer; text-align: left; border-radius: 12px;
+  transition: background 0.12s, color 0.12s;
+}
+.settings-action-item:hover { background: var(--m3-surface-container); color: var(--m3-on-surface); }
+.settings-action-item--danger { color: var(--m3-error); }
+.settings-action-item--danger:hover { background: var(--m3-error-container); color: var(--m3-on-error-container); }
+
+/* Hoverable settings row (people list) */
+.settings-item--hoverable { cursor: pointer; border-radius: 12px; transition: background 0.12s; padding: 10px 8px; margin: 0 -8px; }
+.settings-item--hoverable:hover { background: var(--m3-surface-container); }
+
 .settings-inline-form { background: var(--m3-surface-container-low); border-radius: 16px; padding: 14px; margin-top: 8px; }
 .settings-inline-form input, .settings-inline-form select { width: 100%; padding: 8px 12px; border: 1px solid var(--m3-outline-variant); border-radius: 10px; font-size: 13px; margin-bottom: 8px; font-family: inherit; background: var(--m3-surface); color: var(--m3-on-surface); }
 .settings-inline-form input:focus, .settings-inline-form select:focus { border-color: var(--m3-primary); outline: none; }
@@ -541,21 +557,21 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 
 /* ── Left Navigation ─────────────────────────────────────────────────────────── */
 
-/* Dark navy skin — scoped token overrides for the entire nav tree */
+/* Slate gray skin — scoped token overrides for the entire nav tree */
 .left-nav {
-  --m3-surface-container:         #1E2433;
-  --m3-surface-container-low:     #1A1F2E;
-  --m3-surface-container-high:    #2D3347;
-  --m3-surface-container-highest: #3A4460;
-  --m3-outline-variant:           #2D3347;
-  --m3-on-surface:                #FFFFFF;
-  --m3-on-surface-variant:        rgba(255,255,255,0.55);
-  --m3-secondary-container:       #3D4A73;
-  --m3-on-secondary-container:    #FFFFFF;
-  --m3-primary:                   #A5B4FC;
-  --m3-primary-container:         rgba(165,180,252,0.15);
-  --m3-on-primary-container:      #A5B4FC;
-  --m3-surface:                   #253046;
+  --m3-surface-container:         #F1F2F4;
+  --m3-surface-container-low:     #ECEDF0;
+  --m3-surface-container-high:    #DDE0E6;
+  --m3-surface-container-highest: #D0D4DC;
+  --m3-outline-variant:           #DDE0E6;
+  --m3-on-surface:                #1A1D23;
+  --m3-on-surface-variant:        #5C6370;
+  --m3-secondary-container:       #D3D8FF;
+  --m3-on-secondary-container:    #1A1D50;
+  --m3-primary:                   #5C6BC0;
+  --m3-primary-container:         rgba(92,107,192,0.12);
+  --m3-on-primary-container:      #2D3A8C;
+  --m3-surface:                   #FFFFFF;
 }
 
 .left-nav {
@@ -683,8 +699,8 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .left-nav__user-menu-email { font-size: 11px; color: var(--m3-on-surface-variant); margin-top: 2px; }
 .left-nav__user-menu-item { display: block; width: 100%; text-align: left; padding: 11px 16px; font-size: 13px; color: var(--m3-on-surface-variant); transition: background 0.08s; }
 .left-nav__user-menu-item:hover { background: var(--m3-surface-container-high); color: var(--m3-on-surface); }
-.left-nav__user-menu-item--danger { color: #F87171; }
-.left-nav__user-menu-item--danger:hover { background: rgba(248,113,113,0.15); }
+.left-nav__user-menu-item--danger { color: var(--m3-error); }
+.left-nav__user-menu-item--danger:hover { background: var(--m3-error-container); }
 /* ── Login Page ──────────────────────────────────────────────────────────────── */
 .login-page {
   height: 100vh; display: flex; align-items: center; justify-content: center;
