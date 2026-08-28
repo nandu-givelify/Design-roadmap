@@ -736,7 +736,7 @@ const Timeline = forwardRef(function Timeline({
 
         <button className="timeline__bulk-btn timeline__bulk-btn--delete" onClick={handleBulkDelete}>Delete</button>
         <button className="timeline__bulk-close" onClick={() => { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
     )
