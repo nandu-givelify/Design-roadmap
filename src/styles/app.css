@@ -90,7 +90,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .header__nav-arrow {
   width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--m3-outline-variant);
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; color: var(--m3-on-surface-variant); transition: all 0.15s;
+  font-size: 16px; color: var(--m3-on-surface-variant); background: var(--m3-surface-container-low); transition: all 0.15s;
 }
 .header__nav-arrow:hover { border-color: var(--m3-outline); color: var(--m3-on-surface); background: var(--m3-surface-container-high); }
 .header__nav-label { font-size: 13px; font-weight: 700; min-width: 72px; text-align: center; color: var(--m3-on-surface); }
@@ -507,7 +507,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 /* Direct action list items (board rename/delete, etc.) */
 .settings-action-item {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 11px 4px; font-size: 13px; font-weight: 500;
+  width: 100%; padding: 11px 14px; font-size: 13px; font-weight: 500;
   color: var(--m3-on-surface-variant); background: none; border: none;
   cursor: pointer; text-align: left; border-radius: 12px;
   transition: background 0.12s, color 0.12s;

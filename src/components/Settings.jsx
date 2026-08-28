@@ -272,7 +272,7 @@ function RenameBoardModal({ board, onSave, onClose }) {
       <div className="modal" style={{ width: 360 }} onClick={e => e.stopPropagation()}>
         <div className="modal__header">
           <span className="modal__title">Rename board</span>
-          <button className="modal__close" onClick={onClose}>×</button>
+          <button className="modal__close" onClick={onClose}><CloseIcon /></button>
         </div>
         <div className="modal__body">
           <div className="field">
@@ -318,48 +318,16 @@ export default function Settings({
       <div className="settings-panel">
         <div className="settings-panel__header">
           <span className="settings-panel__title">Settings</span>
-          <button className="settings-panel__close" onClick={onClose}>×</button>
+          <button className="settings-panel__close" onClick={onClose}><CloseIcon /></button>
         </div>
 
         <div className="settings-panel__body">
-
-          {/* ── Board section ──────────────────────────────────────── */}
-          {isOwner && (onRenameBoard || onDeleteBoard) && (
-            <div className="settings-section">
-              <div className="settings-section__header">
-                <span className="settings-section__title">Board</span>
-              </div>
-
-              {/* Board name display row */}
-              <div className="settings-item" style={{ paddingLeft: 0, paddingRight: 0 }}>
-                <div className="settings-item__info">
-                  <div className="settings-item__name" style={{ fontSize: 14 }}>{board?.name}</div>
-                </div>
-              </div>
-
-              {/* Direct action list */}
-              {onRenameBoard && (
-                <button className="settings-action-item" onClick={() => setShowRename(true)}>
-                  <EditIcon size={24} /> Rename board
-                </button>
-              )}
-              {onDeleteBoard && (
-                <button className="settings-action-item settings-action-item--danger" onClick={() => {
-                  if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) {
-                    onDeleteBoard(board.id)
-                    onClose()
-                  }
-                }}>
-                  <DeleteIcon size={24} /> Delete board
-                </button>
-              )}
-            </div>
-          )}
 
           {/* ── People section ─────────────────────────────────────── */}
           <div className="settings-section">
             <div className="settings-section__header">
               <span className="settings-section__title">People</span>
+              {!adding && <button className="settings-section__add" onClick={() => { setAdding(true); setEditingId(null) }}>+ Add person</button>}
             </div>
 
             {/* People list */}
@@ -411,20 +379,13 @@ export default function Settings({
               />
             )}
 
-            {!adding && (
-              <div style={{ marginTop: 12 }}>
-                <button className="btn-primary" style={{ fontSize: 13, padding: '8px 20px' }}
-                  onClick={() => { setAdding(true); setEditingId(null) }}>
-                  + Add person
-                </button>
-              </div>
-            )}
           </div>
 
           {/* ── Phases section ─────────────────────────────────────── */}
           <div className="settings-section">
             <div className="settings-section__header">
               <span className="settings-section__title">Phases</span>
+              {!addingPhase && isOwner && <button className="settings-section__add" onClick={() => setAddingPhase(true)}>+ Add phase</button>}
             </div>
 
             {(boardPhases || []).map((phase) => (
@@ -453,15 +414,32 @@ export default function Settings({
               />
             )}
 
-            {!addingPhase && isOwner && (
-              <div style={{ marginTop: 12 }}>
-                <button className="btn-primary" style={{ fontSize: 13, padding: '8px 20px' }}
-                  onClick={() => setAddingPhase(true)}>
-                  + Add phase
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* ── Board section (bottom) ─────────────────────────────── */}
+          {isOwner && (onRenameBoard || onDeleteBoard) && (
+            <div className="settings-section">
+              <div className="settings-section__header">
+                <span className="settings-section__title">Board</span>
+              </div>
+
+              {onRenameBoard && (
+                <button className="settings-action-item" onClick={() => setShowRename(true)}>
+                  <EditIcon size={24} /> Rename board
+                </button>
+              )}
+              {onDeleteBoard && (
+                <button className="settings-action-item settings-action-item--danger" onClick={() => {
+                  if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) {
+                    onDeleteBoard(board.id)
+                    onClose()
+                  }
+                }}>
+                  <DeleteIcon size={24} /> Delete board
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {confirmDelete && (
@@ -502,6 +480,12 @@ export const EditIcon = ({ size = 24 }) => (
 export const DeleteIcon = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+  </svg>
+)
+
+const CloseIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
   </svg>
 )
 

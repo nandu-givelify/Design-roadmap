@@ -408,11 +408,8 @@ function AuthenticatedApp({ user }) {
   // ── Effective profile — merges userProfile + matching board person ────────
   // Lets LeftNav show the right photo/name immediately (no Firestore round-trip wait)
   const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-  const effectiveProfile = {
-    ...userProfile,
-    photo: userProfile?.photo || myBoardPerson?.photo || null,
-    name:  userProfile?.name  || myBoardPerson?.name  || null,
-  }
+  // Use userProfile (global) for left nav — consistent across all boards
+  const effectiveProfile = userProfile || {}
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid

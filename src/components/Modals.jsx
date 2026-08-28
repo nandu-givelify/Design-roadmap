@@ -1,6 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
 
+const CloseIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+  </svg>
+)
+const ArrowDropDownIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ verticalAlign: 'middle', opacity: 0.7 }}>
+    <path d="M7 10l5 5 5-5z"/>
+  </svg>
+)
+
 // ── Helper functions ──────────────────────────────────────────────────────────
 function getTaskDays(startDate, endDate) {
   if (!startDate || !endDate) return 28
@@ -46,7 +57,7 @@ function ModalShell({ title, onClose, children }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <span className="modal__title">{title}</span>
-          <button className="modal__close" onClick={onClose}>×</button>
+          <button className="modal__close" onClick={onClose}><CloseIcon /></button>
         </div>
         <div className="modal__body">{children}</div>
       </div>
@@ -143,11 +154,11 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
           </div>
           <span className="combobox__selected-name">{selected.name}</span>
           {selected.role && <span style={{ fontSize: 11, color: '#9ca3af' }}>{selected.role}</span>}
-          <span className="combobox__selected-change">change ▾</span>
+          <span className="combobox__selected-change">change <ArrowDropDownIcon /></span>
           <button
             type="button" className="combobox__selected-clear"
             onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false) }}
-          >×</button>
+          ><CloseIcon /></button>
         </div>
       ) : (
         <div className="combobox__input-wrap">

@@ -735,7 +735,9 @@ const Timeline = forwardRef(function Timeline({
         </div>
 
         <button className="timeline__bulk-btn timeline__bulk-btn--delete" onClick={handleBulkDelete}>Delete</button>
-        <button className="timeline__bulk-close" onClick={() => { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }}>×</button>
+        <button className="timeline__bulk-close" onClick={() => { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       </div>
     )
   }
@@ -813,7 +815,6 @@ const Timeline = forwardRef(function Timeline({
                   {sortedFlatTasks.length === 0 && (
                     <div
                       className="timeline__empty-drop"
-                      style={{ minHeight: '100%' }}
                       onDoubleClick={(e) => handleGridDoubleClick(null, e)}
                     >
                       Double-click to add a task
