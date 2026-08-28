@@ -7,6 +7,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Font tester: add ?font=Poppins to the URL to try any Google Font -->
+    <script>
+      (function() {
+        const font = new URLSearchParams(location.search).get('font')
+        if (!font) return
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@300;400;500;600;700&display=swap`
+        document.head.appendChild(link)
+        const style = document.createElement('style')
+        style.textContent = `body { font-family: '${font}', sans-serif !important; }`
+        document.head.appendChild(style)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
