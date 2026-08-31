@@ -356,19 +356,24 @@ function AuthenticatedApp({ user }) {
     } catch { return [] }
   }, [people, activeBoardId]) // eslint-disable-line
 
-  // ── Profile update handler — syncs to matching board person by email ──────
-  const handleUpdateProfile = useCallback((data) => {
+  // ── Profile update handler — saves to userProfile + pushes to ALL boards ──
+  const handleUpdateProfile = useCallback(async (data) => {
     if (!user) return
-    setUserProfile(user.uid, data)
-    // Mirror name/photo to the user's board person record (matched by email)
-    const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-    if (myPerson && activeBoardId) {
-      const patch = {}
-      if (data.name  !== undefined) patch.name  = data.name
-      if (data.photo !== undefined) patch.photo = data.photo
-      if (Object.keys(patch).length) updatePerson(activeBoardId, myPerson.id, patch)
-    }
-  }, [user, people, activeBoardId]) // eslint-disable-line
+    await setUserProfile(user.uid, data)
+    // Push photo/name change to every board the user is a member of
+    try {
+      const allBoards = await findBoardsByMemberEmail(user.email)
+      await Promise.all(allBoards.map(async (board) => {
+        const boardPeople = await getPeopleOnce(board.id)
+        const match = boardPeople.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+        if (!match) return
+        const patch = {}
+        if (data.name  !== undefined) patch.name  = data.name
+        if (data.photo !== undefined) patch.photo = data.photo
+        if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
+      }))
+    } catch (e) { console.warn('Profile push failed:', e) }
+  }, [user]) // eslint-disable-line
 
   // ── Board person → profile sync handler ──────────────────────────────────
   const handleUpdatePerson = useCallback((id, data) => {
@@ -383,79 +388,67 @@ function AuthenticatedApp({ user }) {
     }
   }, [user, people, activeBoardId]) // eslint-disable-line
 
-  // ── Photo/name sync — keep userProfile and current board person in sync ──
-  useEffect(() => {
-    if (!user || !activeBoardId || !people.length) return
-    const myPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-    if (!myPerson) return
-    const profilePhoto = userProfile?.photo || null
-    const profileName  = userProfile?.name  || null
-    const boardPhoto   = myPerson.photo || null
-    const boardName    = myPerson.name  || null
-    const bestPhoto = profilePhoto || boardPhoto
-    const bestName  = profileName  || boardName
-    // Only write if there's an actual mismatch (prevents loops)
-    if (bestPhoto && bestPhoto !== profilePhoto) setUserProfile(user.uid, { photo: bestPhoto, name: bestName || profileName })
-    if (bestName  && bestName  !== profileName)  setUserProfile(user.uid, { name: bestName, photo: bestPhoto || profilePhoto })
-    if (bestPhoto && bestPhoto !== boardPhoto)   updatePerson(activeBoardId, myPerson.id, { photo: bestPhoto })
-    if (bestName  && bestName  !== boardName)    updatePerson(activeBoardId, myPerson.id, { name: bestName })
-  }, [people, userProfile, activeBoardId]) // eslint-disable-line
+  // (per-board reconciliation removed — userProfile is now the single source of truth;
+  //  the push sync effect below handles propagation to all boards)
 
-  // ── Retroactive sync — bidirectional: pull from boards if userProfile missing photo,
-  //    then push the best photo/name to ALL boards ──────────────────────────────────
-  const retroSyncedRef = useRef(null)
+  // ── One-time migration: if userProfile has no photo, pull one from any board ──
+  // This recovers from the old bug that wiped photo on each login.
+  // Runs once per session; never overwrites an explicitly cleared photo.
+  const migrationRanRef = useRef(false)
   useEffect(() => {
-    if (!user || userProfile === undefined) return  // still loading
-    // Use a stable key that includes whether we have a photo, so we re-run if it changes
-    const key = `${user.uid}:${userProfile?.photo || 'none'}:${userProfile?.name || 'none'}`
-    if (retroSyncedRef.current === key) return
-    retroSyncedRef.current = key
+    if (!user || migrationRanRef.current) return
+    if (userProfile === null) return  // still loading (null = not yet subscribed)
+    if (userProfile?.photo) { migrationRanRef.current = true; return } // already has photo
+    migrationRanRef.current = true
     ;(async () => {
       try {
         const allBoards = await findBoardsByMemberEmail(user.email)
-        // First pass: find best photo/name across all boards
-        let bestPhoto = userProfile?.photo || null
-        let bestName  = userProfile?.name  || null
-        const boardPeopleList = await Promise.all(
-          allBoards.map(async (board) => {
-            const ppl = await getPeopleOnce(board.id)
-            return { board, match: ppl.find(p => p.email?.toLowerCase() === user.email?.toLowerCase()) }
-          })
-        )
-        for (const { match } of boardPeopleList) {
-          if (!bestPhoto && match?.photo) bestPhoto = match.photo
-          if (!bestName  && match?.name)  bestName  = match.name
+        for (const board of allBoards) {
+          const ppl   = await getPeopleOnce(board.id)
+          const match = ppl.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+          if (match?.photo) {
+            await setUserProfile(user.uid, {
+              photo: match.photo,
+              ...(match.name && !userProfile?.name ? { name: match.name } : {}),
+            })
+            break  // found one — stop
+          }
         }
-        // Save best values to userProfile if we found something better
-        if ((bestPhoto && bestPhoto !== userProfile?.photo) ||
-            (bestName  && bestName  !== userProfile?.name)) {
-          await setUserProfile(user.uid, {
-            ...(bestPhoto ? { photo: bestPhoto } : {}),
-            ...(bestName  ? { name:  bestName  } : {}),
-          })
-        }
-        // Second pass: push best photo/name to every board person that's missing it
-        await Promise.all(boardPeopleList.map(async ({ board, match }) => {
+      } catch (e) { console.warn('Profile migration failed:', e) }
+    })()
+  }, [user, userProfile]) // eslint-disable-line
+
+  // ── Push sync — whenever userProfile photo/name changes, update ALL boards ──
+  // This is the source-of-truth push (not bidirectional — never pulls from boards).
+  const pushSyncedRef = useRef(null)
+  useEffect(() => {
+    if (!user || !userProfile) return
+    const key = `${user.uid}:${userProfile.photo ?? 'null'}:${userProfile.name ?? 'null'}`
+    if (pushSyncedRef.current === key) return
+    pushSyncedRef.current = key
+    ;(async () => {
+      try {
+        const allBoards = await findBoardsByMemberEmail(user.email)
+        await Promise.all(allBoards.map(async (board) => {
+          const ppl   = await getPeopleOnce(board.id)
+          const match = ppl.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
           if (!match) return
           const updates = {}
-          if (bestPhoto && bestPhoto !== match.photo) updates.photo = bestPhoto
-          if (bestName  && bestName  !== match.name)  updates.name  = bestName
+          // Push the current value (including null for removals)
+          if (userProfile.photo !== undefined && userProfile.photo !== match.photo) updates.photo = userProfile.photo ?? null
+          if (userProfile.name  !== undefined && userProfile.name  !== match.name)  updates.name  = userProfile.name  ?? null
           if (Object.keys(updates).length) await updatePerson(board.id, match.id, updates)
         }))
-      } catch (e) { console.warn('Retroactive sync failed:', e) }
+      } catch (e) { console.warn('Push sync failed:', e) }
     })()
   }, [user, userProfile?.photo, userProfile?.name]) // eslint-disable-line
 
-  // ── Effective profile — merges userProfile + matching board person ────────
-  // Lets LeftNav show the right photo/name immediately (no Firestore round-trip wait)
+  // ── Effective profile — userProfile is the source of truth ──────────────
+  // Fall back to board person only while userProfile is still loading (null)
   const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-  // Merge: prefer userProfile fields but fall back to board person if missing
-  const effectiveProfile = {
-    ...(myBoardPerson || {}),
-    ...(userProfile   || {}),
-    photo: userProfile?.photo || myBoardPerson?.photo || null,
-    name:  userProfile?.name  || myBoardPerson?.name  || null,
-  }
+  const effectiveProfile = userProfile !== null
+    ? { ...(userProfile || {}), photo: userProfile?.photo ?? null, name: userProfile?.name ?? null }
+    : { ...(myBoardPerson || {}), photo: myBoardPerson?.photo ?? null, name: myBoardPerson?.name ?? null }
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
