@@ -38,7 +38,6 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole, onDelete }) 
       email: email.trim() || null,
       photo: photo || null,
       role:  roleToUse || 'Designer',
-      color: getAvatarColor(name.trim()),
     })
     setSaving(false)
     onDone()
@@ -122,7 +121,6 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
       email: email.trim() || null,
       photo: photo || null,
       role:  roleToUse || 'Designer',
-      color: getAvatarColor(query.trim()),
     })
     setSaving(false)
     onDone()
@@ -161,7 +159,7 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
               >
                 {p.photo
                   ? <img src={p.photo} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} alt="" />
-                  : <div style={{ width: 28, height: 28, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                  : <div style={{ width: 28, height: 28, borderRadius: '50%', background: getAvatarColor(p.email || p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                       {p.name?.charAt(0).toUpperCase()}
                     </div>
                 }
@@ -339,7 +337,7 @@ export default function Settings({
                 >
                   <div
                     className="settings-item__avatar"
-                    style={{ background: person.color || getAvatarColor(person.name) }}
+                    style={{ background: getAvatarColor(person.email || person.name) }}
                   >
                     {person.photo
                       ? <img src={person.photo} alt="" />

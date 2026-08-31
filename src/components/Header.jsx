@@ -164,7 +164,7 @@ export default function Header({
                   <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
                   <div
                     className="filter-row__avatar"
-                    style={{ background: p.color || getAvatarColor(p.name) }}
+                    style={{ background: getAvatarColor(p.email || p.name) }}
                   >
                     {p.photo
                       ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

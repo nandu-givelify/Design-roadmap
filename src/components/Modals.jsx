@@ -138,7 +138,6 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
       email: newEmail.trim() || null,
       photo: newPhoto,
       role:  roleToUse || 'Designer',
-      color: getAvatarColor(newName.trim()),
     }
     const id = await onCreatePerson(data)
     onChange(id)
@@ -150,7 +149,7 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
     <div className="combobox" ref={wrapRef}>
       {selected ? (
         <div className="combobox__selected-badge" onClick={() => { setOpen(true); setQuery('') }}>
-          <div className="combobox__option-avatar" style={{ background: selected.color || getAvatarColor(selected.name) }}>
+          <div className="combobox__option-avatar" style={{ background: getAvatarColor(selected.email || selected.name) }}>
             {selected.photo ? <img src={selected.photo} alt="" /> : selected.name?.charAt(0)}
           </div>
           <span className="combobox__selected-name">{selected.name}</span>
@@ -177,7 +176,7 @@ function PersonCombobox({ value, onChange, options, placeholder, defaultRole, on
         <div className="combobox__dropdown">
           {filtered.map((opt) => (
             <div key={opt.id} className="combobox__option" onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}>
-              <div className="combobox__option-avatar" style={{ background: opt.color || getAvatarColor(opt.name) }}>
+              <div className="combobox__option-avatar" style={{ background: getAvatarColor(opt.email || opt.name) }}>
                 {opt.photo ? <img src={opt.photo} alt="" /> : opt.name?.charAt(0)}
               </div>
               <div>
