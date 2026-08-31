@@ -89,7 +89,7 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole, onDelete }) 
           <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Profile photo</Typography>
           <PhotoPicker value={photo} onChange={setPhoto} />
         </Box>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ width: '100%' }}>
+        <Stack direction="row" sx={{ width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button size="small" color="error" onClick={() => { onDone(); onDelete?.() }}>Delete</Button>
           <Stack direction="row" spacing={1}>
             <Button size="small" onClick={onDone}>Cancel</Button>
@@ -138,7 +138,7 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
 
   return (
     <Box sx={{ p: 2, background: '#f9fafb', borderRadius: 2, mt: 0.5, mb: 1, position: 'relative' }}>
-      <Stack spacing={1.5}>
+      <Stack spacing={1.5} sx={{ width: '100%' }}>
         <Box sx={{ position: 'relative' }}>
           <TextField
             label="Name or email" size="small" fullWidth
@@ -156,16 +156,13 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
             }}>
               {(query.length === 0 ? recentPeople : filtered).map(p => (
                 <Box key={p.email || p.name} onMouseDown={() => handleSelect(p)}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px', cursor: 'pointer', '&:hover': { background: '#f3f4f6' } }}>
-                  {p.photo
-                    ? <img src={p.photo} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} alt="" />
-                    : <Box sx={{ width: 28, height: 28, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                        {p.name?.charAt(0).toUpperCase()}
-                      </Box>
-                  }
-                  <Box>
-                    <Typography variant="body2" fontWeight={500}>{p.name}</Typography>
-                    {p.email && <Typography variant="caption" color="text.secondary">{p.email}</Typography>}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px', cursor: 'pointer', '&:hover': { background: '#f3f4f6' } }}>
+                  <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0, overflow: 'hidden' }}>
+                    {p.photo ? <img src={p.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : p.name?.charAt(0).toUpperCase()}
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography component="div" variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{p.name}</Typography>
+                    {p.email && <Typography component="div" variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{p.email}</Typography>}
                   </Box>
                 </Box>
               ))}
@@ -213,7 +210,7 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
           </FormControl>
         )}
 
-        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ width: '100%' }}>
+        <Stack direction="row" spacing={1} sx={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button size="small" onClick={onDone}>Cancel</Button>
           <Button size="small" variant="contained" onClick={handleSave} disabled={saving || !query.trim()}>
             {saving ? 'Saving…' : selected ? 'Add to board' : 'Save'}
@@ -256,7 +253,7 @@ function AddPhaseForm({ existingPhases, onSave, onDone }) {
             }} />
           ))}
         </Box>
-        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ width: '100%' }}>
+        <Stack direction="row" spacing={1} sx={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button size="small" onClick={onDone}>Cancel</Button>
           <Button size="small" variant="contained" onClick={handleSave} disabled={!name.trim()}>Add</Button>
         </Stack>
@@ -343,22 +340,22 @@ export default function Settings({
                 <Box
                   onClick={() => setEditingId(editingId === person.id ? null : person.id)}
                   sx={{
-                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                    display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
                     borderRadius: 2, cursor: 'pointer', transition: 'background 0.12s',
                     '&:hover': { background: '#f3f4f6' },
                   }}
                 >
                   <Box sx={{
-                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                     background: getAvatarColor(person.name), overflow: 'hidden',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, color: '#fff',
+                    fontSize: 12, fontWeight: 700, color: '#fff',
                   }}>
                     {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={500} noWrap>{person.name}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>
+                    <Typography component="div" variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
+                    <Typography component="div" variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
                       {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
                     </Typography>
                   </Box>
@@ -459,7 +456,7 @@ export default function Settings({
             <Typography variant="body2" sx={{ mb: 1.5 }}>
               Delete <strong>{confirmDelete.name}</strong>? This cannot be undone.
             </Typography>
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
               <Button size="small" onClick={() => setConfirmDelete(null)}>Cancel</Button>
               <Button size="small" variant="contained" color="error" onClick={handleDeleteConfirmed}>Delete</Button>
             </Stack>

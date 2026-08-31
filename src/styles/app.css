@@ -31,7 +31,7 @@
 /* ── Reset ──────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
-body { font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--m3-surface); color: var(--m3-on-surface); }
+body { font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--m3-surface); color: var(--m3-on-surface); line-height: normal; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 input, select { font-family: inherit; }
 input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset: 1px; }

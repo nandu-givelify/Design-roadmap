@@ -165,33 +165,36 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
         placeholder={!selected ? placeholder : undefined}
         onChange={(e) => { setInputValue(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        InputProps={{
-          startAdornment: selected ? (
-            <InputAdornment position="start" sx={{ mr: 0.5 }}>
-              <Box sx={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                background: getAvatarColor(selected.name),
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 700, color: '#fff', overflow: 'hidden',
-              }}>
-                {selected.photo
-                  ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : selected.name?.charAt(0)
-                }
-              </Box>
-            </InputAdornment>
-          ) : null,
-          endAdornment: selected ? (
-            <InputAdornment position="end">
-              <IconButton
-                size="small"
-                sx={{ width: 22, height: 22, '& .MuiSvgIcon-root': { fontSize: '14px !important' } }}
-                onMouseDown={e => { e.preventDefault(); onChange(null); setInputValue(''); setOpen(false) }}
-              >
-                <CloseIcon />
-              </IconButton>
-            </InputAdornment>
-          ) : null,
+        slotProps={{
+          input: {
+            startAdornment: selected && (
+              <InputAdornment position="start">
+                <Box sx={{
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  background: getAvatarColor(selected.name),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: '#fff', overflow: 'hidden',
+                  mr: 0.5,
+                }}>
+                  {selected.photo
+                    ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : selected.name?.charAt(0)
+                  }
+                </Box>
+              </InputAdornment>
+            ),
+            endAdornment: selected && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  sx={{ width: 22, height: 22, '& .MuiSvgIcon-root': { fontSize: '14px !important' } }}
+                  onMouseDown={e => { e.preventDefault(); onChange(null); setInputValue(''); setOpen(false) }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }
         }}
       />
 
@@ -209,16 +212,16 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
               cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
             }} onMouseDown={e => { e.preventDefault(); onChange(opt.id); setInputValue(opt.name || ''); setOpen(false) }}>
               <Box sx={{
-                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                 background: getAvatarColor(opt.name),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden',
               }}>
                 {opt.photo ? <img src={opt.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : opt.name?.charAt(0)}
               </Box>
-              <Box>
-                <Typography variant="body2" fontWeight={500}>{opt.name}</Typography>
-                {opt.role && <Typography variant="caption" color="text.secondary">{opt.role}</Typography>}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                <Typography component="div" variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{opt.name}</Typography>
+                {opt.role && <Typography component="div" variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{opt.role}</Typography>}
               </Box>
             </Box>
           ))}
