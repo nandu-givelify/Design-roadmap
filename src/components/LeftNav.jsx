@@ -244,7 +244,13 @@ export default function LeftNav({
             <ListItemIcon><PersonOutlinedIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Edit profile" primaryTypographyProps={{ variant: 'body2' }} />
           </MenuItem>
-          <MenuItem onClick={() => { signOutUser(); setMenuAnchor(null) }} sx={{ color: 'error.main' }}>
+          <MenuItem onClick={() => {
+            // Clear board URL so logout lands on the clean welcome screen
+            const url = new URL(window.location)
+            url.searchParams.delete('board')
+            window.history.replaceState({}, '', url)
+            signOutUser(); setMenuAnchor(null)
+          }} sx={{ color: 'error.main' }}>
             <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
             <ListItemText primary="Sign out" primaryTypographyProps={{ variant: 'body2', color: 'error' }} />
           </MenuItem>

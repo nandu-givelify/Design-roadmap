@@ -1041,11 +1041,87 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 }
 .header__nav-label--clickable:hover { background: var(--m3-surface-container-high); }
 
+/* ── Header controls wrapper (today + nav + filter) ─────────────────────── */
+.header__controls { display: flex; align-items: center; gap: 8px; }
+
+/* ── Hamburger and settings icon — always borderless ────────────────────── */
+.header .header__hamburger.MuiIconButton-root,
+.header__hamburger {
+  border: none !important;
+  background: transparent !important;
+}
+.header .header__board-dots.MuiIconButton-root,
+.header__board-dots {
+  border: none !important;
+  background: transparent !important;
+}
+.header__hamburger:hover,
+.header .header__hamburger.MuiIconButton-root:hover { background: var(--m3-surface-container-high) !important; }
+.header__board-dots:hover,
+.header .header__board-dots.MuiIconButton-root:hover { background: var(--m3-surface-container-high) !important; color: var(--m3-on-surface) !important; }
+
 /* ── Mobile responsive header ────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .header { flex-wrap: wrap; height: auto; padding: 8px 12px; row-gap: 6px; }
-  .header__spacer { width: 100%; height: 0; flex: none; }
+  /* Two-row layout */
+  .header {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 6px 8px;
+    row-gap: 0;
+    gap: 4px;
+  }
+
+  /* Row 1: hamburger (order 1) | board-area fills (order 2) | settings (order 3) */
+  .header__hamburger { order: 1; }
+  .header__board-area { order: 2; flex: 1; min-width: 0; }
+  .header__board-dots { order: 3; }
   .header__board-title { font-size: 14px; }
+
+  /* Controls break to their own row (order 4) */
+  .header__controls {
+    order: 4;
+    width: 100%;
+    justify-content: space-between;
+    padding: 2px 0;
+    gap: 0;
+  }
+
+  /* Center the nav section within controls */
+  .header__nav { flex: 1; justify-content: center; }
+
+  /* Filter popover — align to right edge on mobile */
+  .header__filter-popover { right: -8px; min-width: 200px; }
+
+  /* Readonly badge stays at end */
+  .header__readonly-badge { order: 5; }
+
+  /* Modal: bottom sheet on mobile, always centered */
+  .modal-overlay { align-items: center; padding: 16px; }
+  .modal {
+    width: 100%;
+    max-width: calc(100vw - 32px);
+    max-height: 85dvh;
+    border-radius: 20px;
+  }
+
+  /* Settings panel full-width on mobile */
+  .settings-panel { width: 100% !important; max-width: 100vw !important; border-radius: 24px 24px 0 0 !important; top: auto !important; }
+
+  /* Timeline person column — avatar only when space is tight */
+  .timeline__person-col {
+    width: 52px !important;
+    padding: 8px 6px !important;
+    gap: 0 !important;
+  }
+  .timeline__header-person-col {
+    width: 52px !important;
+    padding: 0 6px 6px !important;
+  }
+  .timeline__person-info { display: none !important; }
+  .timeline__avatar { width: 30px !important; height: 30px !important; font-size: 12px !important; }
+
+  /* Nav overlay covers full screen on mobile */
+  .left-nav--overlay { width: 240px; }
 }
 
 /* ── m3-field removed — replaced by MUI TextField ───────────────────────────── */

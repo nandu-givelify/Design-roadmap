@@ -19,7 +19,7 @@ export default function LoginPage() {
     setStep('password')
   }
 
-  // ── Step 2: try sign-in; if no account exists, auto-switch to register ───
+  // ── Step 2: try sign-in ──────────────────────────────────────────────────
   const handleSignIn = async (e) => {
     e.preventDefault()
     if (!password) return
@@ -29,12 +29,9 @@ export default function LoginPage() {
       // success → auth state change handles the rest
     } catch (err) {
       const code = err.code
-      // These codes mean "no account with this email"
-      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
-        // Check if it might be wrong password vs no account
-        // We'll show a prompt and let user confirm they want to create
-        setStep('register')
-        setError('')
+      if (code === 'auth/user-not-found') {
+        // Older Firebase SDK: explicit "no account" signal → go to register
+        setStep('register'); setError('')
       } else {
         setError(friendlyError(code))
       }
@@ -101,7 +98,7 @@ export default function LoginPage() {
           {step === 'reset-sent'&& 'Check your email'}
         </h1>
         <p className="login-card__sub">
-          {step === 'email'     && 'Sign in or join to start your roadmap'}
+          {step === 'email'     && 'Sign in with your email, or create a new account'}
           {step === 'password'  && `Signing in as ${email}`}
           {step === 'register'  && `No account found for ${email}`}
           {step === 'reset-sent'&& ''}
@@ -131,7 +128,15 @@ export default function LoginPage() {
             />
             {error && <div className="login-error">{error}</div>}
             <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
-              Continue
+              Sign in
+            </button>
+            <button
+              type="button"
+              className="login-forgot"
+              disabled={!email.trim()}
+              onClick={() => { if (email.trim()) { clearError(); setStep('register') } }}
+            >
+              New to RoadMap? Create an account
             </button>
           </form>
         )}
@@ -157,6 +162,10 @@ export default function LoginPage() {
             </button>
             <button type="button" className="login-forgot" onClick={handleForgotPassword} disabled={loading}>
               Forgot password?
+            </button>
+            <button type="button" className="login-forgot"
+              onClick={() => { setStep('register'); setPassword(''); clearError() }}>
+              No account yet? Create one
             </button>
           </form>
         )}

@@ -249,9 +249,10 @@ function AuthenticatedApp({ user }) {
     })
   }
 
-  // Nav state
-  const [navOpen,   setNavOpen]   = useState(true)
-  const [navDocked, setNavDocked] = useState(true)
+  // Nav state — collapsed by default on mobile
+  const isMobileInit = typeof window !== 'undefined' && window.innerWidth <= 640
+  const [navOpen,   setNavOpen]   = useState(!isMobileInit)
+  const [navDocked, setNavDocked] = useState(!isMobileInit)
 
   // Timeline controls
   const now = new Date()
@@ -307,12 +308,13 @@ function AuthenticatedApp({ user }) {
     try { setUserProfile(user.uid, loginData) } catch {}
     return subscribeUserProfile(user.uid, (profile) => {
       if (!profile) return
-      // Merge Firestore data — don't overwrite locally-cached photo/name if Firestore
-      // doesn't have them (e.g. if the userProfiles write was blocked by rules)
+      // Merge Firestore data — only use Firestore photo if it's a real value (not null/empty)
+      // Firestore can have photo:null if the user's profile panel saved with no photo selected,
+      // which would wipe the locally-cached photo on every login.
       setUserProfile_(prev => ({
         ...(prev || {}),
         ...profile,
-        photo: 'photo' in profile ? profile.photo : (prev?.photo ?? null),
+        photo: ('photo' in profile && profile.photo) ? profile.photo : (prev?.photo ?? null),
         name:  'name'  in profile ? profile.name  : (prev?.name  ?? null),
       }))
     })
@@ -441,7 +443,13 @@ function AuthenticatedApp({ user }) {
     if (!user) return
     // Compress photo before writing to Firestore (1MB document limit)
     const saveData = { ...data }
-    if (saveData.photo) saveData.photo = await compressImage(saveData.photo)
+    if (saveData.photo) {
+      saveData.photo = await compressImage(saveData.photo)
+    } else if ('photo' in saveData) {
+      // Don't write null/empty photo — ProfilePanel sends photo:null when no photo
+      // was selected, which would wipe the existing photo from all storage layers.
+      delete saveData.photo
+    }
     // Update local state immediately — persists across board switches even if Firestore rules block writes
     setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...saveData }))
     // Best-effort Firestore write
@@ -493,7 +501,12 @@ function AuthenticatedApp({ user }) {
 
     if (isOwnProfile) {
       // Compress photo before writing to Firestore (1MB document limit)
-      if (patch.photo) patch.photo = await compressImage(patch.photo)
+      if (patch.photo) {
+        patch.photo = await compressImage(patch.photo)
+      } else if ('photo' in patch) {
+        // Don't wipe an existing photo with null — only save real photos
+        delete patch.photo
+      }
       // Update local state immediately — persists across board switches even if Firestore rules block writes
       setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...patch }))
       // Best-effort Firestore write to userProfile collection

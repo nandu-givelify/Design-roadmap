@@ -69,6 +69,7 @@ export default function Header({
 
   return (
     <header className="header">
+      {/* ── Row 1: hamburger + board title + settings ── */}
       {navCollapsed && (
         <Tooltip title="Open navigation" placement="bottom">
           <IconButton className="header__hamburger" onClick={onOpenNav} size="small">
@@ -77,13 +78,12 @@ export default function Header({
         </Tooltip>
       )}
 
-      {/* Board title */}
-      <Box className="header__board-area">
+      {/* Board title — fills available space */}
+      <Box className="header__board-area" sx={{ flex: 1, minWidth: 0 }}>
         {renaming ? (
-          /* Auto-width: invisible ghost span sizes the container; input fills it */
           <Box component="span" sx={{ position: 'relative', display: 'inline-block' }}>
             <span className="header__board-title" style={{ visibility: 'hidden', display: 'inline-block', minWidth: 80 }} aria-hidden>
-              {renameVal || ' '}
+              {renameVal || ' '}
             </span>
             <input
               className="header__board-rename-input"
@@ -103,136 +103,138 @@ export default function Header({
             style={{ cursor: readOnly ? 'default' : 'text' }}
           >{boardName}</span>
         )}
-
-        {!readOnly && !renaming && onSettings && (
-          <Tooltip title="Board settings" placement="bottom">
-            <IconButton className="header__board-dots" onClick={onSettings} size="small">
-              <SettingsOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
       </Box>
 
-      <Box className="header__spacer" />
+      {/* Settings icon — at top level so it sits at end of row 1 on mobile */}
+      {!readOnly && !renaming && onSettings && (
+        <Tooltip title="Board settings" placement="bottom">
+          <IconButton className="header__board-dots" onClick={onSettings} size="small">
+            <SettingsOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
 
-      {/* Today */}
-      <Tooltip title="Jump to today" placement="bottom">
-        <IconButton className="header__today-btn" onClick={onJumpToday} size="small">
-          <TodayIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+      {/* ── Row 2: today + period nav (centered) + filter ── */}
+      <Box className="header__controls">
+        {/* Today */}
+        <Tooltip title="Jump to today" placement="bottom">
+          <IconButton className="header__today-btn" onClick={onJumpToday} size="small">
+            <TodayIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
 
-      {/* Period navigation */}
-      <Box className="header__nav">
-        <IconButton className="header__nav-arrow" onClick={goPrev} size="small">
-          <ChevronLeftIcon fontSize="small" />
-        </IconButton>
+        {/* Period navigation */}
+        <Box className="header__nav">
+          <IconButton className="header__nav-arrow" onClick={goPrev} size="small">
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
 
+          <Box sx={{ position: 'relative' }}>
+            <Button
+              className="header__nav-label header__nav-label--clickable"
+              onClick={() => setShowViewPicker(v => !v)}
+              endIcon={<KeyboardArrowDownIcon />}
+              size="small"
+              sx={{ fontWeight: 600, color: 'text.primary', textTransform: 'none', px: 1 }}
+            >
+              {navLabel}
+            </Button>
+            {showViewPicker && (
+              <>
+                <Box sx={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowViewPicker(false)} />
+                <Box className="header__dropdown" sx={{ minWidth: 120, left: '50%', right: 'auto', transform: 'translateX(-50%)' }}>
+                  {['quarter', 'year'].map(m => (
+                    <button
+                      key={m}
+                      className={`header__dropdown-item${viewMode === m ? ' header__dropdown-item--active' : ''}`}
+                      onClick={() => { setViewMode(m); setShowViewPicker(false) }}
+                    >
+                      {m === 'quarter' ? 'Quarter' : 'Year'}
+                    </button>
+                  ))}
+                </Box>
+              </>
+            )}
+          </Box>
+
+          <IconButton className="header__nav-arrow" onClick={goNext} size="small">
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        {/* Filter */}
         <Box sx={{ position: 'relative' }}>
-          <Button
-            className="header__nav-label header__nav-label--clickable"
-            onClick={() => setShowViewPicker(v => !v)}
-            endIcon={<KeyboardArrowDownIcon />}
-            size="small"
-            sx={{ fontWeight: 600, color: 'text.primary', textTransform: 'none', px: 1 }}
-          >
-            {navLabel}
-          </Button>
-          {showViewPicker && (
+          <Tooltip title="Filter" placement="bottom">
+            <IconButton
+              className={`header__filter-btn${activeFilters > 0 ? ' header__filter-btn--active' : ''}`}
+              onClick={() => setShowFilters(v => !v)}
+              size="small"
+            >
+              <FilterListIcon fontSize="small" />
+              {activeFilters > 0 && <span className="header__filter-count">{activeFilters}</span>}
+            </IconButton>
+          </Tooltip>
+
+          {showFilters && (
             <>
-              <Box sx={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowViewPicker(false)} />
-              <Box className="header__dropdown" sx={{ minWidth: 120, left: '50%', right: 'auto', transform: 'translateX(-50%)' }}>
-                {['quarter', 'year'].map(m => (
-                  <button
-                    key={m}
-                    className={`header__dropdown-item${viewMode === m ? ' header__dropdown-item--active' : ''}`}
-                    onClick={() => { setViewMode(m); setShowViewPicker(false) }}
-                  >
-                    {m === 'quarter' ? 'Quarter' : 'Year'}
-                  </button>
+              <Box sx={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowFilters(false)} />
+              <Box className="header__filter-popover">
+                {/* Group by */}
+                <Typography variant="subtitle2" className="header__filter-section-title">Group by</Typography>
+                {groupOptions.map(opt => (
+                  <label key={opt} className="filter-row" style={{ cursor: 'pointer' }}>
+                    <input type="radio" name="groupby" checked={groupBy === opt} onChange={() => setGroupBy(opt)} style={{ accentColor: '#111827' }} />
+                    <span className="filter-row__label">{opt === 'none' ? 'None' : opt}</span>
+                  </label>
                 ))}
+
+                <Box className="header__filter-divider" />
+
+                {/* People */}
+                <Typography variant="subtitle2" className="header__filter-section-title">People</Typography>
+                {(() => {
+                  const roleOrder = []
+                  const byRole = {}
+                  people.forEach(p => {
+                    const role = p.role || '__other__'
+                    if (!byRole[role]) { byRole[role] = []; roleOrder.push(role) }
+                    byRole[role].push(p)
+                  })
+                  const orderedRoles = roleOrder.filter(r => r !== '__other__')
+                  if (byRole['__other__']) orderedRoles.push('__other__')
+                  return orderedRoles.map((role, roleIdx) => (
+                    <Box key={role}>
+                      <Typography variant="subtitle2" className="header__filter-section-title" sx={roleIdx > 0 ? { mt: 1 } : {}}>
+                        {role === '__other__' ? 'Other' : role}
+                      </Typography>
+                      {byRole[role].map(p => (
+                        <label key={p.id} className="filter-row">
+                          <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
+                          <Box className="filter-row__avatar" style={{ background: getAvatarColor(p.name) }}>
+                            {p.photo
+                              ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : p.name?.charAt(0)
+                            }
+                          </Box>
+                          <span className="filter-row__label">{p.name}</span>
+                        </label>
+                      ))}
+                    </Box>
+                  ))
+                })()}
+                {people.length === 0 && <Typography variant="caption" color="text.secondary">No people yet.</Typography>}
+                {activeFilters > 0 && (
+                  <Button
+                    size="small" color="primary" onClick={() => setFilterPersonIds([])}
+                    sx={{ mt: 1, width: '100%', fontSize: 12 }}
+                  >
+                    Clear filters
+                  </Button>
+                )}
               </Box>
             </>
           )}
         </Box>
-
-        <IconButton className="header__nav-arrow" onClick={goNext} size="small">
-          <ChevronRightIcon fontSize="small" />
-        </IconButton>
-      </Box>
-
-      {/* Filter */}
-      <Box sx={{ position: 'relative' }}>
-        <Tooltip title="Filter" placement="bottom">
-          <IconButton
-            className={`header__filter-btn${activeFilters > 0 ? ' header__filter-btn--active' : ''}`}
-            onClick={() => setShowFilters(v => !v)}
-            size="small"
-          >
-            <FilterListIcon fontSize="small" />
-            {activeFilters > 0 && <span className="header__filter-count">{activeFilters}</span>}
-          </IconButton>
-        </Tooltip>
-
-        {showFilters && (
-          <>
-            <Box sx={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setShowFilters(false)} />
-            <Box className="header__filter-popover">
-              {/* Group by */}
-              <Typography variant="subtitle2" className="header__filter-section-title">Group by</Typography>
-              {groupOptions.map(opt => (
-                <label key={opt} className="filter-row" style={{ cursor: 'pointer' }}>
-                  <input type="radio" name="groupby" checked={groupBy === opt} onChange={() => setGroupBy(opt)} style={{ accentColor: '#111827' }} />
-                  <span className="filter-row__label">{opt === 'none' ? 'None' : opt}</span>
-                </label>
-              ))}
-
-              <Box className="header__filter-divider" />
-
-              {/* People */}
-              <Typography variant="subtitle2" className="header__filter-section-title">People</Typography>
-              {(() => {
-                const roleOrder = []
-                const byRole = {}
-                people.forEach(p => {
-                  const role = p.role || '__other__'
-                  if (!byRole[role]) { byRole[role] = []; roleOrder.push(role) }
-                  byRole[role].push(p)
-                })
-                const orderedRoles = roleOrder.filter(r => r !== '__other__')
-                if (byRole['__other__']) orderedRoles.push('__other__')
-                return orderedRoles.map((role, roleIdx) => (
-                  <Box key={role}>
-                    <Typography variant="subtitle2" className="header__filter-section-title" sx={roleIdx > 0 ? { mt: 1 } : {}}>
-                      {role === '__other__' ? 'Other' : role}
-                    </Typography>
-                    {byRole[role].map(p => (
-                      <label key={p.id} className="filter-row">
-                        <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
-                        <Box className="filter-row__avatar" style={{ background: getAvatarColor(p.name) }}>
-                          {p.photo
-                            ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : p.name?.charAt(0)
-                          }
-                        </Box>
-                        <span className="filter-row__label">{p.name}</span>
-                      </label>
-                    ))}
-                  </Box>
-                ))
-              })()}
-              {people.length === 0 && <Typography variant="caption" color="text.secondary">No people yet.</Typography>}
-              {activeFilters > 0 && (
-                <Button
-                  size="small" color="primary" onClick={() => setFilterPersonIds([])}
-                  sx={{ mt: 1, width: '100%', fontSize: 12 }}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </Box>
-          </>
-        )}
       </Box>
 
       {readOnly && <Box className="header__readonly-badge">View only</Box>}
