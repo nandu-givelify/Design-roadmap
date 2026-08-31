@@ -282,6 +282,25 @@ function AuthenticatedApp({ user }) {
   const [undoToast, setUndoToast] = useState(null)
   const showToast = useCallback((msg) => { setUndoToast(msg); setTimeout(() => setUndoToast(null), 2500) }, [])
 
+  // ── Auto-collapse nav on mobile resize; restore when back to desktop ───────
+  useEffect(() => {
+    const autoCollapsed = { current: false }
+    const handle = () => {
+      const isMobile = window.innerWidth <= 640
+      if (isMobile && !autoCollapsed.current) {
+        autoCollapsed.current = true
+        setNavOpen(false)
+        setNavDocked(false)
+      } else if (!isMobile && autoCollapsed.current) {
+        autoCollapsed.current = false
+        setNavOpen(true)
+        setNavDocked(true)
+      }
+    }
+    window.addEventListener('resize', handle)
+    return () => window.removeEventListener('resize', handle)
+  }, [])
+
   // ── Subscribe to user prefs (board order + favourites) ───────────────────
   useEffect(() => {
     if (!user) return

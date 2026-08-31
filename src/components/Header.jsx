@@ -78,8 +78,8 @@ export default function Header({
         </Tooltip>
       )}
 
-      {/* Board title — fills available space */}
-      <Box className="header__board-area" sx={{ flex: 1, minWidth: 0 }}>
+      {/* Board title — natural width on desktop; flex:1 on mobile via CSS */}
+      <Box className="header__board-area">
         {renaming ? (
           <Box component="span" sx={{ position: 'relative', display: 'inline-block' }}>
             <span className="header__board-title" style={{ visibility: 'hidden', display: 'inline-block', minWidth: 80 }} aria-hidden>
@@ -114,7 +114,10 @@ export default function Header({
         </Tooltip>
       )}
 
-      {/* ── Row 2: today + period nav (centered) + filter ── */}
+      {/* Spacer: flex:1 on desktop pushes controls right; width:100% on mobile forces wrap */}
+      <Box className="header__spacer" />
+
+      {/* ── Row 2 on mobile / right side on desktop: today + nav + filter ── */}
       <Box className="header__controls">
         {/* Today */}
         <Tooltip title="Jump to today" placement="bottom">

@@ -183,6 +183,8 @@ export default function LoginPage() {
             <input
               className="login-input"
               type="text"
+              name="name"
+              autoComplete="name"
               placeholder="Your full name"
               value={name}
               onChange={(e) => { setName(e.target.value); clearError() }}
@@ -191,6 +193,8 @@ export default function LoginPage() {
             <input
               className="login-input"
               type="password"
+              name="new-password"
+              autoComplete="new-password"
               placeholder="Create a password (6+ chars)"
               value={password}
               onChange={(e) => { setPassword(e.target.value); clearError() }}
