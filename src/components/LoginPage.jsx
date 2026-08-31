@@ -100,7 +100,7 @@ export default function LoginPage() {
         <p className="login-card__sub">
           {step === 'email'     && 'Sign in with your email, or create a new account'}
           {step === 'password'  && `Signing in as ${email}`}
-          {step === 'register'  && `No account found for ${email}`}
+          {step === 'register'  && 'Fill in your details to get started'}
           {step === 'reset-sent'&& ''}
         </p>
 
@@ -133,7 +133,7 @@ export default function LoginPage() {
             <button
               type="button"
               className="login-forgot"
-              onClick={() => { if (!email.trim()) return; clearError(); setStep('register') }}
+              onClick={() => { clearError(); setStep('register') }}
             >
               New to RoadMap? Create an account
             </button>
@@ -169,16 +169,27 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* ── Register step (no account found) ────────────── */}
+        {/* ── Register step ───────────────────────────────── */}
         {step === 'register' && (
           <form onSubmit={handleRegister}>
-            <div className="login-email-badge">
-              <span>{email}</span>
-              <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
-            </div>
-            <p className="login-new-user-hint">
-              Let's set up your account. Enter your name and choose a password.
-            </p>
+            {/* If email was pre-filled show badge; otherwise show editable email field */}
+            {email.trim() ? (
+              <div className="login-email-badge">
+                <span>{email}</span>
+                <button type="button" onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
+              </div>
+            ) : (
+              <input
+                className="login-input"
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="Your email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); clearError() }}
+                autoFocus
+              />
+            )}
             <input
               className="login-input"
               type="text"
@@ -187,7 +198,7 @@ export default function LoginPage() {
               placeholder="Your full name"
               value={name}
               onChange={(e) => { setName(e.target.value); clearError() }}
-              autoFocus
+              autoFocus={!!email.trim()}
             />
             <input
               className="login-input"
@@ -200,12 +211,12 @@ export default function LoginPage() {
             />
             {error && <div className="login-error">{error}</div>}
             <button className="login-submit-btn" type="submit"
-              disabled={loading || !name.trim() || password.length < 6}>
+              disabled={loading || !email.trim() || !name.trim() || password.length < 6}>
               {loading ? 'Creating account…' : 'Join RoadMap'}
             </button>
             <button type="button" className="login-forgot"
-              onClick={() => { setStep('password'); clearError() }}>
-              Already have an account? Try signing in
+              onClick={() => { setStep(email.trim() ? 'password' : 'email'); clearError() }}>
+              Already have an account? Sign in
             </button>
           </form>
         )}
