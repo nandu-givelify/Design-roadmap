@@ -376,16 +376,32 @@ function AuthenticatedApp({ user }) {
   }, [user]) // eslint-disable-line
 
   // ── Board person → profile sync handler ──────────────────────────────────
-  const handleUpdatePerson = useCallback((id, data) => {
+  const handleUpdatePerson = useCallback(async (id, data) => {
     updatePerson(activeBoardId, id, data)
-    // If this person is the logged-in user, also update their profile
     const person = people.find(p => p.id === id)
-    if (person?.email?.toLowerCase() === user?.email?.toLowerCase()) {
-      const patch = {}
-      if (data.name  !== undefined) patch.name  = data.name
-      if (data.photo !== undefined) patch.photo = data.photo
-      if (Object.keys(patch).length) setUserProfile(user.uid, patch)
+    if (!person?.email) return
+    const patch = {}
+    if (data.name  !== undefined) patch.name  = data.name
+    if (data.photo !== undefined) patch.photo = data.photo
+    if (!Object.keys(patch).length) return
+
+    // If this is the logged-in user, update their global userProfile
+    // (push sync will then propagate to all boards automatically)
+    if (person.email.toLowerCase() === user?.email?.toLowerCase()) {
+      setUserProfile(user.uid, patch)
+      return
     }
+
+    // For any other person: push the change to all boards they appear on
+    try {
+      const allBoards = await findBoardsByMemberEmail(person.email)
+      await Promise.all(allBoards.map(async (board) => {
+        if (board.id === activeBoardId) return  // already updated above
+        const ppl   = await getPeopleOnce(board.id)
+        const match = ppl.find(p => p.email?.toLowerCase() === person.email.toLowerCase())
+        if (match) await updatePerson(board.id, match.id, patch)
+      }))
+    } catch (e) { console.warn('Cross-board person sync failed:', e) }
   }, [user, people, activeBoardId]) // eslint-disable-line
 
   // (per-board reconciliation removed — userProfile is now the single source of truth;
