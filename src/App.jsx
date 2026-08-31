@@ -379,7 +379,12 @@ function AuthenticatedApp({ user }) {
   const handleUpdatePerson = useCallback(async (id, data) => {
     updatePerson(activeBoardId, id, data)
     const person = people.find(p => p.id === id)
-    if (!person?.email) return
+
+    // Use the email from the submitted data first (user may have just added it),
+    // then fall back to what's currently in local state
+    const email = (data.email ?? person?.email)?.trim() || null
+    if (!email) return
+
     const patch = {}
     if (data.name  !== undefined) patch.name  = data.name
     if (data.photo !== undefined) patch.photo = data.photo
@@ -387,18 +392,18 @@ function AuthenticatedApp({ user }) {
 
     // If this is the logged-in user, update their global userProfile
     // (push sync will then propagate to all boards automatically)
-    if (person.email.toLowerCase() === user?.email?.toLowerCase()) {
+    if (email.toLowerCase() === user?.email?.toLowerCase()) {
       setUserProfile(user.uid, patch)
       return
     }
 
     // For any other person: push the change to all boards they appear on
     try {
-      const allBoards = await findBoardsByMemberEmail(person.email)
+      const allBoards = await findBoardsByMemberEmail(email)
       await Promise.all(allBoards.map(async (board) => {
         if (board.id === activeBoardId) return  // already updated above
         const ppl   = await getPeopleOnce(board.id)
-        const match = ppl.find(p => p.email?.toLowerCase() === person.email.toLowerCase())
+        const match = ppl.find(p => p.email?.toLowerCase() === email.toLowerCase())
         if (match) await updatePerson(board.id, match.id, patch)
       }))
     } catch (e) { console.warn('Cross-board person sync failed:', e) }
@@ -460,11 +465,17 @@ function AuthenticatedApp({ user }) {
   }, [user, userProfile?.photo, userProfile?.name]) // eslint-disable-line
 
   // ── Effective profile — userProfile is the source of truth ──────────────
-  // Fall back to board person only while userProfile is still loading (null)
+  // - userProfile === null  → still loading, show board person as fast-path
+  // - userProfile.photo === undefined → field never written, fall back to board person
+  // - userProfile.photo === null → explicitly removed, show no photo
   const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-  const effectiveProfile = userProfile !== null
-    ? { ...(userProfile || {}), photo: userProfile?.photo ?? null, name: userProfile?.name ?? null }
-    : { ...(myBoardPerson || {}), photo: myBoardPerson?.photo ?? null, name: myBoardPerson?.name ?? null }
+  const effectiveProfile = userProfile === null
+    ? { ...(myBoardPerson || {}), photo: myBoardPerson?.photo ?? null, name: myBoardPerson?.name ?? null }
+    : {
+        ...(userProfile || {}),
+        photo: 'photo' in (userProfile || {}) ? userProfile.photo : (myBoardPerson?.photo ?? null),
+        name:  userProfile?.name ?? myBoardPerson?.name ?? null,
+      }
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
