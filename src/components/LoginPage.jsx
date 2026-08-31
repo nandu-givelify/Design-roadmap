@@ -133,8 +133,7 @@ export default function LoginPage() {
             <button
               type="button"
               className="login-forgot"
-              disabled={!email.trim()}
-              onClick={() => { if (email.trim()) { clearError(); setStep('register') } }}
+              onClick={() => { if (!email.trim()) return; clearError(); setStep('register') }}
             >
               New to RoadMap? Create an account
             </button>

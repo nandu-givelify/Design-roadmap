@@ -787,13 +787,12 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .login-forgot {
   display: block; width: 100%; text-align: center;
   margin-top: 12px; font-size: 14px; font-weight: 500;
-  padding: 11px 16px; border-radius: 50px;
-  border: 1.5px solid var(--m3-outline-variant);
-  color: var(--m3-on-surface-variant); background: transparent;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  padding: 8px 4px; border-radius: 0;
+  border: none; background: none;
+  color: var(--m3-on-surface-variant);
+  transition: color 0.15s;
 }
-.login-forgot:hover:not(:disabled) { border-color: var(--m3-outline); background: var(--m3-surface-container-low); color: var(--m3-on-surface); }
-.login-forgot:disabled { opacity: 0.4; cursor: not-allowed; }
+.login-forgot:hover { color: var(--m3-on-surface); }
 .login-reset-sent { text-align: center; }
 .login-reset-sent__icon { font-size: 36px; margin-bottom: 12px; }
 .login-reset-sent p { font-size: 13px; color: var(--m3-on-surface-variant); margin-bottom: 6px; line-height: 1.5; }
