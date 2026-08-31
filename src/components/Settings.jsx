@@ -49,17 +49,29 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole, onDelete }) 
   return (
     <div className="settings-inline-form">
       <PhotoPicker value={photo} onChange={setPhoto} />
-      <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)}
-        placeholder="Full name" autoFocus onKeyDown={onKey(0)} />
-      <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email (optional)" type="email" onKeyDown={onKey(1)} />
-      <select value={role} onChange={(e) => setRole(e.target.value)}>
-        {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
-        <option value="__custom__">+ New role…</option>
-      </select>
+      <div className="m3-field">
+        <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)}
+          placeholder=" " autoFocus onKeyDown={onKey(0)} />
+        <label className="m3-field__label">Full name</label>
+      </div>
+      <div className="m3-field">
+        <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
+          placeholder=" " type="email" onKeyDown={onKey(1)} />
+        <label className="m3-field__label">Email (optional)</label>
+      </div>
+      <div className="m3-field m3-field--select">
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+          <option value="__custom__">+ New role…</option>
+        </select>
+        <label className="m3-field__label">Role</label>
+      </div>
       {role === '__custom__' && (
-        <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
-          placeholder="Role name" onKeyDown={onKey(2)} />
+        <div className="m3-field">
+          <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
+            placeholder=" " onKeyDown={onKey(2)} />
+          <label className="m3-field__label">Role name</label>
+        </div>
       )}
       <div className="settings-inline-actions" style={{ justifyContent: 'space-between' }}>
         <button className="btn-danger" style={{ fontSize: 12, padding: '5px 12px' }}
@@ -132,17 +144,19 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
   return (
     <div className="settings-inline-form" style={{ position: 'relative' }}>
       <div style={{ position: 'relative' }}>
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Name or email…"
-          autoFocus
-          style={{ width: '100%' }}
-          onKeyDown={onKey(0)}
-        />
+        <div className="m3-field" style={{ marginBottom: 0 }}>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder=" "
+            autoFocus
+            onKeyDown={onKey(0)}
+          />
+          <label className="m3-field__label">Name or email…</label>
+        </div>
         {open && (recentPeople.length > 0 || query.length > 0) && (
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
@@ -180,24 +194,36 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
 
       {isNew && (
         <>
-          <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email (optional)" type="email" onKeyDown={onKey(1)} />
+          <div className="m3-field">
+            <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder=" " type="email" onKeyDown={onKey(1)} />
+            <label className="m3-field__label">Email (optional)</label>
+          </div>
           <PhotoPicker value={photo} onChange={setPhoto} />
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
-            <option value="__custom__">+ New role…</option>
-          </select>
+          <div className="m3-field m3-field--select">
+            <select value={role} onChange={(e) => setRole(e.target.value)}>
+              {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
+              <option value="__custom__">+ New role…</option>
+            </select>
+            <label className="m3-field__label">Role</label>
+          </div>
           {role === '__custom__' && (
-            <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
-              placeholder="Role name" onKeyDown={onKey(2)} />
+            <div className="m3-field">
+              <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
+                placeholder=" " onKeyDown={onKey(2)} />
+              <label className="m3-field__label">Role name</label>
+            </div>
           )}
         </>
       )}
 
       {selected && (
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
+        <div className="m3-field m3-field--select">
+          <select value={role} onChange={(e) => setRole(e.target.value)}>
+            {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <label className="m3-field__label">Role</label>
+        </div>
       )}
 
       <div className="settings-inline-actions">

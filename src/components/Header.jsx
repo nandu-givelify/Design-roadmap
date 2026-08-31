@@ -157,26 +157,38 @@ export default function Header({
 
               <div className="header__filter-divider" />
 
-              {/* People filter */}
+              {/* People filter — grouped by role */}
               <div className="header__filter-section-title">People</div>
-              {people.map((p) => (
-                <label key={p.id} className="filter-row">
-                  <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
-                  <div
-                    className="filter-row__avatar"
-                    style={{ background: getAvatarColor(p.name) }}
-                  >
-                    {p.photo
-                      ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : p.name?.charAt(0)
-                    }
+              {(() => {
+                const roleOrder = []
+                const byRole = {}
+                people.forEach(p => {
+                  const role = p.role || '__other__'
+                  if (!byRole[role]) { byRole[role] = []; roleOrder.push(role) }
+                  byRole[role].push(p)
+                })
+                const orderedRoles = roleOrder.filter(r => r !== '__other__')
+                if (byRole['__other__']) orderedRoles.push('__other__')
+                return orderedRoles.map((role, roleIdx) => (
+                  <div key={role}>
+                    <div className="header__filter-section-title" style={roleIdx > 0 ? { marginTop: 8 } : {}}>
+                      {role === '__other__' ? 'Other' : role}
+                    </div>
+                    {byRole[role].map(p => (
+                      <label key={p.id} className="filter-row">
+                        <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />
+                        <div className="filter-row__avatar" style={{ background: getAvatarColor(p.name) }}>
+                          {p.photo
+                            ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : p.name?.charAt(0)
+                          }
+                        </div>
+                        <span className="filter-row__label">{p.name}</span>
+                      </label>
+                    ))}
                   </div>
-                  <span className="filter-row__label">
-                    {p.name}
-                    {p.role && <span style={{ color: '#9ca3af', marginLeft: 4, fontSize: 11 }}>· {p.role}</span>}
-                  </span>
-                </label>
-              ))}
+                ))
+              })()}
               {people.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af' }}>No people yet.</div>}
               {activeFilters > 0 && (
                 <button className="header__filter-clear" onClick={() => setFilterPersonIds([])}>

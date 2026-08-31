@@ -66,11 +66,11 @@ function ModalShell({ title, onClose, children }) {
   )
 }
 
-function Field({ label, children }) {
+function Field({ label, children, isSelect }) {
   return (
-    <div className="field">
-      <label className="field__label">{label}</label>
+    <div className={`m3-field${isSelect ? ' m3-field--select' : ''}`} style={{ marginBottom: 16 }}>
       {children}
+      <label className="m3-field__label">{label}</label>
     </div>
   )
 }
@@ -236,11 +236,10 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
     <>
       <Field label="Task title *">
         <input
-          className="field__input"
           value={form.title}
           onChange={(e) => set('title', e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onTitleEnter?.() } }}
-          placeholder="e.g. Homepage redesign"
+          placeholder=" "
           autoFocus
         />
       </Field>
@@ -273,11 +272,11 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
 
       <div className="field__row">
         <Field label="Start date">
-          <input className="field__input" type="date" value={form.startDate}
+          <input type="date" value={form.startDate} placeholder=" "
             onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)} />
         </Field>
         <Field label="End date">
-          <input className="field__input" type="date" value={form.endDate} min={form.startDate}
+          <input type="date" value={form.endDate} min={form.startDate} placeholder=" "
             onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)} />
         </Field>
       </div>
