@@ -33,8 +33,8 @@ export default function TaskBar({
 
   const assignee     = people.find((p) => p.id === task.assigneeId)
   const pmPerson     = people.find((p) => p.id === (task.pmId || task.teamId))
-  const assigneeColor = assignee ? (getAvatarColor(assignee.email || assignee.name)) : '#9ca3af'
-  const pmColor       = pmPerson ? (getAvatarColor(pmPerson.email || pmPerson.name)) : '#6366f1'
+  const assigneeColor = assignee ? (getAvatarColor(assignee.name)) : '#9ca3af'
+  const pmColor       = pmPerson ? (getAvatarColor(pmPerson.name)) : '#6366f1'
 
   const dispStart = visual ? visual.startDate : parseLocalDate(task.startDate)
   const dispEnd   = visual ? visual.endDate   : parseLocalDate(task.endDate)

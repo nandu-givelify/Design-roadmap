@@ -497,7 +497,7 @@ const Timeline = forwardRef(function Timeline({
   const renderPersonRow = (person, rowTasks, isUnassigned = false) => {
     const personId    = person ? person.id : '__unassigned__'
     const personName  = person ? person.name : 'Unassigned'
-    const personColor = person ? (getAvatarColor(person.email || person.name)) : '#9ca3af'
+    const personColor = person ? (getAvatarColor(person.name)) : '#9ca3af'
 
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
@@ -599,13 +599,13 @@ const Timeline = forwardRef(function Timeline({
         {(assignee || pmPerson) && (
           <div className="task-bar__avatars" style={{ marginRight: 5 }}>
             {assignee && (
-              <div className="task-bar__avatar" style={{ background: getAvatarColor(assignee.email || assignee.name), zIndex: 2 }}>
+              <div className="task-bar__avatar" style={{ background: getAvatarColor(assignee.name), zIndex: 2 }}>
                 {assignee.photo ? <img src={assignee.photo} alt="" /> : assignee.name?.charAt(0).toUpperCase()}
               </div>
             )}
             {pmPerson && (
               <div className={`task-bar__avatar${assignee ? ' task-bar__avatar--second' : ''}`}
-                style={{ background: getAvatarColor(pmPerson.email || pmPerson.name), zIndex: 1, borderRadius: '5px' }}>
+                style={{ background: getAvatarColor(pmPerson.name), zIndex: 1, borderRadius: '5px' }}>
                 {pmPerson.photo ? <img src={pmPerson.photo} alt="" /> : pmPerson.name?.charAt(0).toUpperCase()}
               </div>
             )}
@@ -655,7 +655,7 @@ const Timeline = forwardRef(function Timeline({
             <div className="timeline__bulk-dropdown">
               {people.map((p) => (
                 <div key={p.id} className="timeline__bulk-dropdown-item" onClick={() => handleBulkAssignPerson(p.id)}>
-                  <div className="timeline__bulk-dropdown-avatar" style={{ background: getAvatarColor(p.email || p.name) }}>
+                  <div className="timeline__bulk-dropdown-avatar" style={{ background: getAvatarColor(p.name) }}>
                     {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.name?.charAt(0).toUpperCase()}
                   </div>
                   {p.name} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{p.role}</span>
@@ -673,7 +673,7 @@ const Timeline = forwardRef(function Timeline({
             <div className="timeline__bulk-dropdown">
               {people.filter((p) => p.role === 'PM').concat(people.filter((p) => p.role !== 'PM')).map((p) => (
                 <div key={p.id} className="timeline__bulk-dropdown-item" onClick={() => handleBulkAssignPM(p.id)}>
-                  <div className="timeline__bulk-dropdown-avatar" style={{ background: getAvatarColor(p.email || p.name) }}>
+                  <div className="timeline__bulk-dropdown-avatar" style={{ background: getAvatarColor(p.name) }}>
                     {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.name?.charAt(0).toUpperCase()}
                   </div>
                   {p.name} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{p.role}</span>

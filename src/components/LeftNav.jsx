@@ -55,7 +55,7 @@ export default function LeftNav({
   const displayName  = userProfile?.name || user?.displayName || user?.email?.split('@')[0] || 'You'
   const photoUrl     = userProfile?.photo || user?.photoURL || null
   const avatarLetter = displayName.charAt(0).toUpperCase()
-  const avatarColor  = getAvatarColor(user?.email || displayName)
+  const avatarColor  = getAvatarColor(displayName)
 
   const favoriteBoards = boards.filter(b => favoriteBoardIds.includes(b.id))
   const regularBoards  = boards.filter(b => !favoriteBoardIds.includes(b.id))
