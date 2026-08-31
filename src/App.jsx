@@ -70,6 +70,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null
                          && request.auth.uid == uid;
     }
+
+    match /userProfiles/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
   }
 }`
 
@@ -193,6 +198,29 @@ function PublicBoardView({ boardId }) {
   )
 }
 
+// Compress a base64 image to max 400px / 80% JPEG before writing to Firestore
+// (Firestore has a 1MB document limit — uncompressed photos easily exceed it)
+async function compressImage(dataUrl, maxPx = 400, quality = 0.80) {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
+  try {
+    return await new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight
+        if (w <= maxPx && h <= maxPx) { resolve(dataUrl); return }
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx }
+        else        { w = Math.round(w * maxPx / h); h = maxPx }
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = () => resolve(dataUrl)
+      img.src = dataUrl
+    })
+  } catch { return dataUrl }
+}
+
 function AuthenticatedApp({ user }) {
   const [boards,        setBoards]        = useState([])
   const [activeBoardId, setActiveBoardId] = useState(null)
@@ -203,7 +231,23 @@ function AuthenticatedApp({ user }) {
   const [migrating,     setMigrating]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [dbError,       setDbError]       = useState(null)
-  const [userProfile,   setUserProfile_]  = useState(null)
+  // Initialize from localStorage so the left nav always shows the right photo
+  // even on boards where the user isn't a member, and even if Firestore rules
+  // block the userProfiles collection.
+  const [userProfile, setUserProfile_raw] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`userProfile_${user?.uid}`)
+      return cached ? JSON.parse(cached) : null
+    } catch { return null }
+  })
+  // Wrap setter: always mirror to localStorage
+  const setUserProfile_ = (updater) => {
+    setUserProfile_raw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      try { localStorage.setItem(`userProfile_${user?.uid}`, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   // Nav state
   const [navOpen,   setNavOpen]   = useState(true)
@@ -249,12 +293,29 @@ function AuthenticatedApp({ user }) {
   // ── Sync user profile on login ────────────────────────────────────────────
   useEffect(() => {
     if (!user) return
-    // Only write fields that are actually set — never overwrite a saved photo with null
+    // Seed local state with auth data — but don't overwrite a previously saved photo
+    setUserProfile_(prev => ({
+      email: user.email,
+      ...(user.displayName ? { name: user.displayName } : {}),
+      ...(user.photoURL    ? { photo: user.photoURL }   : {}),
+      ...(prev || {}),  // locally cached values win over auth defaults
+    }))
+    // Best-effort write to Firestore (may fail if rules don't cover userProfiles)
     const loginData = { email: user.email }
     if (user.displayName) loginData.name  = user.displayName
     if (user.photoURL)    loginData.photo = user.photoURL
-    setUserProfile(user.uid, loginData)
-    return subscribeUserProfile(user.uid, setUserProfile_)
+    try { setUserProfile(user.uid, loginData) } catch {}
+    return subscribeUserProfile(user.uid, (profile) => {
+      if (!profile) return
+      // Merge Firestore data — don't overwrite locally-cached photo/name if Firestore
+      // doesn't have them (e.g. if the userProfiles write was blocked by rules)
+      setUserProfile_(prev => ({
+        ...(prev || {}),
+        ...profile,
+        photo: 'photo' in profile ? profile.photo : (prev?.photo ?? null),
+        name:  'name'  in profile ? profile.name  : (prev?.name  ?? null),
+      }))
+    })
   }, [user]) // eslint-disable-line
 
   // ── Sorted boards (by user-defined order) ────────────────────────────────
@@ -347,6 +408,25 @@ function AuthenticatedApp({ user }) {
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
   const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
 
+  // ── Enrich people: overlay logged-in user's photo/name from userProfile ──────
+  // Ensures the timeline shows the current photo even when the per-board person
+  // entry has no email and the push sync couldn't match them.
+  const enrichedPeople = useMemo(() => {
+    if (!userProfile || !user?.email) return people
+    const userEmail = user.email.toLowerCase()
+    const userName  = (userProfile.name || user.displayName || '').toLowerCase()
+    return people.map(p => {
+      const emailMatch = p.email && p.email.toLowerCase() === userEmail
+      const nameMatch  = !emailMatch && userName && p.name?.toLowerCase() === userName
+      if (!emailMatch && !nameMatch) return p
+      return {
+        ...p,
+        photo: userProfile.photo ?? p.photo ?? null,
+        name:  userProfile.name  ?? p.name,
+      }
+    })
+  }, [people, user, userProfile]) // eslint-disable-line
+
   // ── Recent people (from localStorage cache, excluding current board members) ──
   const recentPeople = useMemo(() => {
     try {
@@ -359,55 +439,94 @@ function AuthenticatedApp({ user }) {
   // ── Profile update handler — saves to userProfile + pushes to ALL boards ──
   const handleUpdateProfile = useCallback(async (data) => {
     if (!user) return
-    await setUserProfile(user.uid, data)
-    // Push photo/name change to every board the user is a member of
+    // Compress photo before writing to Firestore (1MB document limit)
+    const saveData = { ...data }
+    if (saveData.photo) saveData.photo = await compressImage(saveData.photo)
+    // Update local state immediately — persists across board switches even if Firestore rules block writes
+    setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...saveData }))
+    // Best-effort Firestore write
+    try { await setUserProfile(user.uid, saveData) } catch (e) { console.warn('userProfile write:', e) }
+    // Push photo/name change to every board the user appears on
+    // Use loaded `boards` (includes owned + member boards) — findBoardsByMemberEmail only
+    // finds boards where the user's email is in memberEmails, missing owned boards.
     try {
-      const allBoards = await findBoardsByMemberEmail(user.email)
-      await Promise.all(allBoards.map(async (board) => {
+      const ue = user.email.toLowerCase()
+      const un = (saveData.name || user.displayName || '').toLowerCase()
+      await Promise.all(boards.map(async (board) => {
         const boardPeople = await getPeopleOnce(board.id)
-        const match = boardPeople.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+        const match = boardPeople.find(p => p.email?.toLowerCase() === ue)
+          || (un ? boardPeople.find(p => !p.email && p.name?.toLowerCase() === un) : null)
         if (!match) return
         const patch = {}
-        if (data.name  !== undefined) patch.name  = data.name
-        if (data.photo !== undefined) patch.photo = data.photo
+        if (saveData.name  !== undefined) patch.name  = saveData.name
+        if (saveData.photo !== undefined) patch.photo = saveData.photo
         if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
       }))
     } catch (e) { console.warn('Profile push failed:', e) }
-  }, [user]) // eslint-disable-line
+  }, [user, boards]) // eslint-disable-line
 
   // ── Board person → profile sync handler ──────────────────────────────────
   const handleUpdatePerson = useCallback(async (id, data) => {
     updatePerson(activeBoardId, id, data)
     const person = people.find(p => p.id === id)
 
-    // Use the email from the submitted data first (user may have just added it),
-    // then fall back to what's currently in local state
-    const email = (data.email ?? person?.email)?.trim() || null
-    if (!email) return
-
     const patch = {}
     if (data.name  !== undefined) patch.name  = data.name
     if (data.photo !== undefined) patch.photo = data.photo
     if (!Object.keys(patch).length) return
 
-    // If this is the logged-in user, update their global userProfile
-    // (push sync will then propagate to all boards automatically)
-    if (email.toLowerCase() === user?.email?.toLowerCase()) {
-      setUserProfile(user.uid, patch)
+    // Identify if the person being edited is the logged-in user.
+    // Match by email first; fall back to name for old entries that have no email stored.
+    // Use the EDITED person's current name as the name key (most reliable — it's right here).
+    const email     = (data.email ?? person?.email)?.trim()?.toLowerCase() || null
+    const userEmail = user?.email?.toLowerCase()
+    // Name of the person being edited — use this to find them on other boards
+    const personName = (person?.name || '').toLowerCase()
+    const myBoardPerson_ = people.find(p =>
+      (p.email && p.email.toLowerCase() === userEmail) ||
+      (!p.email && personName && p.name?.toLowerCase() === personName)
+    )
+    const myBoardPersonId = myBoardPerson_?.id
+
+    // Also treat as own profile if this person IS the one found (id match via name/email)
+    const isOwnProfile = (email && userEmail && email === userEmail) || (id === myBoardPersonId)
+
+    if (isOwnProfile) {
+      // Compress photo before writing to Firestore (1MB document limit)
+      if (patch.photo) patch.photo = await compressImage(patch.photo)
+      // Update local state immediately — persists across board switches even if Firestore rules block writes
+      setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...patch }))
+      // Best-effort Firestore write to userProfile collection
+      try { await setUserProfile(user.uid, patch) } catch (e) { console.warn('userProfile write:', e) }
+      // Push directly to ALL other boards using email OR person name for matching
+      try {
+        const ue = userEmail
+        const un = personName  // use the actual person name, not displayName
+        await Promise.all(boards.map(async (board) => {
+          if (board.id === activeBoardId) return // already updated at top of this handler
+          const ppl = await getPeopleOnce(board.id)
+          const match = (ue && ppl.find(p => p.email?.toLowerCase() === ue))
+            || (un && ppl.find(p => !p.email && p.name?.toLowerCase() === un))
+          if (match) await updatePerson(board.id, match.id, patch)
+        }))
+      } catch (e) { console.warn('Cross-board push failed:', e) }
       return
     }
 
-    // For any other person: push the change to all boards they appear on
+    // For any other person: push the change to all boards they appear on.
+    // Use loaded `boards` state and match by email OR name (for entries without email).
+    const pn = (person?.name || '').toLowerCase()
+    if (!email && !pn) return
     try {
-      const allBoards = await findBoardsByMemberEmail(email)
-      await Promise.all(allBoards.map(async (board) => {
+      await Promise.all(boards.map(async (board) => {
         if (board.id === activeBoardId) return  // already updated above
         const ppl   = await getPeopleOnce(board.id)
-        const match = ppl.find(p => p.email?.toLowerCase() === email.toLowerCase())
+        const match = (email && ppl.find(p => p.email?.toLowerCase() === email))
+          || (pn && ppl.find(p => !p.email && p.name?.toLowerCase() === pn))
         if (match) await updatePerson(board.id, match.id, patch)
       }))
     } catch (e) { console.warn('Cross-board person sync failed:', e) }
-  }, [user, people, activeBoardId]) // eslint-disable-line
+  }, [user, people, activeBoardId, userProfile, boards]) // eslint-disable-line
 
   // (per-board reconciliation removed — userProfile is now the single source of truth;
   //  the push sync effect below handles propagation to all boards)
@@ -428,8 +547,9 @@ function AuthenticatedApp({ user }) {
           const ppl   = await getPeopleOnce(board.id)
           const match = ppl.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
           if (match?.photo) {
+            const compressedPhoto = await compressImage(match.photo)
             await setUserProfile(user.uid, {
-              photo: match.photo,
+              photo: compressedPhoto,
               ...(match.name && !userProfile?.name ? { name: match.name } : {}),
             })
             break  // found one — stop
@@ -441,18 +561,21 @@ function AuthenticatedApp({ user }) {
 
   // ── Push sync — whenever userProfile photo/name changes, update ALL boards ──
   // This is the source-of-truth push (not bidirectional — never pulls from boards).
-  const pushSyncedRef = useRef(null)
+  // No ref-based dedup here — the photo !== match.photo check inside prevents unnecessary
+  // writes, and we need this to re-run whenever `boards` loads/changes.
   useEffect(() => {
-    if (!user || !userProfile) return
-    const key = `${user.uid}:${userProfile.photo ?? 'null'}:${userProfile.name ?? 'null'}`
-    if (pushSyncedRef.current === key) return
-    pushSyncedRef.current = key
+    if (!user || !userProfile || !boards.length) return
     ;(async () => {
       try {
-        const allBoards = await findBoardsByMemberEmail(user.email)
-        await Promise.all(allBoards.map(async (board) => {
-          const ppl   = await getPeopleOnce(board.id)
-          const match = ppl.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
+        // Use loaded `boards` instead of findBoardsByMemberEmail — the latter misses
+        // boards the user OWNS (their email isn't in memberEmails on owned boards).
+        const userEmail = user.email.toLowerCase()
+        const userName  = (userProfile.name || user.displayName || '').toLowerCase()
+        await Promise.all(boards.map(async (board) => {
+          const ppl = await getPeopleOnce(board.id)
+          // Match by email first; fall back to name for old entries that lack an email field
+          const match = ppl.find(p => p.email?.toLowerCase() === userEmail)
+            || (userName ? ppl.find(p => !p.email && p.name?.toLowerCase() === userName) : null)
           if (!match) return
           const updates = {}
           // Push the current value (including null for removals)
@@ -462,20 +585,18 @@ function AuthenticatedApp({ user }) {
         }))
       } catch (e) { console.warn('Push sync failed:', e) }
     })()
-  }, [user, userProfile?.photo, userProfile?.name]) // eslint-disable-line
+  }, [user, boards, userProfile?.photo, userProfile?.name]) // eslint-disable-line
 
   // ── Effective profile — userProfile is the source of truth ──────────────
   // - userProfile === null  → still loading, show board person as fast-path
-  // - userProfile.photo === undefined → field never written, fall back to board person
-  // - userProfile.photo === null → explicitly removed, show no photo
-  const myBoardPerson = people.find(p => p.email?.toLowerCase() === user.email?.toLowerCase())
-  const effectiveProfile = userProfile === null
-    ? { ...(myBoardPerson || {}), photo: myBoardPerson?.photo ?? null, name: myBoardPerson?.name ?? null }
-    : {
-        ...(userProfile || {}),
-        photo: 'photo' in (userProfile || {}) ? userProfile.photo : (myBoardPerson?.photo ?? null),
-        name:  userProfile?.name ?? myBoardPerson?.name ?? null,
-      }
+  // effectiveProfile — board-independent. Left nav is the user's own profile,
+  // it should never depend on whether they're a member of the active board.
+  // Priority: cached userProfile → Google auth photo → initials only.
+  const effectiveProfile = {
+    ...(userProfile || {}),
+    photo: userProfile?.photo ?? user.photoURL ?? null,
+    name:  userProfile?.name  ?? user.displayName ?? user.email?.split('@')[0] ?? null,
+  }
 
   // ── Access level ─────────────────────────────────────────────────────────
   const isOwner   = activeBoard?.ownerId === user.uid
@@ -747,7 +868,7 @@ function AuthenticatedApp({ user }) {
           onSettings={() => setSettingsOpen(true)}
           onRenameBoard={handleRenameBoard}
           onDeleteBoard={handleDeleteBoard}
-          people={people}
+          people={enrichedPeople}
           filterPersonIds={filterPersonIds}
           setFilterPersonIds={setFilterPersonIds}
           groupBy={groupBy}
@@ -762,7 +883,7 @@ function AuthenticatedApp({ user }) {
           ref={timelineRef}
           viewMode={viewMode}
           year={year} quarter={quarter}
-          people={people}
+          people={enrichedPeople}
           tasks={tasks}
           groupBy={groupBy}
           filterPersonIds={filterPersonIds}
@@ -784,7 +905,7 @@ function AuthenticatedApp({ user }) {
           <TaskModal
             onClose={() => { setModal(null); setDefaultStartDate(null) }}
             onSave={handleAddTask}
-            people={people}
+            people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
             defaultAssigneeId={defaultAssigneeId}
@@ -801,7 +922,7 @@ function AuthenticatedApp({ user }) {
             onClose={() => setEditingTask(null)}
             onSave={(data) => handleUpdateTask(editingTask.id, data)}
             onDelete={() => handleDeleteTask(editingTask.id)}
-            people={people}
+            people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
             onCreatePerson={handleCreatePerson}
@@ -825,7 +946,7 @@ function AuthenticatedApp({ user }) {
             onClose={() => setSettingsOpen(false)}
             boardId={activeBoardId}
             board={activeBoard}
-            people={people}
+            people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
             onUpdatePerson={handleUpdatePerson}

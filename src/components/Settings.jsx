@@ -1,4 +1,24 @@
 import { useState, useRef, useEffect } from 'react'
+import TextField from '@mui/material/TextField'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import Stack from '@mui/material/Stack'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Divider from '@mui/material/Divider'
+import CloseIcon from '@mui/icons-material/Close'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import AddIcon from '@mui/icons-material/Add'
 import { getAvatarColor } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
 
@@ -22,10 +42,6 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole, onDelete }) 
   const [customRole, setCustomRole] = useState('')
   const [saving,     setSaving]     = useState(false)
 
-  const nameRef       = useRef(null)
-  const emailRef      = useRef(null)
-  const customRoleRef = useRef(null)
-
   const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
 
   const handleSave = async () => {
@@ -43,56 +59,51 @@ function PersonEditForm({ person, roles, onSave, onDone, onAddRole, onDelete }) 
     onDone()
   }
 
-  const fieldRefs = [nameRef, emailRef, ...(role === '__custom__' ? [customRoleRef] : [])]
-  const onKey = useEnterNav(fieldRefs, handleSave)
-
   return (
-    <div className="settings-inline-form">
-      <PhotoPicker value={photo} onChange={setPhoto} />
-      <div className="m3-field">
-        <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)}
-          placeholder=" " autoFocus onKeyDown={onKey(0)} />
-        <label className="m3-field__label">Full name</label>
-      </div>
-      <div className="m3-field">
-        <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder=" " type="email" onKeyDown={onKey(1)} />
-        <label className="m3-field__label">Email (optional)</label>
-      </div>
-      <div className="m3-field m3-field--select">
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
-          <option value="__custom__">+ New role…</option>
-        </select>
-        <label className="m3-field__label">Role</label>
-      </div>
-      {role === '__custom__' && (
-        <div className="m3-field">
-          <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
-            placeholder=" " onKeyDown={onKey(2)} />
-          <label className="m3-field__label">Role name</label>
-        </div>
-      )}
-      <div className="settings-inline-actions" style={{ justifyContent: 'space-between' }}>
-        <button className="btn-danger" style={{ fontSize: 12, padding: '5px 12px' }}
-          onClick={() => { onDone(); onDelete?.() }}>
-          Delete
-        </button>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onDone}>
-            Cancel
-          </button>
-          <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleSave}
-            disabled={saving || !name.trim()}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Box sx={{ p: 2, background: '#f9fafb', borderRadius: 2, mt: 0.5, mb: 1 }}>
+      <Stack spacing={1.5}>
+        <TextField
+          label="Full name" size="small" fullWidth
+          value={name} onChange={e => setName(e.target.value)}
+          autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
+        />
+        <TextField
+          label="Email (optional)" size="small" fullWidth type="email"
+          value={email} onChange={e => setEmail(e.target.value)}
+        />
+        <FormControl size="small" fullWidth>
+          <InputLabel>Role</InputLabel>
+          <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+            {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+            <MenuItem value="__custom__">+ New role…</MenuItem>
+          </Select>
+        </FormControl>
+        {role === '__custom__' && (
+          <TextField
+            label="Role name" size="small" fullWidth
+            value={customRole} onChange={e => setCustomRole(e.target.value)}
+          />
+        )}
+        <Box sx={{ background: '#eeeff1', borderRadius: 2, p: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Profile photo</Typography>
+          <PhotoPicker value={photo} onChange={setPhoto} />
+        </Box>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ width: '100%' }}>
+          <Button size="small" color="error" onClick={() => { onDone(); onDelete?.() }}>Delete</Button>
+          <Stack direction="row" spacing={1}>
+            <Button size="small" onClick={onDone}>Cancel</Button>
+            <Button size="small" variant="contained" onClick={handleSave} disabled={saving || !name.trim()}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Stack>
+        </Stack>
+      </Stack>
+    </Box>
   )
 }
 
-// ── Add person form (combobox style) ─────────────────────────────────────────
+// ── Add person form ───────────────────────────────────────────────────────────
 function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) {
   const [query,      setQuery]      = useState('')
   const [open,       setOpen]       = useState(false)
@@ -103,22 +114,15 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
   const [customRole, setCustomRole] = useState('')
   const [saving,     setSaving]     = useState(false)
 
-  const inputRef      = useRef(null)
-  const emailRef      = useRef(null)
-  const customRoleRef = useRef(null)
-
   const filtered = recentPeople.filter(p =>
     !query || p.name?.toLowerCase().includes(query.toLowerCase()) ||
     p.email?.toLowerCase().includes(query.toLowerCase())
   )
 
   const handleSelect = (person) => {
-    setSelected(person)
-    setQuery(person.name)
-    setEmail(person.email || '')
-    setPhoto(person.photo || null)
-    setRole(person.role || 'Designer')
-    setOpen(false)
+    setSelected(person); setQuery(person.name)
+    setEmail(person.email || ''); setPhoto(person.photo || null)
+    setRole(person.role || 'Designer'); setOpen(false)
   }
 
   const isNew = !selected && query.trim().length > 0
@@ -128,114 +132,95 @@ function AddPersonForm({ roles, onSave, onDone, onAddRole, recentPeople = [] }) 
     setSaving(true)
     const roleToUse = role === '__custom__' ? customRole.trim() : role
     if (roleToUse && !roles?.includes(roleToUse)) await onAddRole?.(roleToUse)
-    await onSave({
-      name:  query.trim(),
-      email: email.trim() || null,
-      photo: photo || null,
-      role:  roleToUse || 'Designer',
-    })
-    setSaving(false)
-    onDone()
+    await onSave({ name: query.trim(), email: email.trim() || null, photo: photo || null, role: roleToUse || 'Designer' })
+    setSaving(false); onDone()
   }
 
-  const fieldRefs = [inputRef, ...(isNew ? [emailRef] : []), ...(role === '__custom__' ? [customRoleRef] : [])]
-  const onKey = useEnterNav(fieldRefs, handleSave)
-
   return (
-    <div className="settings-inline-form" style={{ position: 'relative' }}>
-      <div style={{ position: 'relative' }}>
-        <div className="m3-field" style={{ marginBottom: 0 }}>
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
+    <Box sx={{ p: 2, background: '#f9fafb', borderRadius: 2, mt: 0.5, mb: 1, position: 'relative' }}>
+      <Stack spacing={1.5}>
+        <Box sx={{ position: 'relative' }}>
+          <TextField
+            label="Name or email" size="small" fullWidth
+            value={query} autoFocus
+            onChange={e => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder=" "
-            autoFocus
-            onKeyDown={onKey(0)}
           />
-          <label className="m3-field__label">Name or email…</label>
-        </div>
-        {open && (recentPeople.length > 0 || query.length > 0) && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-            background: 'var(--m3-surface)', border: '1px solid var(--m3-outline-variant)', borderRadius: 12,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto',
-            marginTop: 4,
-          }}>
-            {(query.length === 0 ? recentPeople : filtered).map((p) => (
-              <div key={p.email || p.name}
-                onMouseDown={() => handleSelect(p)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--m3-surface-container-high)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = ''}
-              >
-                {p.photo
-                  ? <img src={p.photo} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} alt="" />
-                  : <div style={{ width: 28, height: 28, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                      {p.name?.charAt(0).toUpperCase()}
-                    </div>
-                }
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--m3-on-surface)' }}>{p.name}</div>
-                  {p.email && <div style={{ fontSize: 11, color: 'var(--m3-on-surface-variant)' }}>{p.email}</div>}
-                </div>
-              </div>
-            ))}
-            {query.length > 0 && filtered.length === 0 && (
-              <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--m3-on-surface-variant)' }}>
-                Press Save to add "{query}" as a new person
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {isNew && (
-        <>
-          <div className="m3-field">
-            <input ref={emailRef} value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder=" " type="email" onKeyDown={onKey(1)} />
-            <label className="m3-field__label">Email (optional)</label>
-          </div>
-          <PhotoPicker value={photo} onChange={setPhoto} />
-          <div className="m3-field m3-field--select">
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
-              {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
-              <option value="__custom__">+ New role…</option>
-            </select>
-            <label className="m3-field__label">Role</label>
-          </div>
-          {role === '__custom__' && (
-            <div className="m3-field">
-              <input ref={customRoleRef} value={customRole} onChange={(e) => setCustomRole(e.target.value)}
-                placeholder=" " onKeyDown={onKey(2)} />
-              <label className="m3-field__label">Role name</label>
-            </div>
+          {open && (recentPeople.length > 0 || query.length > 0) && (
+            <Box sx={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1400,
+              background: '#fff', border: '1px solid', borderColor: 'divider',
+              borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+              maxHeight: 200, overflowY: 'auto', mt: 0.5,
+            }}>
+              {(query.length === 0 ? recentPeople : filtered).map(p => (
+                <Box key={p.email || p.name} onMouseDown={() => handleSelect(p)}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px', cursor: 'pointer', '&:hover': { background: '#f3f4f6' } }}>
+                  {p.photo
+                    ? <img src={p.photo} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                    : <Box sx={{ width: 28, height: 28, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                        {p.name?.charAt(0).toUpperCase()}
+                      </Box>
+                  }
+                  <Box>
+                    <Typography variant="body2" fontWeight={500}>{p.name}</Typography>
+                    {p.email && <Typography variant="caption" color="text.secondary">{p.email}</Typography>}
+                  </Box>
+                </Box>
+              ))}
+              {query.length > 0 && filtered.length === 0 && (
+                <Typography variant="caption" sx={{ p: '8px 12px', display: 'block', color: 'text.secondary' }}>
+                  Press Save to add "{query}" as a new person
+                </Typography>
+              )}
+            </Box>
           )}
-        </>
-      )}
+        </Box>
 
-      {selected && (
-        <div className="m3-field m3-field--select">
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {(roles || ['Designer', 'PM', 'Dev']).map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <label className="m3-field__label">Role</label>
-        </div>
-      )}
+        {isNew && (
+          <>
+            <TextField
+              label="Email (optional)" size="small" fullWidth type="email"
+              value={email} onChange={e => setEmail(e.target.value)}
+            />
+            <FormControl size="small" fullWidth>
+              <InputLabel>Role</InputLabel>
+              <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+                {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                <MenuItem value="__custom__">+ New role…</MenuItem>
+              </Select>
+            </FormControl>
+            {role === '__custom__' && (
+              <TextField
+                label="Role name" size="small" fullWidth
+                value={customRole} onChange={e => setCustomRole(e.target.value)}
+              />
+            )}
+            <Box sx={{ background: '#f3f4f6', borderRadius: 2, p: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Profile photo</Typography>
+              <PhotoPicker value={photo} onChange={setPhoto} />
+            </Box>
+          </>
+        )}
 
-      <div className="settings-inline-actions">
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onDone}>
-          Cancel
-        </button>
-        <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }}
-          onClick={handleSave} disabled={saving || !query.trim()}>
-          {saving ? 'Saving…' : selected ? 'Add to board' : 'Save'}
-        </button>
-      </div>
-    </div>
+        {selected && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Role</InputLabel>
+            <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+              {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+
+        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ width: '100%' }}>
+          <Button size="small" onClick={onDone}>Cancel</Button>
+          <Button size="small" variant="contained" onClick={handleSave} disabled={saving || !query.trim()}>
+            {saving ? 'Saving…' : selected ? 'Add to board' : 'Save'}
+          </Button>
+        </Stack>
+      </Stack>
+    </Box>
   )
 }
 
@@ -255,36 +240,34 @@ function AddPhaseForm({ existingPhases, onSave, onDone }) {
   }
 
   return (
-    <div className="settings-inline-form">
-      <input value={name} onChange={(e) => setName(e.target.value)}
-        placeholder="Phase name" autoFocus
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }} />
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-        {PHASE_COLORS.map(c => (
-          <button key={c} type="button" onClick={() => setColor(c)}
-            style={{ width: 20, height: 20, borderRadius: '50%', background: c, cursor: 'pointer',
-              border: color === c ? '2px solid var(--m3-primary)' : '2px solid transparent', padding: 0 }} />
-        ))}
-      </div>
-      <div className="settings-inline-actions">
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onDone}>
-          Cancel
-        </button>
-        <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }}
-          onClick={handleSave} disabled={!name.trim()}>
-          Add
-        </button>
-      </div>
-    </div>
+    <Box sx={{ p: 2, background: '#f9fafb', borderRadius: 2, mt: 0.5 }}>
+      <Stack spacing={1.5}>
+        <TextField
+          label="Phase name" size="small" fullWidth value={name}
+          onChange={e => setName(e.target.value)} autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
+        />
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+          {PHASE_COLORS.map(c => (
+            <Box key={c} onClick={() => setColor(c)} sx={{
+              width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer',
+              border: color === c ? '3px solid #111827' : '2px solid transparent',
+              transition: 'border 0.12s',
+            }} />
+          ))}
+        </Box>
+        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ width: '100%' }}>
+          <Button size="small" onClick={onDone}>Cancel</Button>
+          <Button size="small" variant="contained" onClick={handleSave} disabled={!name.trim()}>Add</Button>
+        </Stack>
+      </Stack>
+    </Box>
   )
 }
 
-// ── Board rename modal ────────────────────────────────────────────────────────
-function RenameBoardModal({ board, onSave, onClose }) {
+// ── Board rename dialog ───────────────────────────────────────────────────────
+function RenameBoardDialog({ board, onSave, onClose }) {
   const [name, setName] = useState(board?.name || '')
-  const inputRef = useRef(null)
-
-  useEffect(() => { inputRef.current?.focus() }, [])
 
   const handleSave = () => {
     if (name.trim() && name.trim() !== board?.name) onSave(board.id, name.trim())
@@ -292,27 +275,23 @@ function RenameBoardModal({ board, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 360 }} onClick={e => e.stopPropagation()}>
-        <div className="modal__header">
-          <span className="modal__title">Rename board</span>
-          <button className="modal__close" onClick={onClose}><CloseIcon /></button>
-        </div>
-        <div className="modal__body">
-          <div className="field">
-            <label className="field__label">Board name</label>
-            <input ref={inputRef} className="field__input" value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
-              placeholder="Board name" />
-          </div>
-          <div className="modal-footer">
-            <button className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave} disabled={!name.trim()}>Save</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Rename board
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <TextField
+          label="Board name" size="small" fullWidth autoFocus sx={{ mt: 0.5 }}
+          value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!name.trim()}>Save</Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -338,192 +317,162 @@ export default function Settings({
 
   return (
     <>
-      <div className="settings-overlay" onClick={onClose} />
-      <div className="settings-panel">
-        <div className="settings-panel__header">
-          <span className="settings-panel__title">Settings</span>
-          <button className="settings-panel__close" onClick={onClose}><CloseIcon /></button>
-        </div>
+      <Box className="settings-overlay" onClick={onClose} />
+      <Box className="settings-panel">
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '16px 20px', borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+          <Typography variant="subtitle1">Settings</Typography>
+          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        </Box>
 
-        <div className="settings-panel__body">
+        <Box sx={{ overflowY: 'auto', flex: 1, p: '8px 0' }}>
 
-          {/* ── People section ─────────────────────────────────────── */}
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <span className="settings-section__title">People</span>
-              {!adding && <button className="settings-section__add" onClick={() => { setAdding(true); setEditingId(null) }}>+ Add person</button>}
-            </div>
+          {/* ── People ── */}
+          <Box sx={{ px: 2.5, py: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2" color="text.secondary">People</Typography>
+              {!adding && (
+                <Button size="small" startIcon={<AddIcon />} onClick={() => { setAdding(true); setEditingId(null) }}>
+                  Add person
+                </Button>
+              )}
+            </Box>
 
-            {/* People list */}
-            {people.map((person) => (
-              <div key={person.id}>
-                <div
-                  className="settings-item settings-item--hoverable"
-                  onClick={() => { setEditingId(editingId === person.id ? null : person.id) }}
+            {people.map(person => (
+              <Box key={person.id}>
+                <Box
+                  onClick={() => setEditingId(editingId === person.id ? null : person.id)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                    borderRadius: 2, cursor: 'pointer', transition: 'background 0.12s',
+                    '&:hover': { background: '#f3f4f6' },
+                  }}
                 >
-                  <div
-                    className="settings-item__avatar"
-                    style={{ background: getAvatarColor(person.name) }}
-                  >
-                    {person.photo
-                      ? <img src={person.photo} alt="" />
-                      : person.name?.charAt(0).toUpperCase()
-                    }
-                  </div>
-                  <div className="settings-item__info">
-                    <div className="settings-item__name">{person.name}</div>
-                    <div className="settings-item__sub">{person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}</div>
-                  </div>
-                  <ChevronRightSmall rotated={editingId === person.id} />
-                </div>
+                  <Box sx={{
+                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                    background: getAvatarColor(person.name), overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, fontWeight: 700, color: '#fff',
+                  }}>
+                    {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={500} noWrap>{person.name}</Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
+                    </Typography>
+                  </Box>
+                  <ChevronRightIcon sx={{
+                    fontSize: 18, color: 'text.secondary', flexShrink: 0,
+                    transform: editingId === person.id ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 0.2s',
+                  }} />
+                </Box>
                 {editingId === person.id && (
                   <PersonEditForm
-                    person={person}
-                    roles={roles}
-                    onSave={onUpdatePerson}
-                    onDone={() => setEditingId(null)}
+                    person={person} roles={roles}
+                    onSave={onUpdatePerson} onDone={() => setEditingId(null)}
                     onAddRole={onAddRole}
                     onDelete={() => setConfirmDelete({ id: person.id, name: person.name })}
                   />
                 )}
-              </div>
+              </Box>
             ))}
 
             {people.length === 0 && !adding && (
-              <div style={{ fontSize: 13, color: 'var(--m3-on-surface-variant)', padding: '8px 0' }}>No people yet.</div>
+              <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>No people yet.</Typography>
             )}
-
             {adding && (
-              <AddPersonForm
-                roles={roles}
-                onSave={onAddPerson}
-                onDone={() => setAdding(false)}
-                onAddRole={onAddRole}
-                recentPeople={recentPeople}
-              />
+              <AddPersonForm roles={roles} onSave={onAddPerson} onDone={() => setAdding(false)} onAddRole={onAddRole} recentPeople={recentPeople} />
             )}
+          </Box>
 
-          </div>
+          <Divider sx={{ mx: 2 }} />
 
-          {/* ── Phases section ─────────────────────────────────────── */}
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <span className="settings-section__title">Phases</span>
-              {!addingPhase && isOwner && <button className="settings-section__add" onClick={() => setAddingPhase(true)}>+ Add phase</button>}
-            </div>
+          {/* ── Phases ── */}
+          <Box sx={{ px: 2.5, py: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2" color="text.secondary">Phases</Typography>
+              {!addingPhase && isOwner && (
+                <Button size="small" startIcon={<AddIcon />} onClick={() => setAddingPhase(true)}>Add phase</Button>
+              )}
+            </Box>
 
-            {(boardPhases || []).map((phase) => (
-              <div key={phase.id} className="settings-phase-item">
-                <span className="settings-phase-dot" style={{ background: phase.color }} />
-                <span className="settings-phase-name">{phase.name}</span>
-                <div style={{ flex: 1 }} />
+            {(boardPhases || []).map(phase => (
+              <Box key={phase.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '6px 10px', borderRadius: 2 }}>
+                <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
+                <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
                 {isOwner && (
-                  <button className="settings-item__btn settings-item__btn--delete"
-                    title="Delete phase"
+                  <IconButton size="small" sx={{ width: 28, height: 28 }} title="Delete phase"
                     onClick={() => {
                       if ((boardPhases || []).length <= 1) return
                       onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phase.id))
-                    }}><DeleteIcon size={16} /></button>
+                    }}>
+                    <DeleteIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
                 )}
-              </div>
+              </Box>
             ))}
 
             {addingPhase && isOwner && (
               <AddPhaseForm
                 existingPhases={boardPhases || []}
-                onSave={(phase) => {
-                  onUpdateBoardPhases([...(boardPhases || []), phase])
-                  setAddingPhase(false)
-                }}
+                onSave={phase => { onUpdateBoardPhases([...(boardPhases || []), phase]); setAddingPhase(false) }}
                 onDone={() => setAddingPhase(false)}
               />
             )}
+          </Box>
 
-          </div>
-
-          {/* ── Board section (bottom) ─────────────────────────────── */}
+          {/* ── Board actions ── */}
           {isOwner && (onRenameBoard || onDeleteBoard) && (
-            <div className="settings-section">
-              <div className="settings-section__header">
-                <span className="settings-section__title">Board</span>
-              </div>
-
-              {onRenameBoard && (
-                <button className="settings-action-item" onClick={() => setShowRename(true)}>
-                  <EditIcon size={24} /> Rename board
-                </button>
-              )}
-              {onDeleteBoard && (
-                <button className="settings-action-item settings-action-item--danger" onClick={() => {
-                  if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) {
-                    onDeleteBoard(board.id)
-                    onClose()
-                  }
-                }}>
-                  <DeleteIcon size={24} /> Delete board
-                </button>
-              )}
-            </div>
+            <>
+              <Divider sx={{ mx: 2 }} />
+              <Box sx={{ px: 2.5, py: 1.5 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Board</Typography>
+                {onRenameBoard && (
+                  <Box onClick={() => setShowRename(true)} sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                    borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
+                  }}>
+                    <EditIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    <Typography variant="body2">Rename board</Typography>
+                  </Box>
+                )}
+                {onDeleteBoard && (
+                  <Box onClick={() => { if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) { onDeleteBoard(board.id); onClose() } }}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                      borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#fff0f0' }, color: 'error.main',
+                    }}>
+                    <DeleteIcon sx={{ fontSize: 20 }} />
+                    <Typography variant="body2" color="error">Delete board</Typography>
+                  </Box>
+                )}
+              </Box>
+            </>
           )}
-        </div>
+        </Box>
 
+        {/* Confirm delete */}
         {confirmDelete && (
-          <div className="settings-confirm">
-            <div className="settings-confirm__text">
+          <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider', background: '#fff8f8' }}>
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
               Delete <strong>{confirmDelete.name}</strong>? This cannot be undone.
-            </div>
-            <div className="settings-confirm__actions">
-              <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={() => setConfirmDelete(null)}>
-                Cancel
-              </button>
-              <button className="btn-danger" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleDeleteConfirmed}>
-                Delete
-              </button>
-            </div>
-          </div>
+            </Typography>
+            <Stack direction="row" spacing={1} justifyContent="flex-end">
+              <Button size="small" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+              <Button size="small" variant="contained" color="error" onClick={handleDeleteConfirmed}>Delete</Button>
+            </Stack>
+          </Box>
         )}
-      </div>
+      </Box>
 
       {showRename && (
-        <RenameBoardModal
-          board={board}
-          onSave={onRenameBoard}
-          onClose={() => setShowRename(false)}
-        />
+        <RenameBoardDialog board={board} onSave={onRenameBoard} onClose={() => setShowRename(false)} />
       )}
     </>
   )
 }
 
-// ── Icons (Material Design, 24px default) ─────────────────────────────────────
-export const EditIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-  </svg>
-)
-
-export const DeleteIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="3 6 5 6 21 6"/>
-    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-    <path d="M10 11v6"/>
-    <path d="M14 11v6"/>
-    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-  </svg>
-)
-
-const CloseIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-    <line x1="18" y1="6" x2="6" y2="18"/>
-    <line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-)
-
-const ChevronRightSmall = ({ rotated }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-    strokeLinecap="round" style={{ flexShrink: 0, color: 'var(--m3-on-surface-variant)',
-      transform: rotated ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
-    <path d="M9 18l6-6-6-6"/>
-  </svg>
-)
+// Re-export icons for backward compat (used in other files)
+export { EditIcon, DeleteIcon }

@@ -1,17 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, AVATAR_COLORS, parseLocalDate } from '../utils/dateUtils'
-
-const CloseIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-    <line x1="18" y1="6" x2="6" y2="18"/>
-    <line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-)
-const ArrowDropDownIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: 'middle', opacity: 0.7 }}>
-    <path d="M6 9l6 6 6-6"/>
-  </svg>
-)
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import InputLabel from '@mui/material/InputLabel'
+import FormControl from '@mui/material/FormControl'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Stack from '@mui/material/Stack'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import InputAdornment from '@mui/material/InputAdornment'
+import CloseIcon from '@mui/icons-material/Close'
+import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 function getTaskDays(startDate, endDate) {
@@ -30,7 +34,6 @@ function normalizePhases(phases, totalDays) {
   }))
 }
 
-// Smart defaults: Discovery & Handoff = 1 week (or proportional), UX+UI split remaining
 function smartDefaultPhases(boardPhases, totalDays) {
   if (!boardPhases || boardPhases.length === 0) return []
   const n   = boardPhases.length
@@ -51,246 +54,294 @@ function smartDefaultPhases(boardPhases, totalDays) {
   return normalizePhases(boardPhases.map(bp => ({ id: bp.id })), totalDays)
 }
 
-// ── Shared shell ─────────────────────────────────────────────────────────────
-function ModalShell({ title, onClose, children }) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <span className="modal__title">{title}</span>
-          <button className="modal__close" onClick={onClose}><CloseIcon /></button>
-        </div>
-        <div className="modal__body">{children}</div>
-      </div>
-    </div>
-  )
-}
-
-function Field({ label, children, isSelect, always }) {
-  // `always`: forces label to float (use for non-input children like comboboxes, pickers)
-  return (
-    <div className={`m3-field${isSelect || always ? ' m3-field--always' : ''}`} style={{ marginBottom: 16 }}>
-      {children}
-      <label className="m3-field__label">{label}</label>
-    </div>
-  )
-}
-
 // ── Photo picker ──────────────────────────────────────────────────────────────
 export function PhotoPicker({ value, onChange }) {
   const ref = useRef()
+
   const handleFile = (e) => {
-    const file = e.target.files[0]; if (!file) return
+    const file = e.target.files[0]
+    if (!file) return
+    // Compress image to max 400px and 80% quality before storing
     const reader = new FileReader()
-    reader.onload = (ev) => onChange(ev.target.result)
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const MAX = 400
+        let w = img.width, h = img.height
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+          else        { w = Math.round(w * MAX / h); h = MAX }
+        }
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        onChange(canvas.toDataURL('image/jpeg', 0.80))
+      }
+      img.src = ev.target.result
+    }
     reader.readAsDataURL(file)
   }
+
   return (
-    <div className="photo-picker">
-      <div className="photo-picker__preview">
-        {value ? <img src={value} alt="" /> : '👤'}
-      </div>
-      <button type="button" className="photo-picker__btn" onClick={() => ref.current.click()}>
-        {value ? 'Change photo' : 'Upload photo'}
-      </button>
-      {value && <button type="button" className="photo-picker__remove" onClick={() => onChange(null)}>Remove</button>}
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{
+        width: 56, height: 56, borderRadius: '50%', overflow: 'hidden',
+        background: '#f3f4f6', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', fontSize: 24, flexShrink: 0,
+        border: '1px solid #e5e7eb',
+      }}>
+        {value ? <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+      </Box>
+      <Stack direction="row" spacing={1}>
+        <Button size="small" variant="outlined" onClick={() => ref.current.click()}>
+          {value ? 'Change photo' : 'Upload photo'}
+        </Button>
+        {value && (
+          <Button size="small" color="error" onClick={() => onChange(null)}>Remove</Button>
+        )}
+      </Stack>
       <input ref={ref} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
-    </div>
+    </Box>
   )
 }
 
-// ── Combobox: choose person from list or create new inline ────────────────────
-// Unified — works for both assignee and PM (no separate teams)
-function PersonCombobox({ value, onChange, options, placeholder, defaultRole, onCreatePerson, onAddRole, roles }) {
-  const [open, setOpen]             = useState(false)
-  const [query, setQuery]           = useState('')
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName]       = useState('')
-  const [newEmail, setNewEmail]     = useState('')
-  const [newRole, setNewRole]       = useState(defaultRole || 'Designer')
-  const [newPhoto, setNewPhoto]     = useState(null)
-  const [creating, setCreating]     = useState(false)
-  const [customRole, setCustomRole] = useState('')
+// ── Combobox ──────────────────────────────────────────────────────────────────
+function PersonCombobox({ value, onChange, options, label, placeholder, defaultRole, onCreatePerson, onAddRole, roles }) {
+  const [open,        setOpen]        = useState(false)
+  const [inputValue,  setInputValue]  = useState('')
+  const [showCreate,  setShowCreate]  = useState(false)
+  const [newName,     setNewName]     = useState('')
+  const [newEmail,    setNewEmail]    = useState('')
+  const [newRole,     setNewRole]     = useState(defaultRole || 'Designer')
+  const [creating,    setCreating]    = useState(false)
+  const [customRole,  setCustomRole]  = useState('')
   const wrapRef = useRef()
 
   const selected = options.find((o) => o.id === value)
+  const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
 
+  // Sync input with selection (only when value changes from outside)
+  useEffect(() => { setInputValue(selected?.name || '') }, [value]) // eslint-disable-line
+
+  // Close on outside click
   useEffect(() => {
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false); setShowCreate(false)
+        // Reset input to selected name if user clicked away without picking
+        setInputValue(selected?.name || '')
+      }
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [selected])
 
-  const filtered = query
-    ? options.filter((o) => o.name?.toLowerCase().includes(query.toLowerCase()))
+  // Filter options based on what's typed (only filter when input differs from selected name)
+  const isTyping = !selected || inputValue !== selected.name
+  const filtered = isTyping && inputValue
+    ? options.filter(o => o.name?.toLowerCase().includes(inputValue.toLowerCase()))
     : options
-
-  const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
 
   const handleCreate = async () => {
     if (!newName.trim()) return
     setCreating(true)
     const roleToUse = newRole === '__custom__' ? customRole.trim() : newRole
-    if (roleToUse && !allRoles.includes(roleToUse)) {
-      await onAddRole?.(roleToUse)
-    }
-    const data = {
-      name:  newName.trim(),
-      email: newEmail.trim() || null,
-      photo: newPhoto,
-      role:  roleToUse || 'Designer',
-    }
-    const id = await onCreatePerson(data)
+    if (roleToUse && !allRoles.includes(roleToUse)) await onAddRole?.(roleToUse)
+    const id = await onCreatePerson({ name: newName.trim(), email: newEmail.trim() || null, photo: null, role: roleToUse || 'Designer' })
     onChange(id)
+    setInputValue(newName.trim())
     setOpen(false); setShowCreate(false)
-    setNewName(''); setNewEmail(''); setNewPhoto(null); setCustomRole(''); setCreating(false)
+    setNewName(''); setNewEmail(''); setCustomRole(''); setCreating(false)
   }
 
   return (
-    <div className="combobox" ref={wrapRef}>
-      {selected ? (
-        <div className="combobox__selected-badge" onClick={() => { setOpen(true); setQuery('') }}>
-          <div className="combobox__option-avatar" style={{ background: getAvatarColor(selected.name) }}>
-            {selected.photo ? <img src={selected.photo} alt="" /> : selected.name?.charAt(0)}
-          </div>
-          <span className="combobox__selected-name">{selected.name}</span>
-          {selected.role && <span style={{ fontSize: 11, color: '#9ca3af' }}>{selected.role}</span>}
-          <span className="combobox__selected-change">change <ArrowDropDownIcon /></span>
-          <button
-            type="button" className="combobox__selected-clear"
-            onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false) }}
-          ><CloseIcon /></button>
-        </div>
-      ) : (
-        <div className="combobox__input-wrap">
-          <input
-            className="combobox__input"
-            placeholder={placeholder}
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
-            onFocus={() => setOpen(true)}
-          />
-        </div>
-      )}
-
-      {open && (
-        <div className="combobox__dropdown">
-          {filtered.map((opt) => (
-            <div key={opt.id} className="combobox__option" onClick={() => { onChange(opt.id); setOpen(false); setQuery('') }}>
-              <div className="combobox__option-avatar" style={{ background: getAvatarColor(opt.name) }}>
-                {opt.photo ? <img src={opt.photo} alt="" /> : opt.name?.charAt(0)}
-              </div>
-              <div>
-                <div className="combobox__option-label">{opt.name}</div>
-                <div className="combobox__option-sub">{opt.role}{opt.email ? ` · ${opt.email}` : ''}</div>
-              </div>
-            </div>
-          ))}
-
-          {!showCreate ? (
-            <div className="combobox__option combobox__option--add" onClick={() => setShowCreate(true)}>
-              + Add new person…
-            </div>
-          ) : (
-            <div className="combobox__inline-form" onClick={(e) => e.stopPropagation()}>
-              <input className="field__input" placeholder="Full name" value={newName}
-                onChange={(e) => setNewName(e.target.value)} autoFocus />
-              <input className="field__input" style={{ marginTop: 6 }} placeholder="Email (optional)"
-                value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
-              <select
-                className="field__input"
-                style={{ marginTop: 6 }}
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
+    <Box ref={wrapRef} sx={{ position: 'relative' }}>
+      {/* Always-visible search TextField */}
+      <TextField
+        label={label}
+        size="small"
+        fullWidth
+        value={inputValue}
+        placeholder={!selected ? placeholder : undefined}
+        onChange={(e) => { setInputValue(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        InputProps={{
+          startAdornment: selected ? (
+            <InputAdornment position="start" sx={{ mr: 0.5 }}>
+              <Box sx={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: getAvatarColor(selected.name),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700, color: '#fff', overflow: 'hidden',
+              }}>
+                {selected.photo
+                  ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : selected.name?.charAt(0)
+                }
+              </Box>
+            </InputAdornment>
+          ) : null,
+          endAdornment: selected ? (
+            <InputAdornment position="end">
+              <IconButton
+                size="small"
+                sx={{ width: 22, height: 22, '& .MuiSvgIcon-root': { fontSize: '14px !important' } }}
+                onMouseDown={e => { e.preventDefault(); onChange(null); setInputValue(''); setOpen(false) }}
               >
-                {allRoles.map((r) => <option key={r} value={r}>{r}</option>)}
-                <option value="__custom__">+ New role…</option>
-              </select>
-              {newRole === '__custom__' && (
-                <input className="field__input" style={{ marginTop: 6 }} placeholder="Role name"
-                  value={customRole} onChange={(e) => setCustomRole(e.target.value)} />
-              )}
-              <div className="combobox__inline-actions" style={{ marginTop: 6 }}>
-                <button className="combobox__inline-add" onClick={handleCreate}
-                  disabled={creating || !newName.trim()}>
-                  {creating ? 'Adding…' : 'Add'}
-                </button>
-                <button className="combobox__inline-cancel"
-                  onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+                <CloseIcon />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        }}
+      />
+
+      {/* Dropdown */}
+      {open && !showCreate && (
+        <Box sx={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
+          background: '#fff', border: '1px solid', borderColor: 'divider',
+          borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          maxHeight: 240, overflowY: 'auto', mt: 0.5,
+        }}>
+          {filtered.map((opt) => (
+            <Box key={opt.id} sx={{
+              display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
+              cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
+            }} onMouseDown={e => { e.preventDefault(); onChange(opt.id); setInputValue(opt.name || ''); setOpen(false) }}>
+              <Box sx={{
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                background: getAvatarColor(opt.name),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden',
+              }}>
+                {opt.photo ? <img src={opt.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : opt.name?.charAt(0)}
+              </Box>
+              <Box>
+                <Typography variant="body2" fontWeight={500}>{opt.name}</Typography>
+                {opt.role && <Typography variant="caption" color="text.secondary">{opt.role}</Typography>}
+              </Box>
+            </Box>
+          ))}
+          <Box sx={{ p: '8px 12px', cursor: 'pointer', color: 'primary.main', fontSize: 13, '&:hover': { background: '#f3f4f6' } }}
+            onMouseDown={e => { e.preventDefault(); setShowCreate(true) }}>
+            + Add new person…
+          </Box>
+        </Box>
       )}
-    </div>
+
+      {/* Create new person panel */}
+      {open && showCreate && (
+        <Box sx={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
+          background: '#fff', border: '1px solid', borderColor: 'divider',
+          borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          p: 1.5, mt: 0.5,
+        }} onMouseDown={e => e.stopPropagation()}>
+          <TextField size="small" fullWidth placeholder="Full name" value={newName}
+            onChange={e => setNewName(e.target.value)} autoFocus sx={{ mb: 1 }} />
+          <TextField size="small" fullWidth placeholder="Email (optional)"
+            value={newEmail} onChange={e => setNewEmail(e.target.value)} sx={{ mb: 1 }} />
+          <FormControl size="small" fullWidth sx={{ mb: 1 }}>
+            <Select value={newRole} onChange={e => setNewRole(e.target.value)}>
+              {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+              <MenuItem value="__custom__">+ New role…</MenuItem>
+            </Select>
+          </FormControl>
+          {newRole === '__custom__' && (
+            <TextField size="small" fullWidth placeholder="Role name"
+              value={customRole} onChange={e => setCustomRole(e.target.value)} sx={{ mb: 1 }} />
+          )}
+          <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Button size="small" onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>Cancel</Button>
+            <Button size="small" variant="contained" onClick={handleCreate} disabled={creating || !newName.trim()}>
+              {creating ? 'Adding…' : 'Add'}
+            </Button>
+          </Stack>
+        </Box>
+      )}
+    </Box>
   )
 }
 
-// ── Task fields (shared between Add and Edit) ─────────────────────────────────
+// ── Task fields ───────────────────────────────────────────────────────────────
 function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases }) {
-  // For PM field: only show people with PM role
-  const pmPeople = people.filter((p) => p.role === 'PM')
+  const pmPeople = people.filter(p => p.role === 'PM')
 
   return (
-    <>
-      <Field label="Task title *">
-        <input
-          value={form.title}
-          onChange={(e) => set('title', e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onTitleEnter?.() } }}
-          placeholder=" "
-          autoFocus
+    <Stack spacing={2} sx={{ pt: 1.5 }}>
+      <TextField
+        label="Task title *"
+        value={form.title}
+        onChange={(e) => set('title', e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onTitleEnter?.() } }}
+        autoFocus
+        fullWidth
+      />
+
+      <PersonCombobox
+        label="Assignee"
+        value={form.assigneeId}
+        onChange={(v) => set('assigneeId', v)}
+        options={people}
+        placeholder="Search or add…"
+        defaultRole="Designer"
+        onCreatePerson={onCreatePerson}
+        onAddRole={onAddRole}
+        roles={roles}
+      />
+
+      <PersonCombobox
+        label="PM"
+        value={form.pmId}
+        onChange={(v) => set('pmId', v)}
+        options={pmPeople}
+        placeholder="Search or add PM…"
+        defaultRole="PM"
+        onCreatePerson={onCreatePerson}
+        onAddRole={onAddRole}
+        roles={roles}
+      />
+
+      <Stack direction="row" spacing={2}>
+        <TextField
+          label="Start date"
+          type="date"
+          value={form.startDate}
+          onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)}
+          fullWidth
+          InputLabelProps={{ shrink: true }}
         />
-      </Field>
-
-      <Field label="Assignee" always>
-        <PersonCombobox
-          value={form.assigneeId}
-          onChange={(v) => set('assigneeId', v)}
-          options={people}
-          placeholder="Search or add person…"
-          defaultRole="Designer"
-          onCreatePerson={onCreatePerson}
-          onAddRole={onAddRole}
-          roles={roles}
+        <TextField
+          label="End date"
+          type="date"
+          value={form.endDate}
+          inputProps={{ min: form.startDate }}
+          onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)}
+          fullWidth
+          InputLabelProps={{ shrink: true }}
         />
-      </Field>
+      </Stack>
 
-      <Field label="PM" always>
-        <PersonCombobox
-          value={form.pmId}
-          onChange={(v) => set('pmId', v)}
-          options={pmPeople}
-          placeholder="Search or add PM…"
-          defaultRole="PM"
-          onCreatePerson={onCreatePerson}
-          onAddRole={onAddRole}
-          roles={roles}
-        />
-      </Field>
-
-      <div className="field__row">
-        <Field label="Start date" always>
-          <input type="date" value={form.startDate}
-            onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)} />
-        </Field>
-        <Field label="End date" always>
-          <input type="date" value={form.endDate} min={form.startDate}
-            onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)} />
-        </Field>
-      </div>
-
-      {/* Phases picker */}
       {boardPhases && boardPhases.length > 0 && (
-        <Field label="Phases" always>
-          <div className="task-phases-picker">
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Phases</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
             {boardPhases.map(bp => {
               const isActive = (form.phases || []).some(p => p.id === bp.id)
               return (
-                <label key={bp.id} className={`phase-checkbox${isActive ? ' phase-checkbox--active' : ''}`}>
-                  <input type="checkbox" checked={isActive} onChange={() => {
+                <Box
+                  key={bp.id}
+                  component="label"
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.75,
+                    px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
+                    border: '1.5px solid',
+                    borderColor: isActive ? bp.color : 'divider',
+                    background: isActive ? `${bp.color}18` : 'transparent',
+                    transition: 'all 0.12s',
+                  }}
+                >
+                  <input type="checkbox" checked={isActive} style={{ display: 'none' }} onChange={() => {
                     const cur = form.phases || []
                     let newPhases
                     if (isActive) {
@@ -298,39 +349,42 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
                       newPhases = cur.filter(p => p.id !== bp.id)
                     } else {
                       const added = [...cur, { id: bp.id, days: 1 }]
-                      const ordered = boardPhases
-                        .filter(b => added.some(p => p.id === b.id))
-                        .map(b => ({ id: b.id, days: 1 }))
+                      const ordered = boardPhases.filter(b => added.some(p => p.id === b.id)).map(b => ({ id: b.id, days: 1 }))
                       newPhases = normalizePhases(ordered, getTaskDays(form.startDate, form.endDate))
                     }
                     set('phases', newPhases)
                   }} />
-                  <span className="phase-checkbox__dot" style={{ background: bp.color }} />
-                  <span className="phase-checkbox__label">{bp.name}</span>
-                </label>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
+                  <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
+                </Box>
               )
             })}
-          </div>
-        </Field>
+          </Box>
+        </Box>
       )}
 
-      {/* Task color */}
-      <Field label="Color" always>
-        <div className="task-color-picker">
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Color</Typography>
+        <Stack direction="row" spacing={1}>
           {[
             { value: 'white', label: 'White', hex: '#ffffff' },
             { value: 'gray',  label: 'Gray',  hex: '#eeeeee' },
           ].map(c => (
-            <button key={c.value} type="button"
-              className={`task-color-swatch${(form.taskColor || 'white') === c.value ? ' task-color-swatch--active' : ''}`}
-              style={{ background: c.hex }}
+            <Box
+              key={c.value}
               onClick={() => set('taskColor', c.value)}
+              sx={{
+                width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
+                background: c.hex,
+                border: (form.taskColor || 'white') === c.value ? '3px solid #111827' : '2px solid #d1d5db',
+                transition: 'border 0.12s',
+              }}
               title={c.label}
             />
           ))}
-        </div>
-      </Field>
-    </>
+        </Stack>
+      </Box>
+    </Stack>
   )
 }
 
@@ -347,11 +401,10 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   const [form, setForm] = useState({
     title: '', assigneeId: defaultAssigneeId || '', pmId: '',
     startDate: toDateString(startDate), endDate: toDateString(endDate),
-    taskColor: 'white',
-    phases: defaultPhases,
+    taskColor: 'white', phases: defaultPhases,
   })
   const [endDateTouched, setEndDateTouched] = useState(false)
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleStartDateChange = (v) => {
     set('startDate', v)
@@ -360,216 +413,181 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({
-      ...form,
-      assigneeId: form.assigneeId || null,
-      pmId: form.pmId || null,
-      taskColor: form.taskColor || 'white',
-      phases: form.phases || [],
-    })
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
     onClose()
   }
 
   return (
-    <ModalShell title="Add Task" onClose={onClose}>
-      <TaskFields
-        form={form} set={set} people={people} roles={roles}
-        boardPhases={boardPhases}
-        onCreatePerson={onCreatePerson} onAddRole={onAddRole}
-        onStartDateChange={handleStartDateChange}
-        onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
-        onTitleEnter={() => { if (form.title.trim()) handleSave() }}
-      />
-      <div className="modal-footer">
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Add Task</button>
-      </div>
-    </ModalShell>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Add Task
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <TaskFields
+          form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
+          onCreatePerson={onCreatePerson} onAddRole={onAddRole}
+          onStartDateChange={handleStartDateChange}
+          onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
+          onTitleEnter={() => { if (form.title.trim()) handleSave() }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!form.title.trim()}>Add Task</Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-// ── Edit Task Modal ────────────────────────────────────────────────────────────
+// ── Edit Task Modal ───────────────────────────────────────────────────────────
 export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onAddRole }) {
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
-    pmId:       task.pmId       || task.teamId || '',  // support legacy teamId
+    pmId:       task.pmId       || task.teamId || '',
     startDate:  task.startDate  || '',
     endDate:    task.endDate    || '',
     taskColor:  task.taskColor  || 'white',
     phases:     task.phases     || [],
   })
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({
-      ...form,
-      assigneeId: form.assigneeId || null,
-      pmId: form.pmId || null,
-      taskColor: form.taskColor || 'white',
-      phases: form.phases || [],
-    })
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
     onClose()
   }
 
   return (
-    <ModalShell title="Edit Task" onClose={onClose}>
-      <TaskFields
-        form={form} set={set} people={people} roles={roles}
-        boardPhases={boardPhases}
-        onCreatePerson={onCreatePerson} onAddRole={onAddRole}
-        onTitleEnter={() => { if (form.title.trim()) handleSave() }}
-      />
-      <div className="modal-footer">
-        <button className="btn-danger" onClick={() => { onDelete(); onClose() }}>Delete</button>
-        <div style={{ flex: 1 }} />
-        <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleSave} disabled={!form.title.trim()}>Save Changes</button>
-      </div>
-    </ModalShell>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Edit Task
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <TaskFields
+          form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
+          onCreatePerson={onCreatePerson} onAddRole={onAddRole}
+          onTitleEnter={() => { if (form.title.trim()) handleSave() }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button color="error" onClick={() => { onDelete(); onClose() }}>Delete</Button>
+        <Box sx={{ flex: 1 }} />
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!form.title.trim()}>Save Changes</Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
 // ── Share Modal ───────────────────────────────────────────────────────────────
-// Import the shared rules constant from App — re-defined here for the modal
 import { PUBLIC_FIRESTORE_RULES } from '../App'
 
 const ACCESS_OPTIONS = [
-  {
-    value: 'off',
-    icon: '🔒',
-    label: 'Private',
-    desc: 'Only signed-in members can view or edit.',
-  },
-  {
-    value: 'view',
-    icon: '👁',
-    label: 'View only',
-    desc: 'Anyone with the link can view — no account needed.',
-  },
-  {
-    value: 'edit',
-    icon: '✏️',
-    label: 'Edit',
-    desc: 'Anyone with the link can view and edit — no account needed.',
-  },
+  { value: 'off',  icon: '🔒', label: 'Private',   desc: 'Only signed-in members can view or edit.' },
+  { value: 'view', icon: '👁',  label: 'View only', desc: 'Anyone with the link can view — no account needed.' },
+  { value: 'edit', icon: '✏️', label: 'Edit',       desc: 'Anyone with the link can view and edit — no account needed.' },
 ]
 
 export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
-  // Support legacy isPublic flag
   const currentAccess = board?.publicAccess || (board?.isPublic ? 'view' : 'off')
   const [access,      setAccess]      = useState(currentAccess)
   const [copied,      setCopied]      = useState(false)
   const [copiedRules, setCopiedRules] = useState(false)
   const [showRules,   setShowRules]   = useState(false)
 
-  const handleAccess = (val) => {
-    setAccess(val)
-    onSetPublicAccess?.(val)
-  }
-
-  const copy = () => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopied(true); setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  const copyRules = () => {
-    navigator.clipboard.writeText(PUBLIC_FIRESTORE_RULES).then(() => {
-      setCopiedRules(true); setTimeout(() => setCopiedRules(false), 2000)
-    })
-  }
-
+  const handleAccess = (val) => { setAccess(val); onSetPublicAccess?.(val) }
+  const copy = () => { navigator.clipboard.writeText(shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }
+  const copyRules = () => { navigator.clipboard.writeText(PUBLIC_FIRESTORE_RULES).then(() => { setCopiedRules(true); setTimeout(() => setCopiedRules(false), 2000) }) }
   const isPublic = access !== 'off'
 
   return (
-    <ModalShell title="Share Board" onClose={onClose}>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Share Board
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
+          {/* Access selector */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Access level</Typography>
+            <Stack spacing={0.75}>
+              {ACCESS_OPTIONS.map(opt => (
+                <Box key={opt.value} onClick={() => handleAccess(opt.value)} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5,
+                  p: '10px 14px', borderRadius: 2, cursor: 'pointer',
+                  border: '1.5px solid', transition: 'all 0.12s',
+                  borderColor: access === opt.value ? 'primary.main' : 'divider',
+                  background: access === opt.value ? '#f9fafb' : '#fff',
+                }}>
+                  <Typography sx={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{opt.icon}</Typography>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" fontWeight={600}>{opt.label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{opt.desc}</Typography>
+                  </Box>
+                  <Box sx={{
+                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                    border: access === opt.value ? '5px solid #111827' : '1.5px solid #d1d5db',
+                    background: '#fff', transition: 'all 0.12s',
+                  }} />
+                </Box>
+              ))}
+            </Stack>
+          </Box>
 
-      {/* ── Access level selector ── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: 10 }}>Access level</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {ACCESS_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => handleAccess(opt.value)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
-                border: access === opt.value ? '2px solid #111827' : '1.5px solid #e5e7eb',
-                background: access === opt.value ? '#f9fafb' : '#fff',
-                transition: 'all 0.12s',
-              }}>
-              <span style={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{opt.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{opt.label}</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>{opt.desc}</div>
-              </div>
-              <div style={{
-                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                border: access === opt.value ? '5px solid #111827' : '1.5px solid #d1d5db',
-                background: '#fff',
-                transition: 'all 0.12s',
-              }} />
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Link */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              {isPublic ? 'Shareable link' : 'Board link (sign in required)'}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                size="small" fullWidth value={shareUrl}
+                inputProps={{ readOnly: true }}
+                onFocus={e => e.target.select()}
+              />
+              <Button variant={copied ? 'outlined' : 'contained'} onClick={copy} sx={{ flexShrink: 0 }}>
+                {copied ? '✓ Copied!' : 'Copy'}
+              </Button>
+            </Stack>
+          </Box>
 
-      {/* ── Board link ── */}
-      <div style={{ marginBottom: isPublic ? 16 : 0 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: 8 }}>
-          {isPublic ? 'Shareable link' : 'Board link (sign in required)'}
-        </div>
-        <div className="share-link-row__controls">
-          <input readOnly className="share-link-row__input" value={shareUrl} onFocus={(e) => e.target.select()} />
-          <button className={`share-copy-btn${copied ? ' share-copy-btn--copied' : ''}`} onClick={copy}>
-            {copied ? '✓ Copied!' : 'Copy link'}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Firestore rules notice (only when public) ── */}
-      {isPublic && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>
-              ⚠️ Firestore rules update required
-            </span>
-            <button
-              onClick={() => setShowRules(r => !r)}
-              style={{ fontSize: 11, color: '#92400e', background: 'none', border: 'none', cursor: 'pointer',
-                       padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
-              {showRules ? 'Hide ▲' : 'Show ▼'}
-            </button>
-          </div>
-          <div style={{ fontSize: 11, color: '#78350f', marginTop: 4 }}>
-            Public access won't work until you update your Firestore security rules.
-          </div>
-
-          {showRules && (
-            <div style={{ marginTop: 10 }}>
-              <pre style={{ background: '#fff', borderRadius: 6, padding: '10px 12px', fontSize: 10,
-                            color: '#111827', overflowX: 'auto', whiteSpace: 'pre', margin: 0,
-                            border: '1px solid #e5e7eb', lineHeight: 1.6 }}>
-                {PUBLIC_FIRESTORE_RULES}
-              </pre>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                <button className={`share-copy-btn${copiedRules ? ' share-copy-btn--copied' : ''}`} onClick={copyRules}>
-                  {copiedRules ? '✓ Copied!' : 'Copy rules'}
-                </button>
-                <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer"
-                   style={{ fontSize: 11, color: '#92400e', fontWeight: 500 }}>
-                  Open Firebase Console →
-                </a>
-              </div>
-            </div>
+          {isPublic && (
+            <Box sx={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 2, p: '10px 14px' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: '#92400e' }}>⚠️ Firestore rules update required</Typography>
+                <Button size="small" sx={{ color: '#92400e', minWidth: 0, fontSize: 11 }} onClick={() => setShowRules(r => !r)}>
+                  {showRules ? 'Hide ▲' : 'Show ▼'}
+                </Button>
+              </Box>
+              <Typography variant="caption" sx={{ color: '#78350f', mt: 0.5, display: 'block' }}>
+                Public access won't work until you update your Firestore security rules.
+              </Typography>
+              {showRules && (
+                <Box sx={{ mt: 1.5 }}>
+                  <Box component="pre" sx={{ background: '#fff', borderRadius: 1.5, p: '10px 12px', fontSize: 10, color: '#111827', overflowX: 'auto', whiteSpace: 'pre', m: 0, border: '1px solid #e5e7eb', lineHeight: 1.6 }}>
+                    {PUBLIC_FIRESTORE_RULES}
+                  </Box>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                    <Button size="small" variant={copiedRules ? 'outlined' : 'contained'} onClick={copyRules}>
+                      {copiedRules ? '✓ Copied!' : 'Copy rules'}
+                    </Button>
+                    <Typography component="a" href="https://console.firebase.google.com" target="_blank" rel="noreferrer" variant="caption" sx={{ color: '#92400e', fontWeight: 500 }}>
+                      Open Firebase Console →
+                    </Typography>
+                  </Stack>
+                </Box>
+              )}
+            </Box>
           )}
-        </div>
-      )}
-    </ModalShell>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Done</Button>
+      </DialogActions>
+    </Dialog>
   )
 }

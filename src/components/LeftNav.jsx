@@ -1,15 +1,35 @@
 import { useState } from 'react'
+import Avatar from '@mui/material/Avatar'
+import IconButton from '@mui/material/IconButton'
+import Button from '@mui/material/Button'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Tooltip from '@mui/material/Tooltip'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
+import Divider from '@mui/material/Divider'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
+import TextField from '@mui/material/TextField'
+import Stack from '@mui/material/Stack'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import AddIcon from '@mui/icons-material/Add'
+import StarIcon from '@mui/icons-material/Star'
+import StarBorderIcon from '@mui/icons-material/StarBorder'
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined'
+import LogoutIcon from '@mui/icons-material/Logout'
 import { signOutUser, setUserProfile } from '../firebase'
 import { getAvatarColor } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
 
-// Transparent 1×1 GIF — used as invisible drag image so browser shows nothing
+// Transparent 1×1 GIF — used as invisible drag image
 const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
 // ── Profile editor panel ──────────────────────────────────────────────────────
 function ProfilePanel({ user, profile, onSave, onClose }) {
-  const [name,  setName]  = useState(profile?.name  || user?.displayName || '')
-  const [photo, setPhoto] = useState(profile?.photo || user?.photoURL    || null)
+  const [name,   setName]   = useState(profile?.name  || user?.displayName || '')
+  const [photo,  setPhoto]  = useState(profile?.photo || user?.photoURL    || null)
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
@@ -19,24 +39,22 @@ function ProfilePanel({ user, profile, onSave, onClose }) {
   }
 
   return (
-    <div className="left-nav__profile-panel">
-      <div className="left-nav__profile-panel__title">Edit profile</div>
+    <Box sx={{ p: 2, background: '#f9fafb', borderRadius: 2, mb: 1, border: '1px solid', borderColor: 'divider' }}>
+      <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary' }}>Edit profile</Typography>
       <PhotoPicker value={photo} onChange={setPhoto} />
-      <input
-        className="left-nav__profile-input"
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Display name"
+      <TextField
+        label="Display name" size="small" fullWidth
+        value={name} onChange={e => setName(e.target.value)}
+        sx={{ mb: 1.5 }}
+        onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
       />
-      <div className="left-nav__profile-actions">
-        <button className="btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} onClick={handleSave} disabled={saving}>
+      <Stack direction="row" spacing={1} justifyContent="flex-end">
+        <Button size="small" onClick={onClose}>Cancel</Button>
+        <Button size="small" variant="contained" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Stack>
+    </Box>
   )
 }
 
@@ -46,16 +64,16 @@ export default function LeftNav({
   onSelectBoard, onNewBoard, onReorderBoards, onToggleFavorite,
   isOverlay, onClose, onDock,
 }) {
-  const [showUserMenu,   setShowUserMenu]   = useState(false)
-  const [showProfile,    setShowProfile]    = useState(false)
-  const [draggedId,      setDraggedId]      = useState(null)
-  const [dragOverId,     setDragOverId]     = useState(null)
-  const [dragPosition,   setDragPosition]   = useState(null)
+  const [menuAnchor,  setMenuAnchor]  = useState(null)
+  const [showProfile, setShowProfile] = useState(false)
+  const [draggedId,   setDraggedId]   = useState(null)
+  const [dragOverId,  setDragOverId]  = useState(null)
+  const [dragPosition,setDragPosition]= useState(null)
 
   const displayName  = userProfile?.name || user?.displayName || user?.email?.split('@')[0] || 'You'
   const photoUrl     = userProfile?.photo || user?.photoURL || null
-  const avatarLetter = displayName.charAt(0).toUpperCase()
   const avatarColor  = getAvatarColor(displayName)
+  const avatarLetter = displayName.charAt(0).toUpperCase()
 
   const favoriteBoards = boards.filter(b => favoriteBoardIds.includes(b.id))
   const regularBoards  = boards.filter(b => !favoriteBoardIds.includes(b.id))
@@ -92,7 +110,7 @@ export default function LeftNav({
   const resetDrag = () => { setDraggedId(null); setDragOverId(null); setDragPosition(null) }
 
   const renderBoardItem = (board) => (
-    <div
+    <Box
       key={board.id}
       className={[
         'left-nav__board-wrap',
@@ -105,140 +123,145 @@ export default function LeftNav({
       onDrop={e => handleDrop(e, board.id)}
       onDragEnd={resetDrag}
     >
-      <div className={`left-nav__board-row${board.id === activeBoardId ? ' left-nav__board-row--active' : ''}${draggedId === board.id ? ' left-nav__board-row--dragging' : ''}`}>
-        <button
+      <Box
+        className={`left-nav__board-row${board.id === activeBoardId ? ' left-nav__board-row--active' : ''}${draggedId === board.id ? ' left-nav__board-row--dragging' : ''}`}
+        sx={{ display: 'flex', alignItems: 'center', borderRadius: 2, transition: 'background 0.1s' }}
+      >
+        <Box
+          component="button"
           className="left-nav__board-btn"
           onClick={() => { onSelectBoard(board.id); if (isOverlay) onClose?.() }}
-          title={board.name}
+          sx={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          <span className="left-nav__board-name">{board.name}</span>
-        </button>
+          <Typography variant="body2" noWrap className="left-nav__board-name">{board.name}</Typography>
+        </Box>
 
-        <button
-          className={`left-nav__star-btn${favoriteBoardIds.includes(board.id) ? ' left-nav__star-btn--active' : ''}`}
-          onClick={e => { e.stopPropagation(); onToggleFavorite(board.id) }}
-          title={favoriteBoardIds.includes(board.id) ? 'Remove from favourites' : 'Add to favourites'}
-        >
-          <StarIcon filled={favoriteBoardIds.includes(board.id)} />
-        </button>
-      </div>
-    </div>
+        <Tooltip title={favoriteBoardIds.includes(board.id) ? 'Remove from favourites' : 'Add to favourites'} placement="right">
+          <IconButton
+            size="small"
+            className={`left-nav__star-btn${favoriteBoardIds.includes(board.id) ? ' left-nav__star-btn--active' : ''}`}
+            onClick={e => { e.stopPropagation(); onToggleFavorite(board.id) }}
+            sx={{ width: 28, height: 28, opacity: 0 }}
+          >
+            {favoriteBoardIds.includes(board.id)
+              ? <StarIcon sx={{ fontSize: 14 }} />
+              : <StarBorderIcon sx={{ fontSize: 14 }} />
+            }
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Box>
   )
 
   return (
     <nav className={`left-nav${isOverlay ? ' left-nav--overlay' : ''}`}>
 
       {/* ── Header ── */}
-      <div className="left-nav__header">
-        <div className="left-nav__brand">
+      <Box className="left-nav__header" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '12px 12px 12px 16px' }}>
+        <Box className="left-nav__brand" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <NavLogo />
-          <span className="left-nav__brand-name">RoadMap</span>
-        </div>
-        {isOverlay ? (
-          <button className="left-nav__toggle" onClick={onDock} title="Dock navigation">
-            <ChevronRight />
-          </button>
-        ) : (
-          <button className="left-nav__toggle" onClick={onClose} title="Collapse navigation">
-            <ChevronLeft />
-          </button>
-        )}
-      </div>
+          <Typography variant="subtitle1" className="left-nav__brand-name">RoadMap</Typography>
+        </Box>
+        <Tooltip title={isOverlay ? 'Dock navigation' : 'Collapse navigation'} placement="right">
+          <IconButton size="small" className="left-nav__toggle" onClick={isOverlay ? onDock : onClose}>
+            {isOverlay ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+      </Box>
 
-      {/* ── Scrollable body ── */}
-      <div className="left-nav__body">
+      {/* ── Body ── */}
+      <Box className="left-nav__body" sx={{ flex: 1, overflowY: 'auto', px: 0 }}>
 
-        {/* Favourites section — only when at least one board is starred */}
         {hasFavorites && (
-          <div className="left-nav__section">
-            <div className="left-nav__section-label">Favourites</div>
-            <div className="left-nav__boards-list">
-              {favoriteBoards.map(renderBoardItem)}
-            </div>
-          </div>
+          <Box className="left-nav__section" sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" color="text.secondary" className="left-nav__section-label" sx={{ px: 1.5, py: 0.5 }}>
+              Favourites
+            </Typography>
+            {favoriteBoards.map(renderBoardItem)}
+          </Box>
         )}
 
-        {/* All Boards section */}
-        <div className="left-nav__section">
-          <div className="left-nav__section-label">
-            <span>Boards</span>
-            <button className="left-nav__new-btn" onClick={onNewBoard} title="New board"><PlusIcon /></button>
-          </div>
-          <div className="left-nav__boards-list">
-            {regularBoards.map(renderBoardItem)}
-            {regularBoards.length === 0 && boards.length > 0 && (
-              <div className="left-nav__empty-boards">All boards are in Favourites</div>
-            )}
-            {boards.length === 0 && (
-              <div className="left-nav__empty-boards">No boards yet</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Footer (user profile) ── */}
-      <div className="left-nav__footer">
-        <div className="left-nav__user-wrap" style={{ position: 'relative' }}>
-          {showProfile && (
-            <ProfilePanel
-              user={user}
-              profile={userProfile}
-              onSave={onUpdateProfile}
-              onClose={() => setShowProfile(false)}
-            />
+        <Box className="left-nav__section">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.5 }}>
+            <Typography variant="subtitle2" color="text.secondary" className="left-nav__section-label">Boards</Typography>
+            <Tooltip title="New board" placement="right">
+              <IconButton size="small" className="left-nav__new-btn" onClick={onNewBoard} sx={{ width: 24, height: 24 }}>
+                <AddIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          {regularBoards.map(renderBoardItem)}
+          {regularBoards.length === 0 && boards.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1, display: 'block' }}>All boards are in Favourites</Typography>
           )}
-
-          <button className="left-nav__user-btn" onClick={() => setShowUserMenu(v => !v)} title={displayName}>
-            <div className="left-nav__avatar" style={{ background: photoUrl ? 'transparent' : avatarColor }}>
-              {photoUrl ? <img src={photoUrl} alt="" /> : avatarLetter}
-            </div>
-            <div className="left-nav__user-text">
-              <span className="left-nav__user-name">{displayName}</span>
-              <span className="left-nav__user-email">{user?.email}</span>
-            </div>
-          </button>
-
-          {showUserMenu && (
-            <>
-              <div className="left-nav__backdrop" onClick={() => setShowUserMenu(false)} />
-              <div className="left-nav__user-menu">
-                <div className="left-nav__user-menu-header">
-                  <div className="left-nav__user-menu-name">{displayName}</div>
-                  <div className="left-nav__user-menu-email">{user?.email}</div>
-                </div>
-                <button className="left-nav__user-menu-item"
-                  onClick={() => { setShowUserMenu(false); setShowProfile(true) }}>
-                  Edit profile
-                </button>
-                <button className="left-nav__user-menu-item left-nav__user-menu-item--danger"
-                  onClick={() => { signOutUser(); setShowUserMenu(false) }}>
-                  Sign out
-                </button>
-              </div>
-            </>
+          {boards.length === 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1, display: 'block' }}>No boards yet</Typography>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
+
+      {/* ── Footer ── */}
+      <Box className="left-nav__footer" sx={{ p: 1 }}>
+        {showProfile && (
+          <ProfilePanel
+            user={user} profile={userProfile}
+            onSave={onUpdateProfile}
+            onClose={() => setShowProfile(false)}
+          />
+        )}
+
+        <Box
+          onClick={e => setMenuAnchor(e.currentTarget)}
+          className="left-nav__user-btn"
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, p: '8px', borderRadius: 2, cursor: 'pointer', '&:hover': { background: 'var(--m3-surface-container-high)' } }}
+        >
+          <Avatar
+            src={photoUrl || undefined}
+            sx={{ width: 32, height: 32, background: photoUrl ? 'transparent' : avatarColor, fontSize: 14, fontWeight: 700 }}
+          >
+            {!photoUrl && avatarLetter}
+          </Avatar>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap className="left-nav__user-name">{displayName}</Typography>
+            <Typography variant="caption" color="text.secondary" noWrap className="left-nav__user-email" sx={{ display: 'block' }}>{user?.email}</Typography>
+          </Box>
+        </Box>
+
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={() => setMenuAnchor(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          PaperProps={{ sx: { minWidth: 200, borderRadius: 2 } }}
+        >
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant="body2" fontWeight={600}>{displayName}</Typography>
+            <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
+          </Box>
+          <Divider />
+          <MenuItem onClick={() => { setMenuAnchor(null); setShowProfile(true) }}>
+            <ListItemIcon><PersonOutlinedIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Edit profile" primaryTypographyProps={{ variant: 'body2' }} />
+          </MenuItem>
+          <MenuItem onClick={() => { signOutUser(); setMenuAnchor(null) }} sx={{ color: 'error.main' }}>
+            <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
+            <ListItemText primary="Sign out" primaryTypographyProps={{ variant: 'body2', color: 'error' }} />
+          </MenuItem>
+        </Menu>
+      </Box>
     </nav>
   )
 }
 
-// ── Icons (Material Design, 24px) ─────────────────────────────────────────────
+// ── Logo ─────────────────────────────────────────────────────────────────────
 function NavLogo() {
   return (
     <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-      <rect width="32" height="32" rx="8" fill="var(--m3-primary)"/>
+      <rect width="32" height="32" rx="8" fill="var(--m3-primary, #111827)"/>
       <rect x="6" y="10" width="20" height="3" rx="1.5" fill="white"/>
       <rect x="6" y="15" width="14" height="3" rx="1.5" fill="white" opacity="0.75"/>
       <rect x="6" y="20" width="17" height="3" rx="1.5" fill="white" opacity="0.5"/>
     </svg>
   )
 }
-const ChevronLeft  = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-const ChevronRight = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-const PlusIcon     = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-const StarIcon     = ({ filled }) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-    <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-  </svg>
-)
