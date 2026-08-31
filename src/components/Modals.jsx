@@ -66,9 +66,10 @@ function ModalShell({ title, onClose, children }) {
   )
 }
 
-function Field({ label, children, isSelect }) {
+function Field({ label, children, isSelect, always }) {
+  // `always`: forces label to float (use for non-input children like comboboxes, pickers)
   return (
-    <div className={`m3-field${isSelect ? ' m3-field--select' : ''}`} style={{ marginBottom: 16 }}>
+    <div className={`m3-field${isSelect || always ? ' m3-field--always' : ''}`} style={{ marginBottom: 16 }}>
       {children}
       <label className="m3-field__label">{label}</label>
     </div>
@@ -244,7 +245,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
         />
       </Field>
 
-      <Field label="Assignee">
+      <Field label="Assignee" always>
         <PersonCombobox
           value={form.assigneeId}
           onChange={(v) => set('assigneeId', v)}
@@ -257,7 +258,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
         />
       </Field>
 
-      <Field label="PM">
+      <Field label="PM" always>
         <PersonCombobox
           value={form.pmId}
           onChange={(v) => set('pmId', v)}
@@ -271,19 +272,19 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
       </Field>
 
       <div className="field__row">
-        <Field label="Start date">
-          <input type="date" value={form.startDate} placeholder=" "
+        <Field label="Start date" always>
+          <input type="date" value={form.startDate}
             onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)} />
         </Field>
-        <Field label="End date">
-          <input type="date" value={form.endDate} min={form.startDate} placeholder=" "
+        <Field label="End date" always>
+          <input type="date" value={form.endDate} min={form.startDate}
             onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)} />
         </Field>
       </div>
 
       {/* Phases picker */}
       {boardPhases && boardPhases.length > 0 && (
-        <Field label="Phases">
+        <Field label="Phases" always>
           <div className="task-phases-picker">
             {boardPhases.map(bp => {
               const isActive = (form.phases || []).some(p => p.id === bp.id)
@@ -314,7 +315,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
       )}
 
       {/* Task color */}
-      <Field label="Color">
+      <Field label="Color" always>
         <div className="task-color-picker">
           {[
             { value: 'white', label: 'White', hex: '#ffffff' },
