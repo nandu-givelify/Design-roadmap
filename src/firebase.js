@@ -132,8 +132,14 @@ export const addPerson = async (boardId, data) => {
 export const addPersonWithId = (boardId, id, data) =>
   setDoc(doc(db, 'boards', boardId, 'people', id), { ...data, createdAt: serverTimestamp() })
 
-export const updatePerson = (boardId, id, data) =>
-  updateDoc(doc(db, 'boards', boardId, 'people', id), data)
+export const updatePerson = async (boardId, id, data) => {
+  await updateDoc(doc(db, 'boards', boardId, 'people', id), data)
+  // If an email is being added/changed, keep board's memberEmails in sync
+  // so findBoardsByMemberEmail can discover this board for that person
+  if (data.email) {
+    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+  }
+}
 
 export const deletePerson = (boardId, id) =>
   deleteDoc(doc(db, 'boards', boardId, 'people', id))
