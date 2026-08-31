@@ -829,8 +829,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   border: none; border-bottom: 2px solid var(--m3-primary);
   outline: none; background: transparent;
   font-family: inherit;
-  /* Match .header__board-title padding exactly so widths align */
-  padding: 4px 10px; border-radius: 50px;
+  padding: 4px 10px; border-radius: 0;
 }
 .header__dropdown--left { right: auto; left: 0; }
 .header__dropdown-item--danger { color: var(--m3-error); }
