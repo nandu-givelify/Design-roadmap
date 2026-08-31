@@ -251,6 +251,7 @@ function AuthenticatedApp({ user }) {
 
   // Nav state — collapsed by default on mobile
   const isMobileInit = typeof window !== 'undefined' && window.innerWidth <= 640
+  const [isMobile,  setIsMobile]  = useState(isMobileInit)
   const [navOpen,   setNavOpen]   = useState(!isMobileInit)
   const [navDocked, setNavDocked] = useState(!isMobileInit)
 
@@ -286,12 +287,13 @@ function AuthenticatedApp({ user }) {
   useEffect(() => {
     const autoCollapsed = { current: false }
     const handle = () => {
-      const isMobile = window.innerWidth <= 640
-      if (isMobile && !autoCollapsed.current) {
+      const mobile = window.innerWidth <= 640
+      setIsMobile(mobile)
+      if (mobile && !autoCollapsed.current) {
         autoCollapsed.current = true
         setNavOpen(false)
         setNavDocked(false)
-      } else if (!isMobile && autoCollapsed.current) {
+      } else if (!mobile && autoCollapsed.current) {
         autoCollapsed.current = false
         setNavOpen(true)
         setNavDocked(true)
@@ -930,6 +932,7 @@ function AuthenticatedApp({ user }) {
           boardPhases={boardPhases}
           readOnly={readOnly}
           loading={!tasksLoaded}
+          personColWidth={isMobile && groupBy !== 'none' ? 52 : undefined}
         />
 
         {/* Add Task modal */}

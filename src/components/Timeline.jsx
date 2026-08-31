@@ -9,7 +9,7 @@ import {
 import TaskBar from './TaskBar'
 
 // ── Layout constants ────────────────────────────────────────────────────────
-const PERSON_COL_W = 200
+const PERSON_COL_W_DEFAULT = 200
 const LANE_H       = 46
 const LANE_GAP     = 6
 const ROW_PAD_TOP  = 10
@@ -34,7 +34,9 @@ const Timeline = forwardRef(function Timeline({
   boardPhases,
   readOnly,
   loading,
+  personColWidth,    // optional override for person column width (e.g. 52 on mobile)
 }, ref) {
+  const PERSON_COL_W = personColWidth ?? PERSON_COL_W_DEFAULT
   const scrollRef    = useRef(null)
   const containerRef = useRef(null)
   const rowRefsMap   = useRef({})
