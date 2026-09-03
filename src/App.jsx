@@ -5,7 +5,17 @@ import LeftNav from './components/LeftNav'
 import Header from './components/Header'
 import Timeline from './components/Timeline'
 import Settings from './components/Settings'
-import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
+import PersonDetailsDialog from './components/PersonDetailsDialog'
+import { TaskModal, EditTaskModal, ShareModal, PhotoPicker } from './components/Modals'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import TextField from '@mui/material/TextField'
+import Stack from '@mui/material/Stack'
+import CloseIcon from '@mui/icons-material/Close'
 import {
   subscribeBoards, createBoard, updateBoard, deleteBoard,
   subscribePeople, subscribeTasks, subscribeBoard,
@@ -15,9 +25,10 @@ import {
   subscribeUserPrefs, updateUserPrefs,
   DEFAULT_BOARD_PHASES,
   getUserProfile, setUserProfile, findBoardsByMemberEmail, subscribeUserProfile,
-  getPeopleOnce,
+  getPeopleOnce, addTimeOff, removeTimeOff,
 } from './firebase'
 import { useHistory } from './hooks/useHistory'
+import { parseLocalDate, diffDays, startOfDay, addDays, toDateString } from './utils/dateUtils'
 
 const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
 
@@ -269,6 +280,13 @@ function AuthenticatedApp({ user }) {
   const [editingTask,       setEditingTask]        = useState(null)
   const [defaultAssigneeId, setDefaultAssigneeId]  = useState(null)
   const [defaultStartDate,  setDefaultStartDate]   = useState(null)
+
+  // Profile dialog
+  const [showProfileDialog, setShowProfileDialog] = useState(false)
+
+  // Person details dialog
+  const [personDetailsOpen, setPersonDetailsOpen] = useState(false)
+  const [selectedPerson,    setSelectedPerson]    = useState(null)
 
   // Filters
   const [filterPersonIds, setFilterPersonIds] = useState([])
@@ -908,6 +926,7 @@ function AuthenticatedApp({ user }) {
           isOverlay={isNavOverlay}
           onClose={() => { setNavOpen(false); setNavDocked(false) }}
           onDock={() => setNavDocked(true)}
+          onEditProfile={() => setShowProfileDialog(true)}
         />
       )}
 
@@ -958,6 +977,7 @@ function AuthenticatedApp({ user }) {
           readOnly={readOnly}
           loading={!tasksLoaded}
           personColWidth={isMobile && groupBy !== 'none' ? 52 : undefined}
+          onPersonClick={(person) => { setSelectedPerson(person); setPersonDetailsOpen(true) }}
         />
 
         {/* Add Task modal */}
@@ -1000,7 +1020,7 @@ function AuthenticatedApp({ user }) {
           />
         )}
 
-        {/* Settings panel */}
+        {/* Settings dialog */}
         {settingsOpen && (
           <Settings
             onClose={() => setSettingsOpen(false)}
@@ -1020,10 +1040,101 @@ function AuthenticatedApp({ user }) {
             onDeleteBoard={handleDeleteBoard}
           />
         )}
+
+        {/* Person details + time off dialog */}
+        <PersonDetailsDialog
+          open={personDetailsOpen}
+          person={selectedPerson}
+          onClose={() => { setPersonDetailsOpen(false); setSelectedPerson(null) }}
+          canEdit={isOwner || (selectedPerson && user?.uid === selectedPerson?.uid)}
+          onAddTimeOff={async (entry) => {
+            if (!selectedPerson || !activeBoardId) return
+            await addTimeOff(activeBoardId, selectedPerson.id, entry)
+            // Auto-extend tasks that overlap with this time off period
+            const toStart = parseLocalDate(entry.start)
+            const toEnd   = parseLocalDate(entry.end)
+            const personTasks = tasks.filter(t =>
+              t.assigneeId === selectedPerson.id || t.pmId === selectedPerson.id
+            )
+            for (const task of personTasks) {
+              const taskStart = parseLocalDate(task.startDate)
+              const taskEnd   = parseLocalDate(task.endDate)
+              if (taskEnd < toStart || taskStart > toEnd) continue
+              // Count days that fall within BOTH the task AND the time off
+              const overlapStart = taskStart > toStart ? taskStart : toStart
+              const overlapEnd   = taskEnd   < toEnd   ? taskEnd   : toEnd
+              const overlapDays  = diffDays(startOfDay(overlapStart), startOfDay(overlapEnd)) + 1
+              if (overlapDays > 0) {
+                const newEnd = addDays(taskEnd, overlapDays)
+                await updateTask(activeBoardId, task.id, { endDate: toDateString(newEnd) })
+              }
+            }
+          }}
+          onRemoveTimeOff={async (entry) => {
+            if (!selectedPerson || !activeBoardId) return
+            await removeTimeOff(activeBoardId, selectedPerson.id, entry)
+          }}
+        />
+
+        {/* Edit profile dialog */}
+        <ProfileDialog
+          open={showProfileDialog}
+          onClose={() => setShowProfileDialog(false)}
+          user={user}
+          userProfile={effectiveProfile}
+          onSave={handleUpdateProfile}
+        />
       </div>
 
       {undoToast && <div className="undo-toast">{undoToast}</div>}
     </div>
+  )
+}
+
+// ── Edit profile dialog ──────────────────────────────────────────────────────
+function ProfileDialog({ open, onClose, user, userProfile, onSave }) {
+  const [name,   setName]   = useState(userProfile?.name  || user?.displayName || '')
+  const [photo,  setPhoto]  = useState(userProfile?.photo || user?.photoURL    || null)
+  const [saving, setSaving] = useState(false)
+
+  // Sync with latest profile when dialog opens
+  useEffect(() => {
+    if (open) {
+      setName(userProfile?.name  || user?.displayName || '')
+      setPhoto(userProfile?.photo || user?.photoURL   || null)
+    }
+  }, [open]) // eslint-disable-line
+
+  const handleSave = async () => {
+    setSaving(true)
+    try { await onSave({ name: name.trim() || null, photo: photo || null }) } finally { setSaving(false) }
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ pr: 5 }}>
+        Edit profile
+        <IconButton size="small" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <PhotoPicker value={photo} onChange={setPhoto} />
+        <TextField
+          label="Display name" size="small" fullWidth
+          value={name} onChange={e => setName(e.target.value)}
+          sx={{ mt: 2 }}
+          onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} size="small">Cancel</Button>
+        <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 

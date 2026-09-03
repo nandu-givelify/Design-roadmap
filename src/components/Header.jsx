@@ -207,9 +207,7 @@ export default function Header({
                   if (byRole['__other__']) orderedRoles.push('__other__')
                   return orderedRoles.map((role, roleIdx) => (
                     <Box key={role}>
-                      <Typography variant="subtitle2" className="header__filter-section-title" sx={roleIdx > 0 ? { mt: 1 } : {}}>
-                        {role === '__other__' ? 'Other' : role}
-                      </Typography>
+                      {roleIdx > 0 && <Box sx={{ mt: 1.5 }} />}
                       {byRole[role].map(p => (
                         <label key={p.id} className="filter-row">
                           <input type="checkbox" checked={filterPersonIds.includes(p.id)} onChange={() => togglePerson(p.id)} />

@@ -116,7 +116,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   background: var(--m3-surface-container-low); border: 1px solid var(--m3-outline-variant); border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 220px; z-index: 200; padding: 12px;
 }
-.header__filter-section-title { font-size: 11px; font-weight: 600; color: var(--m3-on-surface-variant); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; }
+.header__filter-section-title { font-size: 11px; font-weight: 600; color: var(--m3-on-surface-variant); letter-spacing: 0.05em; margin-bottom: 6px; }
 .header__filter-divider { height: 1px; background: var(--m3-outline-variant); margin: 8px 0; }
 .header__filter-clear { font-size: 12px; color: var(--m3-primary); margin-top: 8px; padding: 0; font-weight: 500; }
 .filter-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer; }
@@ -142,7 +142,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   background: #fff; border-right: 1px solid #ddd;
   display: flex; align-items: flex-end; padding: 0 12px 6px;
   font-size: 11px; font-weight: 600; color: #9ca3af;
-  letter-spacing: 0.05em; text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .timeline__header-grid { flex: 1; overflow: hidden; }
 .timeline__quarter-row { display: flex; height: 22px; }
@@ -513,7 +513,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .settings-panel__body { flex: 1; overflow-y: auto; padding: 20px 24px; }
 .settings-section { margin-bottom: 28px; }
 .settings-section__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.settings-section__title { font-size: 11px; font-weight: 700; color: var(--m3-on-surface-variant); text-transform: uppercase; letter-spacing: 0.08em; }
+.settings-section__title { font-size: 11px; font-weight: 700; color: var(--m3-on-surface-variant); letter-spacing: 0.08em; }
 .settings-section__add { font-size: 12px; color: var(--m3-primary); font-weight: 600; }
 .settings-section__add:hover { text-decoration: underline; }
 .settings-item {
@@ -1058,7 +1058,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .settings-recent-people { margin-bottom: 8px; }
 .settings-recent-people__label {
   font-size: 11px; font-weight: 700; color: var(--m3-on-surface-variant);
-  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+  letter-spacing: 0.06em; margin-bottom: 6px;
 }
 .settings-recent-people__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .settings-recent-chip {
@@ -1245,3 +1245,28 @@ input:focus, select:focus { outline: none; }
   border-color: var(--m3-outline-variant);
 }
 .left-nav .MuiInputLabel-root { color: var(--m3-on-surface-variant); }
+
+/* ── Time off blocks in timeline ─────────────────────────────────────────────── */
+.timeline__timeoff-block {
+  position: absolute;
+  top: 0; bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(239, 68, 68, 0.09) 4px,
+    rgba(239, 68, 68, 0.09) 8px
+  );
+}
+.timeline__timeoff-block--overlay {
+  z-index: 12;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(239, 68, 68, 0.13) 4px,
+    rgba(239, 68, 68, 0.13) 8px
+  );
+}

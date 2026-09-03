@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import {
   getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp, query, where, getDocs, setDoc, getDoc, arrayUnion,
+  doc, serverTimestamp, query, where, getDocs, setDoc, getDoc, arrayUnion, arrayRemove,
 } from 'firebase/firestore'
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
@@ -150,6 +150,14 @@ export const deletePerson = (boardId, id) =>
 export const getPeopleOnce = (boardId) =>
   getDocs(collection(db, 'boards', boardId, 'people'))
     .then(s => s.docs.map(d => ({ id: d.id, ...d.data() })))
+
+// ── Time off (stored as array field on person document) ──────────────────────
+// Each entry: { id: string, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', reason?: string }
+export const addTimeOff = (boardId, personId, entry) =>
+  updateDoc(doc(db, 'boards', boardId, 'people', personId), { timeOff: arrayUnion(entry) })
+
+export const removeTimeOff = (boardId, personId, entry) =>
+  updateDoc(doc(db, 'boards', boardId, 'people', personId), { timeOff: arrayRemove(entry) })
 
 // ── Tasks (board-scoped) ─────────────────────────────────────────────────────
 export const subscribeTasks = (boardId, cb, onError) =>

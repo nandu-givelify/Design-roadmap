@@ -35,6 +35,7 @@ const Timeline = forwardRef(function Timeline({
   readOnly,
   loading,
   personColWidth,    // optional override for person column width (e.g. 52 on mobile)
+  onPersonClick,     // optional: (person) => void — called when avatar is clicked
 }, ref) {
   const PERSON_COL_W = personColWidth ?? PERSON_COL_W_DEFAULT
   const scrollRef    = useRef(null)
@@ -538,7 +539,14 @@ const Timeline = forwardRef(function Timeline({
       >
         {/* Left column — sticky */}
         <div className="timeline__person-col" style={{ minHeight: rowH, width: PERSON_COL_W }}>
-          <div className="timeline__avatar" style={{ background: isUnassigned ? '#e5e7eb' : personColor }}>
+          <div
+            className="timeline__avatar"
+            style={{
+              background: isUnassigned ? '#e5e7eb' : personColor,
+              cursor: onPersonClick && person ? 'pointer' : 'default',
+            }}
+            onClick={() => onPersonClick && person && onPersonClick(person)}
+          >
             {person?.photo
               ? <img src={person.photo} alt="" />
               : <span>{isUnassigned ? '?' : personName.charAt(0).toUpperCase()}</span>
@@ -556,6 +564,20 @@ const Timeline = forwardRef(function Timeline({
           style={{ minHeight: rowH }}
           onDoubleClick={(e) => handleGridDoubleClick(personId, e)}
         >
+          {/* Time off background blocks (behind task bars) */}
+          {(person?.timeOff || []).map(to => {
+            const s = parseLocalDate(to.start)
+            const e = parseLocalDate(to.end)
+            const sIdx = diffDays(startOfDay(totalStart), startOfDay(s))
+            const eIdx = diffDays(startOfDay(totalStart), startOfDay(e))
+            if (eIdx < 0 || sIdx >= allDays.length) return null
+            const cStart = Math.max(0, sIdx)
+            const cEnd   = Math.min(allDays.length - 1, eIdx)
+            return (
+              <div key={`to-bg-${to.id}`} className="timeline__timeoff-block"
+                style={{ left: cStart * dayWidth, width: (cEnd - cStart + 1) * dayWidth }} />
+            )
+          })}
           {lanedTasks.map((task) => (
             <TaskBar
               key={task.id}
@@ -578,6 +600,20 @@ const Timeline = forwardRef(function Timeline({
               readOnly={readOnly}
             />
           ))}
+          {/* Time off overlay blocks (on top of task bars) */}
+          {(person?.timeOff || []).map(to => {
+            const s = parseLocalDate(to.start)
+            const e = parseLocalDate(to.end)
+            const sIdx = diffDays(startOfDay(totalStart), startOfDay(s))
+            const eIdx = diffDays(startOfDay(totalStart), startOfDay(e))
+            if (eIdx < 0 || sIdx >= allDays.length) return null
+            const cStart = Math.max(0, sIdx)
+            const cEnd   = Math.min(allDays.length - 1, eIdx)
+            return (
+              <div key={`to-ov-${to.id}`} className="timeline__timeoff-block timeline__timeoff-block--overlay"
+                style={{ left: cStart * dayWidth, width: (cEnd - cStart + 1) * dayWidth }} />
+            )
+          })}
         </div>
       </div>
     )

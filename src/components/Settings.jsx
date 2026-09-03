@@ -314,155 +314,162 @@ export default function Settings({
 
   return (
     <>
-      <Box className="settings-overlay" onClick={onClose} />
-      <Box className="settings-panel">
-        {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '16px 20px', borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-          <Typography variant="subtitle1">Settings</Typography>
+      <Dialog
+        open
+        onClose={onClose}
+        maxWidth="sm"
+        fullWidth
+        scroll="paper"
+        PaperProps={{ sx: { maxHeight: '85vh' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
+          Board settings
           <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
-        </Box>
+        </DialogTitle>
 
-        <Box sx={{ overflowY: 'auto', flex: 1, p: '8px 0' }}>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <Box sx={{ p: '8px 0' }}>
 
-          {/* ── People ── */}
-          <Box sx={{ px: 2.5, py: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="subtitle2" color="text.secondary">People</Typography>
-              {!adding && (
-                <Button size="small" startIcon={<AddIcon />} onClick={() => { setAdding(true); setEditingId(null) }}>
-                  Add person
-                </Button>
-              )}
-            </Box>
-
-            {people.map(person => (
-              <Box key={person.id}>
-                <Box
-                  onClick={() => setEditingId(editingId === person.id ? null : person.id)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
-                    borderRadius: 2, cursor: 'pointer', transition: 'background 0.12s',
-                    '&:hover': { background: '#f3f4f6' },
-                  }}
-                >
-                  <Box sx={{
-                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                    background: getAvatarColor(person.name), overflow: 'hidden',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, color: '#fff',
-                  }}>
-                    {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography component="div" variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
-                    <Typography component="div" variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
-                      {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
-                    </Typography>
-                  </Box>
-                  <ChevronRightIcon sx={{
-                    fontSize: 18, color: 'text.secondary', flexShrink: 0,
-                    transform: editingId === person.id ? 'rotate(90deg)' : 'none',
-                    transition: 'transform 0.2s',
-                  }} />
-                </Box>
-                {editingId === person.id && (
-                  <PersonEditForm
-                    person={person} roles={roles}
-                    onSave={onUpdatePerson} onDone={() => setEditingId(null)}
-                    onAddRole={onAddRole}
-                    onDelete={() => setConfirmDelete({ id: person.id, name: person.name })}
-                  />
+            {/* ── People ── */}
+            <Box sx={{ px: 2.5, py: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">People</Typography>
+                {!adding && (
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => { setAdding(true); setEditingId(null) }}>
+                    Add person
+                  </Button>
                 )}
               </Box>
-            ))}
 
-            {people.length === 0 && !adding && (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>No people yet.</Typography>
-            )}
-            {adding && (
-              <AddPersonForm roles={roles} onSave={onAddPerson} onDone={() => setAdding(false)} onAddRole={onAddRole} recentPeople={recentPeople} />
-            )}
-          </Box>
-
-          <Divider sx={{ mx: 2 }} />
-
-          {/* ── Phases ── */}
-          <Box sx={{ px: 2.5, py: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="subtitle2" color="text.secondary">Phases</Typography>
-              {!addingPhase && isOwner && (
-                <Button size="small" startIcon={<AddIcon />} onClick={() => setAddingPhase(true)}>Add phase</Button>
-              )}
-            </Box>
-
-            {(boardPhases || []).map(phase => (
-              <Box key={phase.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '6px 10px', borderRadius: 2 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
-                <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
-                {isOwner && (
-                  <IconButton size="small" sx={{ width: 28, height: 28 }} title="Delete phase"
-                    onClick={() => {
-                      if ((boardPhases || []).length <= 1) return
-                      onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phase.id))
-                    }}>
-                    <DeleteIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                )}
-              </Box>
-            ))}
-
-            {addingPhase && isOwner && (
-              <AddPhaseForm
-                existingPhases={boardPhases || []}
-                onSave={phase => { onUpdateBoardPhases([...(boardPhases || []), phase]); setAddingPhase(false) }}
-                onDone={() => setAddingPhase(false)}
-              />
-            )}
-          </Box>
-
-          {/* ── Board actions ── */}
-          {isOwner && (onRenameBoard || onDeleteBoard) && (
-            <>
-              <Divider sx={{ mx: 2 }} />
-              <Box sx={{ px: 2.5, py: 1.5 }}>
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Board</Typography>
-                {onRenameBoard && (
-                  <Box onClick={() => setShowRename(true)} sx={{
-                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
-                    borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
-                  }}>
-                    <EditIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-                    <Typography variant="body2">Rename board</Typography>
-                  </Box>
-                )}
-                {onDeleteBoard && (
-                  <Box onClick={() => { if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) { onDeleteBoard(board.id); onClose() } }}
+              {people.map(person => (
+                <Box key={person.id}>
+                  <Box
+                    onClick={() => setEditingId(editingId === person.id ? null : person.id)}
                     sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
-                      borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#fff0f0' }, color: 'error.main',
+                      display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
+                      borderRadius: 2, cursor: 'pointer', transition: 'background 0.12s',
+                      '&:hover': { background: '#f3f4f6' },
+                    }}
+                  >
+                    <Box sx={{
+                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                      background: getAvatarColor(person.name), overflow: 'hidden',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, fontWeight: 700, color: '#fff',
                     }}>
-                    <DeleteIcon sx={{ fontSize: 20 }} />
-                    <Typography variant="body2" color="error">Delete board</Typography>
+                      {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography component="div" variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
+                      <Typography component="div" variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
+                        {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
+                      </Typography>
+                    </Box>
+                    <ChevronRightIcon sx={{
+                      fontSize: 18, color: 'text.secondary', flexShrink: 0,
+                      transform: editingId === person.id ? 'rotate(90deg)' : 'none',
+                      transition: 'transform 0.2s',
+                    }} />
                   </Box>
+                  {editingId === person.id && (
+                    <PersonEditForm
+                      person={person} roles={roles}
+                      onSave={onUpdatePerson} onDone={() => setEditingId(null)}
+                      onAddRole={onAddRole}
+                      onDelete={() => setConfirmDelete({ id: person.id, name: person.name })}
+                    />
+                  )}
+                </Box>
+              ))}
+
+              {people.length === 0 && !adding && (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>No people yet.</Typography>
+              )}
+              {adding && (
+                <AddPersonForm roles={roles} onSave={onAddPerson} onDone={() => setAdding(false)} onAddRole={onAddRole} recentPeople={recentPeople} />
+              )}
+            </Box>
+
+            <Divider sx={{ mx: 2 }} />
+
+            {/* ── Phases ── */}
+            <Box sx={{ px: 2.5, py: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">Phases</Typography>
+                {!addingPhase && isOwner && (
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => setAddingPhase(true)}>Add phase</Button>
                 )}
               </Box>
-            </>
-          )}
-        </Box>
 
-        {/* Confirm delete */}
-        {confirmDelete && (
-          <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider', background: '#fff8f8' }}>
-            <Typography variant="body2" sx={{ mb: 1.5 }}>
-              Delete <strong>{confirmDelete.name}</strong>? This cannot be undone.
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={() => setConfirmDelete(null)}>Cancel</Button>
-              <Button size="small" variant="contained" color="error" onClick={handleDeleteConfirmed}>Delete</Button>
-            </Stack>
+              {(boardPhases || []).map(phase => (
+                <Box key={phase.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '6px 10px', borderRadius: 2 }}>
+                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
+                  <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
+                  {isOwner && (
+                    <IconButton size="small" sx={{ width: 28, height: 28 }} title="Delete phase"
+                      onClick={() => {
+                        if ((boardPhases || []).length <= 1) return
+                        onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phase.id))
+                      }}>
+                      <DeleteIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  )}
+                </Box>
+              ))}
+
+              {addingPhase && isOwner && (
+                <AddPhaseForm
+                  existingPhases={boardPhases || []}
+                  onSave={phase => { onUpdateBoardPhases([...(boardPhases || []), phase]); setAddingPhase(false) }}
+                  onDone={() => setAddingPhase(false)}
+                />
+              )}
+            </Box>
+
+            {/* ── Board actions ── */}
+            {isOwner && (onRenameBoard || onDeleteBoard) && (
+              <>
+                <Divider sx={{ mx: 2 }} />
+                <Box sx={{ px: 2.5, py: 1.5 }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Board</Typography>
+                  {onRenameBoard && (
+                    <Box onClick={() => setShowRename(true)} sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                      borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
+                    }}>
+                      <EditIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                      <Typography variant="body2">Rename board</Typography>
+                    </Box>
+                  )}
+                  {onDeleteBoard && (
+                    <Box onClick={() => { if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) { onDeleteBoard(board.id); onClose() } }}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
+                        borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#fff0f0' }, color: 'error.main',
+                      }}>
+                      <DeleteIcon sx={{ fontSize: 20 }} />
+                      <Typography variant="body2" color="error">Delete board</Typography>
+                    </Box>
+                  )}
+                </Box>
+              </>
+            )}
+
+            {/* Confirm delete */}
+            {confirmDelete && (
+              <Box sx={{ mx: 2.5, mb: 1, p: 2, border: '1px solid', borderColor: 'error.light', borderRadius: 2, background: '#fff8f8' }}>
+                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                  Delete <strong>{confirmDelete.name}</strong>? This cannot be undone.
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                  <Button size="small" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+                  <Button size="small" variant="contained" color="error" onClick={handleDeleteConfirmed}>Delete</Button>
+                </Stack>
+              </Box>
+            )}
           </Box>
-        )}
-      </Box>
+        </DialogContent>
+      </Dialog>
 
       {showRename && (
         <RenameBoardDialog board={board} onSave={onRenameBoard} onClose={() => setShowRename(false)} />

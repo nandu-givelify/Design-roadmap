@@ -63,9 +63,9 @@ export default function LeftNav({
   boards, activeBoardId, favoriteBoardIds = [],
   onSelectBoard, onNewBoard, onReorderBoards, onToggleFavorite,
   isOverlay, onClose, onDock,
+  onEditProfile,
 }) {
   const [menuAnchor,  setMenuAnchor]  = useState(null)
-  const [showProfile, setShowProfile] = useState(false)
   const [draggedId,   setDraggedId]   = useState(null)
   const [dragOverId,  setDragOverId]  = useState(null)
   const [dragPosition,setDragPosition]= useState(null)
@@ -202,14 +202,6 @@ export default function LeftNav({
 
       {/* ── Footer ── */}
       <Box className="left-nav__footer" sx={{ p: 1 }}>
-        {showProfile && (
-          <ProfilePanel
-            user={user} profile={userProfile}
-            onSave={onUpdateProfile}
-            onClose={() => setShowProfile(false)}
-          />
-        )}
-
         <Box
           onClick={e => setMenuAnchor(e.currentTarget)}
           className="left-nav__user-btn"
@@ -240,7 +232,7 @@ export default function LeftNav({
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
           </Box>
           <Divider />
-          <MenuItem onClick={() => { setMenuAnchor(null); setShowProfile(true) }}>
+          <MenuItem onClick={() => { setMenuAnchor(null); onEditProfile?.() }}>
             <ListItemIcon><PersonOutlinedIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Edit profile" primaryTypographyProps={{ variant: 'body2' }} />
           </MenuItem>
