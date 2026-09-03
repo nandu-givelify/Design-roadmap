@@ -460,11 +460,11 @@ export default function Settings({
                   )}
                   {isOwner && (
                     <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                      <IconButton size="small" sx={{ width: 28, height: 28 }} title="Edit phase"
+                      <IconButton size="small" sx={{ width: 28, height: 28, color: 'text.secondary', '&:hover': { color: 'text.primary' } }} title="Edit phase"
                         onClick={() => openEditPhase(phase)}>
                         <EditIcon sx={{ fontSize: 15 }} />
                       </IconButton>
-                      <IconButton size="small" sx={{ width: 28, height: 28 }} title="Delete phase"
+                      <IconButton size="small" sx={{ width: 28, height: 28, color: 'text.secondary', '&:hover:not(:disabled)': { color: 'error.main' } }} title="Delete phase"
                         onClick={() => handleDeletePhase(phase.id)}
                         disabled={(boardPhases || []).length <= 1}>
                         <DeleteIcon sx={{ fontSize: 15 }} />

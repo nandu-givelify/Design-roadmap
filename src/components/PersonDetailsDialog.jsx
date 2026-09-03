@@ -273,12 +273,14 @@ export default function PersonDetailsDialog({
             </Box>
             <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
               {canEdit && onUpdatePerson && (
-                <IconButton size="small" onClick={() => setEditDialogOpen(true)} title="Edit details">
+                <IconButton size="small" onClick={() => setEditDialogOpen(true)} title="Edit details"
+                  sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
                   <EditIcon fontSize="small" />
                 </IconButton>
               )}
               {onDelete && (
-                <IconButton size="small" color="error" title="Delete person"
+                <IconButton size="small" title="Remove from board"
+                  sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
                   onClick={() => { if (window.confirm(`Remove ${person.name} from this board?`)) { onDelete(); onClose() } }}>
                   <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
@@ -325,7 +327,8 @@ export default function PersonDetailsDialog({
                       <IconButton size="small" onClick={() => startEdit(to)} sx={{ color: 'text.secondary' }}>
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => onRemoveTimeOff?.(to)} sx={{ color: 'text.secondary' }}>
+                      <IconButton size="small" onClick={() => onRemoveTimeOff?.(to)}
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
                         <DeleteOutlineIcon fontSize="small" />
                       </IconButton>
                     </Box>
