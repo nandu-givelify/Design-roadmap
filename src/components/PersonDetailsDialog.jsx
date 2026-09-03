@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import Grow from '@mui/material/Grow'
+import Slide from '@mui/material/Slide'
 import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -120,8 +120,8 @@ function EditPersonDialog({ open, onClose, person, onUpdatePerson, onDelete, rol
       maxWidth="xs"
       fullWidth
       disableEnforceFocus={false}
-      TransitionComponent={Grow}
-      TransitionProps={{ timeout: 220 }}
+      TransitionComponent={Slide}
+      TransitionProps={{ direction: 'up', timeout: 240 }}
       PaperProps={{ sx: { borderRadius: 3 } }}
     >
       <DialogTitle sx={{ pr: 5 }}>

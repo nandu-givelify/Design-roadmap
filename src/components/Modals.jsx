@@ -362,11 +362,6 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
                   }} />
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
                   <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
-                  {bp.optional && (
-                    <Typography variant="caption" sx={{ fontSize: 9, color: isActive ? bp.color : 'text.disabled', fontWeight: 500, letterSpacing: 0.3 }}>
-                      optional
-                    </Typography>
-                  )}
                 </Box>
               )
             })}
