@@ -678,11 +678,15 @@ function AuthenticatedApp({ user }) {
   // ── GroupBy: persisted to board doc so shared/public viewers see owner's setting ──
   const activeBoardIdRef = useRef(null)
   useEffect(() => {
-    // Restore groupBy from board's saved value whenever the active board changes
-    if (!activeBoardId || activeBoardId === activeBoardIdRef.current) return
-    activeBoardIdRef.current = activeBoardId
+    // Restore groupBy from board's saved value whenever the active board changes.
+    // Wait until boards are loaded — on first render activeBoardId is set from URL
+    // but boards may still be empty, so we skip until the board is actually found.
+    if (!activeBoardId) return
     const board = boards.find(b => b.id === activeBoardId)
-    setGroupBy(board?.defaultGroupBy || 'none')
+    if (!board) return  // boards not loaded yet; retry when boards updates
+    if (activeBoardId === activeBoardIdRef.current) return
+    activeBoardIdRef.current = activeBoardId
+    setGroupBy(board.defaultGroupBy || 'none')
   }, [activeBoardId, boards]) // eslint-disable-line
 
   const handleGroupByChange = useCallback((value) => {
