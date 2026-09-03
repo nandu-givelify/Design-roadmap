@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, resetPassword } from '../firebase'
 import { getAvatarColor } from '../utils/dateUtils'
 
 /*
  * Steps:
- *  'account'   — account card for last-used user (default when lastUser exists)
- *  'password'  — password-only step (fallback when no saved credential found)
- *  'full'      — Google + email+password in one form ("Use another account")
- *  'register'  — create-account form
- *  'reset-sent'— password reset confirmation
+ *  'account'    — account card for last-used user
+ *  'email'      — Google + email + Continue (default when no lastUser)
+ *  'password'   — password field (pre-filled if Chrome autofilled it)
+ *  'register'   — create account
+ *  'reset-sent' — password reset confirmation
+ *
+ * Chrome autofill fix: a hidden <input type="password"> lives in the email-step
+ * form. Chrome fills it when the user selects saved credentials. We read its
+ * value when the user clicks Continue and pre-populate the password step.
  */
 export default function LoginPage() {
   const [lastUser, setLastUser] = useState(null)
@@ -20,6 +24,9 @@ export default function LoginPage() {
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
 
+  // Ref to the hidden password field in the email step — captures Chrome autofill
+  const hiddenPasswordRef = useRef(null)
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem('roadmap_lastUser')
@@ -29,10 +36,10 @@ export default function LoginPage() {
         setEmail(u.email)
         setStep('account')
       } else {
-        setStep('full')
+        setStep('email')
       }
     } catch {
-      setStep('full')
+      setStep('email')
     }
   }, [])
 
@@ -48,71 +55,44 @@ export default function LoginPage() {
     finally { setLoading(false) }
   }
 
-  // ── Account card tap — try saved credential first, show password if none ─
+  // ── Email step → password step ────────────────────────────────────────────
+  const handleEmailContinue = (e) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    // Capture any Chrome-autofilled password from the hidden field
+    const autofilled = hiddenPasswordRef.current?.value || ''
+    if (autofilled) setPassword(autofilled)
+    setStep('password')
+  }
+
+  // ── Account card tap — try saved credential, fall back to password step ───
   const handleAccountCardClick = async () => {
     setLoading(true); clearError()
     try {
-      // Try to retrieve saved password via Credential Management API
       if (window.PasswordCredential && navigator.credentials?.get) {
-        const cred = await navigator.credentials.get({
-          password: true,
-          mediation: 'optional',  // silent if 1 credential; picker if many; null if none
-        })
+        const cred = await navigator.credentials.get({ password: true, mediation: 'optional' })
         if (cred?.password) {
-          // Have saved credential — sign in directly, no password screen
           await signInEmail(cred.id || lastUser.email, cred.password)
-          return  // auth state change navigates away
+          return
         }
       }
-      // No saved credential — fall back to manual password entry
       setStep('password')
     } catch (err) {
-      // Credential API error or sign-in error
-      if (err?.code) {
-        setError(friendlyError(err.code))
-        setStep('password')
-      } else {
-        setStep('password')  // API unavailable — just show password step
-      }
+      if (err?.code) { setError(friendlyError(err.code)); setStep('password') }
+      else setStep('password')
     } finally {
       setLoading(false)
     }
   }
 
-  // ── Password step sign-in ─────────────────────────────────────────────────
+  // ── Sign in ───────────────────────────────────────────────────────────────
   const handleSignIn = async (e) => {
     e.preventDefault()
     if (!password) return
     setLoading(true); clearError()
     try {
       await signInEmail(email, password)
-      // Store credential so next login can be one-tap
       storeCredential(email, password)
-    } catch (err) {
-      const code = err.code
-      if (code === 'auth/user-not-found') { setStep('register'); setError('') }
-      else setError(friendlyError(code))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── Full form — both fields visible so Chrome autofills both at once ──────
-  const handleFullSignIn = async (e) => {
-    e.preventDefault()
-    // Read directly from form elements to capture Chrome-autofilled values
-    const emailVal    = e.target.elements['email']?.value    || email
-    const passwordVal = e.target.elements['password']?.value || password
-    if (!emailVal.trim() || !passwordVal) {
-      setError('Enter your email and password.')
-      return
-    }
-    setEmail(emailVal)
-    setPassword(passwordVal)
-    setLoading(true); clearError()
-    try {
-      await signInEmail(emailVal, passwordVal)
-      storeCredential(emailVal, passwordVal)
     } catch (err) {
       const code = err.code
       if (code === 'auth/user-not-found') { setStep('register'); setError('') }
@@ -125,10 +105,7 @@ export default function LoginPage() {
   // ── Register ──────────────────────────────────────────────────────────────
   const handleRegister = async (e) => {
     e.preventDefault()
-    if (!name.trim() || password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return
-    }
+    if (!name.trim() || password.length < 6) { setError('Password must be at least 6 characters.'); return }
     setLoading(true); clearError()
     try {
       await signUpEmail(email, password)
@@ -166,12 +143,8 @@ export default function LoginPage() {
         {step === 'account' && (
           <>
             <h1 className="login-card__title">Welcome back</h1>
-            <button
-              type="button"
-              className="login-account-card"
-              onClick={handleAccountCardClick}
-              disabled={loading}
-            >
+            <button type="button" className="login-account-card"
+              onClick={handleAccountCardClick} disabled={loading}>
               <LastUserAvatar user={lastUser} />
               <div className="login-account-card__info">
                 <div className="login-account-card__name">{lastUser.name || lastUser.email}</div>
@@ -181,28 +154,77 @@ export default function LoginPage() {
                 ? <div className="login-account-card__spinner" />
                 : <svg className="login-account-card__arrow" width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-              }
+                  </svg>}
             </button>
             {error && <div className="login-error">{error}</div>}
-            <button
-              type="button"
-              className="login-forgot"
-              onClick={() => { setEmail(''); clearError(); setStep('full') }}
-            >
+            <button type="button" className="login-forgot"
+              onClick={() => { setEmail(''); setPassword(''); clearError(); setStep('email') }}>
               Use another account
             </button>
           </>
         )}
 
-        {/* ── Password step (fallback from account card) ───── */}
+        {/* ── Email step ──────────────────────────────────── */}
+        {step === 'email' && (
+          <>
+            <h1 className="login-card__title">Welcome to RoadMap</h1>
+            <p className="login-card__sub">Sign in or create a new account</p>
+
+            <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
+              <GoogleIcon />
+              Continue with Google
+            </button>
+            <div className="login-divider"><span>or</span></div>
+
+            <form onSubmit={handleEmailContinue}>
+              <input
+                className="login-input"
+                type="email"
+                name="email"
+                autoComplete="username"
+                placeholder="Your email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); clearError() }}
+                autoFocus
+              />
+              {/*
+                Hidden password — Chrome autofills username+password together.
+                We read this value on Continue and pre-populate the password step
+                so the user doesn't have to select credentials again.
+              */}
+              <input
+                ref={hiddenPasswordRef}
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                style={{ display: 'none' }}
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              {error && <div className="login-error">{error}</div>}
+              <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
+                Continue
+              </button>
+              <button type="button" className="login-forgot"
+                onClick={() => { clearError(); setStep('register') }}>
+                New to RoadMap? Create an account
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* ── Password step ───────────────────────────────── */}
         {step === 'password' && (
           <>
             <h1 className="login-card__title">Welcome back</h1>
             <form onSubmit={handleSignIn}>
               <div className="login-email-badge">
                 <span>{email}</span>
-                <button type="button" onClick={() => { setStep('account'); setPassword(''); clearError() }}>Change</button>
+                <button type="button"
+                  onClick={() => {
+                    setStep(lastUser ? 'account' : 'email')
+                    setPassword(''); clearError()
+                  }}>Change</button>
               </div>
               <input
                 className="login-input"
@@ -221,52 +243,9 @@ export default function LoginPage() {
               <button type="button" className="login-forgot" onClick={handleForgotPassword} disabled={loading}>
                 Forgot password?
               </button>
-            </form>
-          </>
-        )}
-
-        {/* ── Full sign-in: Google + email+password together ─ */}
-        {step === 'full' && (
-          <>
-            <h1 className="login-card__title">Welcome to RoadMap</h1>
-            <p className="login-card__sub">Sign in or create a new account</p>
-            <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
-              <GoogleIcon />
-              Continue with Google
-            </button>
-            <div className="login-divider"><span>or</span></div>
-            {/*
-              Both fields in ONE form — Chrome autofills email + password together
-              when a saved credential is selected from the browser dropdown.
-            */}
-            <form onSubmit={handleFullSignIn}>
-              <input
-                className="login-input"
-                type="email"
-                name="email"
-                autoComplete="username"
-                placeholder="Email"
-                defaultValue={email}
-                onChange={(e) => { setEmail(e.target.value); clearError() }}
-                autoFocus
-              />
-              <input
-                className="login-input"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                placeholder="Password"
-                defaultValue={password}
-                onChange={(e) => { setPassword(e.target.value); clearError() }}
-                style={{ marginTop: 8 }}
-              />
-              {error && <div className="login-error">{error}</div>}
-              <button className="login-submit-btn" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign in'}
-              </button>
               <button type="button" className="login-forgot"
-                onClick={() => { clearError(); setStep('register') }}>
-                New to RoadMap? Create an account
+                onClick={() => { setStep('register'); setPassword(''); clearError() }}>
+                No account yet? Create one
               </button>
             </form>
           </>
@@ -280,7 +259,8 @@ export default function LoginPage() {
               {email.trim() ? (
                 <div className="login-email-badge">
                   <span>{email}</span>
-                  <button type="button" onClick={() => { setStep('full'); setPassword(''); clearError() }}>Change</button>
+                  <button type="button"
+                    onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
                 </div>
               ) : (
                 <input className="login-input" type="email" name="email" autoComplete="email"
@@ -300,7 +280,7 @@ export default function LoginPage() {
                 {loading ? 'Creating account…' : 'Join RoadMap'}
               </button>
               <button type="button" className="login-forgot"
-                onClick={() => { setStep(email.trim() ? 'password' : 'full'); clearError() }}>
+                onClick={() => { setStep(email.trim() ? 'password' : 'email'); clearError() }}>
                 Already have an account? Sign in
               </button>
             </form>
@@ -327,24 +307,18 @@ export default function LoginPage() {
   )
 }
 
-// ── Store credential in browser's Credential Manager ─────────────────────
 function storeCredential(email, password) {
   if (!window.PasswordCredential || !navigator.credentials?.store) return
-  try {
-    navigator.credentials.store(new PasswordCredential({ id: email, password }))
-  } catch {}
+  try { navigator.credentials.store(new PasswordCredential({ id: email, password })) } catch {}
 }
 
-// ── Last-user avatar ──────────────────────────────────────────────────────
 function LastUserAvatar({ user }) {
   const color  = getAvatarColor(user.name || user.email)
   const letter = (user.name || user.email || '?').charAt(0).toUpperCase()
   if (user.photo) return <img className="login-account-card__avatar" src={user.photo} alt="" />
   return (
     <div className="login-account-card__avatar login-account-card__avatar--initial"
-      style={{ background: color }}>
-      {letter}
-    </div>
+      style={{ background: color }}>{letter}</div>
   )
 }
 
