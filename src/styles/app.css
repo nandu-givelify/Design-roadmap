@@ -236,7 +236,27 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 
 
 /* Empty state */
-.timeline__empty { padding: 60px 0; text-align: center; color: #9ca3af; font-size: 14px; }
+/* Zero-state messages — fixed overlay so they're always centered in the viewport,
+   not centered within the (much wider) scrollable year content. */
+.timeline__empty,
+.timeline__empty-drop {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  color: #9ca3af; font-size: 14px;
+  /* No pointer-events on .timeline__empty (informational only) */
+  pointer-events: none;
+}
+/* empty-drop allows double-click to add a task */
+.timeline__empty-drop { pointer-events: auto; }
+
+/* Hide both while the loading overlay is active — avoids flickering "no tasks" during load.
+   :has(~ .timeline-loading) targets a .timeline whose next sibling is .timeline-loading. */
+.timeline:has(~ .timeline-loading) .timeline__empty,
+.timeline:has(~ .timeline-loading) .timeline__empty-drop {
+  display: none;
+}
 
 /* ── Task Bar ────────────────────────────────────────────────────────────────── */
 .task-bar {
@@ -769,11 +789,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 }
 
 /* ── Empty drop area (no-grouping mode) ──────────────────────────────────────── */
-.timeline__empty-drop {
-  display: flex; align-items: center; justify-content: center;
-  min-height: 200px; color: #9ca3af; font-size: 14px;
-  cursor: default;
-}
+/* .timeline__empty-drop styles merged into the shared rule above */
 
 /* ── Login page additions ─────────────────────────────────────────────────────── */
 .login-email-badge {
