@@ -227,7 +227,10 @@ async function compressImage(dataUrl, maxPx = 256, quality = 0.82) {
 
 function AuthenticatedApp({ user }) {
   const [boards,        setBoards]        = useState([])
-  const [activeBoardId, setActiveBoardId] = useState(null)
+  // Pre-populate from URL so people+tasks subscribe immediately (no wait for boards list).
+  const [activeBoardId, setActiveBoardId] = useState(() =>
+    new URLSearchParams(window.location.search).get('board') || null
+  )
   const [people,        setPeople]        = useState([])
   const [tasks,         setTasks]         = useState([])
   const [tasksLoaded,   setTasksLoaded]   = useState(false)

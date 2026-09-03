@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -18,7 +18,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
-import CheckIcon from '@mui/icons-material/Check'
 import { getAvatarColor } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
 
@@ -31,36 +30,139 @@ function formatDateRange(start, end) {
 
 // ── Inline date range widget (no MUI label overlap) ───────────────────────────
 function DateRangeInput({ start, end, onStartChange, onEndChange }) {
+  const startRef = useRef(null)
+  const endRef   = useRef(null)
+
+  const openPicker = (ref) => {
+    try { ref.current?.showPicker() } catch {}
+  }
+
+  const handleStartChange = (value) => {
+    onStartChange(value)
+    // Auto-open end date after start is chosen
+    if (value) setTimeout(() => openPicker(endRef), 80)
+  }
+
+  const fieldBox = { flex: 1, p: 1.25, cursor: 'pointer', userSelect: 'none' }
+
   return (
     <Box sx={{
       display: 'flex',
       border: '1px solid', borderColor: 'divider', borderRadius: 2,
       overflow: 'hidden', mb: 1.5,
     }}>
-      <Box sx={{ flex: 1, p: 1.25, borderRight: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2 }}>
+      <Box sx={{ ...fieldBox, borderRight: '1px solid', borderColor: 'divider' }}
+        onClick={() => openPicker(startRef)}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
           Start
         </Typography>
         <input
+          ref={startRef}
           type="date"
           value={start}
-          onChange={e => onStartChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer' }}
+          onChange={e => handleStartChange(e.target.value)}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
         />
       </Box>
-      <Box sx={{ flex: 1, p: 1.25 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2 }}>
+      <Box sx={fieldBox} onClick={() => openPicker(endRef)}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
           End
         </Typography>
         <input
+          ref={endRef}
           type="date"
           value={end}
           min={start || undefined}
           onChange={e => onEndChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer' }}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
         />
       </Box>
     </Box>
+  )
+}
+
+// ── Edit person stacked dialog ────────────────────────────────────────────────
+function EditPersonDialog({ open, onClose, person, onUpdatePerson, onDelete, roles }) {
+  const [editName,     setEditName]     = useState(person?.name  || '')
+  const [editEmail,    setEditEmail]    = useState(person?.email || '')
+  const [editRole,     setEditRole]     = useState(person?.role  || '')
+  const [editPhoto,    setEditPhoto]    = useState(person?.photo || null)
+  const [saving,       setSaving]       = useState(false)
+
+  // Reset fields whenever the dialog opens or person changes
+  useEffect(() => {
+    if (open && person) {
+      setEditName(person.name  || '')
+      setEditEmail(person.email || '')
+      setEditRole(person.role  || '')
+      setEditPhoto(person.photo || null)
+    }
+  }, [open, person?.id]) // eslint-disable-line
+
+  const allRoles = roles || ['Designer', 'PM', 'Dev']
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onUpdatePerson?.({ name: editName.trim(), email: editEmail.trim() || null, role: editRole, photo: editPhoto })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      // Keep parent dialog in background, not closing it
+      disableEnforceFocus={false}
+      PaperProps={{ sx: { borderRadius: 3 } }}
+    >
+      <DialogTitle sx={{ pr: 5 }}>
+        Edit details
+        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent>
+        <Box sx={{ mb: 2 }}>
+          <PhotoPicker value={editPhoto} onChange={setEditPhoto} />
+        </Box>
+        <Stack spacing={1.5}>
+          <TextField size="small" label="Name" fullWidth value={editName}
+            onChange={e => setEditName(e.target.value)} />
+          <TextField size="small" label="Email" fullWidth type="email" value={editEmail}
+            onChange={e => setEditEmail(e.target.value)} />
+          <FormControl size="small" fullWidth>
+            <InputLabel>Role</InputLabel>
+            <Select label="Role" value={editRole} onChange={e => setEditRole(e.target.value)}>
+              {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Stack>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 2, pb: 2, justifyContent: 'space-between' }}>
+        <Box>
+          {onDelete && (
+            <Button size="small" color="error" onClick={() => { onDelete?.(); onClose() }}>
+              Delete
+            </Button>
+          )}
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" onClick={onClose}>Cancel</Button>
+          <Button size="small" variant="contained" onClick={handleSave}
+            disabled={saving || !editName.trim()}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </Stack>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -83,31 +185,17 @@ export default function PersonDetailsDialog({
   const [toEnd,          setToEnd]          = useState('')
   const [savingTo,       setSavingTo]       = useState(false)
 
-  // Person edit form
-  const [editingPerson,  setEditingPerson]  = useState(false)
-  const [editName,       setEditName]       = useState('')
-  const [editEmail,      setEditEmail]      = useState('')
-  const [editRole,       setEditRole]       = useState('')
-  const [editPhoto,      setEditPhoto]      = useState(null)
-  const [savingPerson,   setSavingPerson]   = useState(false)
+  // Edit person dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
-  // Reset forms when dialog closes or person changes
+  // Reset time off forms when dialog closes
   useEffect(() => {
     if (!open) {
       setAddingTimeOff(false); setEditingTimeOff(null)
       setToStart(''); setToEnd(''); setSavingTo(false)
-      setEditingPerson(false); setSavingPerson(false)
+      setEditDialogOpen(false)
     }
   }, [open])
-
-  useEffect(() => {
-    if (person) {
-      setEditName(person.name  || '')
-      setEditEmail(person.email || '')
-      setEditRole(person.role   || '')
-      setEditPhoto(person.photo || null)
-    }
-  }, [person?.id]) // eslint-disable-line
 
   if (!person) return null
 
@@ -130,7 +218,6 @@ export default function PersonDetailsDialog({
         end:   toEnd,
       }
       if (editingTimeOff) {
-        // remove old, add new
         await onRemoveTimeOff?.(editingTimeOff)
         await onAddTimeOff?.(newEntry)
       } else {
@@ -146,163 +233,135 @@ export default function PersonDetailsDialog({
     setEditingTimeOff(to); setToStart(to.start); setToEnd(to.end); setAddingTimeOff(false)
   }
 
-  // ── Person edit handler ───────────────────────────────────────────────────
-  const handleSavePerson = async () => {
-    setSavingPerson(true)
-    try {
-      await onUpdatePerson?.({ name: editName.trim(), email: editEmail.trim() || null, role: editRole, photo: editPhoto })
-      setEditingPerson(false)
-    } finally {
-      setSavingPerson(false)
-    }
-  }
-
-  const allRoles = roles || ['Designer', 'PM', 'Dev']
-
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{ sx: { borderRadius: 3 } }}
-    >
-      <DialogTitle sx={{ pb: 1, pr: 5 }}>
-        {person.name}
-        <IconButton onClick={onClose} size="small"
-          sx={{ position: 'absolute', right: 8, top: 8 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
+    <>
+      <Dialog
+        open={open}
+        onClose={onClose}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ pb: 1, pr: 5 }}>
+          {person.name}
+          <IconButton onClick={onClose} size="small"
+            sx={{ position: 'absolute', right: 8, top: 8 }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
 
-      <DialogContent sx={{ pb: 1 }}>
-        {/* ── Avatar + info ── */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Box sx={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: person.photo ? 'transparent' : avatarColor,
-            flexShrink: 0, overflow: 'hidden',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, fontWeight: 700, color: '#fff',
-          }}>
-            {person.photo
-              ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : letter}
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} noWrap>{person.name}</Typography>
-            {person.role  && <Typography variant="body2" color="text.secondary">{person.role}</Typography>}
-            {person.email && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{person.email}</Typography>}
-          </Box>
-          {canEdit && onUpdatePerson && !editingPerson && (
-            <IconButton size="small" onClick={() => setEditingPerson(true)} sx={{ flexShrink: 0 }}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-
-        {/* ── Person edit form ── */}
-        {editingPerson && onUpdatePerson && (
-          <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, background: '#fafafa' }}>
-            <Box sx={{ mb: 1.5 }}>
-              <PhotoPicker value={editPhoto} onChange={setEditPhoto} />
+        <DialogContent sx={{ pb: 2 }}>
+          {/* ── Avatar + info ── */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Box sx={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: person.photo ? 'transparent' : avatarColor,
+              flexShrink: 0, overflow: 'hidden',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, fontWeight: 700, color: '#fff',
+            }}>
+              {person.photo
+                ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : letter}
             </Box>
-            <Stack spacing={1.25}>
-              <TextField size="small" label="Name" fullWidth value={editName} onChange={e => setEditName(e.target.value)} />
-              <TextField size="small" label="Email" fullWidth type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
-              <FormControl size="small" fullWidth>
-                <InputLabel>Role</InputLabel>
-                <Select label="Role" value={editRole} onChange={e => setEditRole(e.target.value)}>
-                  {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Stack>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5 }}>
-              {onDelete && (
-                <Button size="small" color="error" onClick={() => { onDelete?.(); onClose() }}>Delete</Button>
-              )}
-              <Stack direction="row" spacing={1} sx={{ ml: 'auto' }}>
-                <Button size="small" onClick={() => setEditingPerson(false)}>Cancel</Button>
-                <Button size="small" variant="contained" onClick={handleSavePerson} disabled={savingPerson || !editName.trim()}>
-                  {savingPerson ? 'Saving…' : 'Save'}
-                </Button>
-              </Stack>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="subtitle1" fontWeight={700} noWrap>{person.name}</Typography>
+              {person.role  && <Typography variant="body2" color="text.secondary">{person.role}</Typography>}
+              {person.email && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{person.email}</Typography>}
             </Box>
-          </Box>
-        )}
-
-        {/* ── Time off section ── */}
-        {timeOffList.length > 0 && (
-          <Divider sx={{ mb: 1.5 }} />
-        )}
-
-        {timeOffList.map(to => (
-          <Box key={to.id} sx={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            py: 0.75, px: 1.25, mb: 0.5,
-            border: '1px solid', borderColor: editingTimeOff?.id === to.id ? 'primary.main' : 'divider',
-            borderRadius: 2,
-          }}>
-            {editingTimeOff?.id === to.id ? (
-              // Editing this entry inline
-              <Box sx={{ flex: 1 }}>
-                <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
-                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
-                  <Button size="small" onClick={resetToForm}>Cancel</Button>
-                  <Button size="small" variant="contained" onClick={handleSaveTimeOff}
-                    disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
-                    {savingTo ? '…' : 'Save'}
-                  </Button>
-                </Box>
-              </Box>
-            ) : (
-              <>
-                <Typography variant="body2" fontWeight={500}>
-                  {formatDateRange(to.start, to.end)}
-                </Typography>
-                {canEdit && (
-                  <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                    <IconButton size="small" onClick={() => startEdit(to)} sx={{ color: 'text.secondary' }}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => onRemoveTimeOff?.(to)} sx={{ color: 'text.secondary' }}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                )}
-              </>
+            {canEdit && onUpdatePerson && (
+              <IconButton size="small" onClick={() => setEditDialogOpen(true)} sx={{ flexShrink: 0 }}>
+                <EditIcon fontSize="small" />
+              </IconButton>
             )}
           </Box>
-        ))}
 
-        {/* Add time off form */}
-        {canEdit && addingTimeOff && !editingTimeOff && (
-          <Box sx={{ mt: 0.5, mb: 0.5 }}>
-            <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
-              <Button size="small" onClick={resetToForm}>Cancel</Button>
-              <Button size="small" variant="contained" onClick={handleSaveTimeOff}
-                disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
-                {savingTo ? 'Adding…' : 'Add'}
-              </Button>
+          {/* ── Time off section ── */}
+          {timeOffList.length > 0 && (
+            <>
+              <Divider sx={{ mb: 1.5 }} />
+              <Typography variant="caption" color="text.secondary"
+                sx={{ display: 'block', mb: 1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Time off
+              </Typography>
+            </>
+          )}
+
+          {timeOffList.map(to => (
+            <Box key={to.id} sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              py: 0.75, px: 1.25, mb: 0.5,
+              border: '1px solid', borderColor: editingTimeOff?.id === to.id ? 'primary.main' : 'divider',
+              borderRadius: 2,
+            }}>
+              {editingTimeOff?.id === to.id ? (
+                <Box sx={{ flex: 1 }}>
+                  <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
+                    <Button size="small" onClick={resetToForm}>Cancel</Button>
+                    <Button size="small" variant="contained" onClick={handleSaveTimeOff}
+                      disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
+                      {savingTo ? '…' : 'Save'}
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <>
+                  <Typography variant="body2" fontWeight={500}>
+                    {formatDateRange(to.start, to.end)}
+                  </Typography>
+                  {canEdit && (
+                    <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+                      <IconButton size="small" onClick={() => startEdit(to)} sx={{ color: 'text.secondary' }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => onRemoveTimeOff?.(to)} sx={{ color: 'text.secondary' }}>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )}
+                </>
+              )}
             </Box>
-          </Box>
-        )}
+          ))}
 
-        {/* Add button — shown when not adding */}
-        {canEdit && !addingTimeOff && !editingTimeOff && (
-          <Button size="small" startIcon={<AddIcon />}
-            onClick={() => { setAddingTimeOff(true); setEditingTimeOff(null) }}
-            sx={{ mt: timeOffList.length > 0 ? 0.5 : 0 }}
-          >
-            Add time off
-          </Button>
-        )}
-      </DialogContent>
+          {/* Add time off form */}
+          {canEdit && addingTimeOff && !editingTimeOff && (
+            <Box sx={{ mt: 0.5, mb: 0.5 }}>
+              <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
+              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
+                <Button size="small" onClick={resetToForm}>Cancel</Button>
+                <Button size="small" variant="contained" onClick={handleSaveTimeOff}
+                  disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
+                  {savingTo ? 'Adding…' : 'Add'}
+                </Button>
+              </Box>
+            </Box>
+          )}
 
-      <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={onClose} size="small">Close</Button>
-      </DialogActions>
-    </Dialog>
+          {/* Add button — shown when not adding */}
+          {canEdit && !addingTimeOff && !editingTimeOff && (
+            <Button size="small" startIcon={<AddIcon />}
+              onClick={() => { setAddingTimeOff(true); setEditingTimeOff(null) }}
+              sx={{ mt: timeOffList.length > 0 ? 0.5 : 0 }}
+            >
+              Add time off
+            </Button>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit person stacked dialog ── */}
+      {canEdit && onUpdatePerson && (
+        <EditPersonDialog
+          open={editDialogOpen}
+          onClose={() => setEditDialogOpen(false)}
+          person={person}
+          onUpdatePerson={onUpdatePerson}
+          onDelete={onDelete ? () => { onDelete(); onClose() } : null}
+          roles={roles}
+        />
+      )}
+    </>
   )
 }

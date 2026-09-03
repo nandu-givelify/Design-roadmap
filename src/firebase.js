@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import {
-  getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc,
   doc, serverTimestamp, query, where, getDocs, setDoc, getDoc, arrayUnion, arrayRemove,
 } from 'firebase/firestore'
 import {
@@ -27,7 +28,11 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-export const db   = getFirestore(app)
+// Offline persistence: data is cached in IndexedDB so subsequent loads are instant.
+// persistentMultipleTabManager lets you have the app open in multiple tabs safely.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})
 export const auth = getAuth(app)
 
 // ── Auth ─────────────────────────────────────────────────────────────────────

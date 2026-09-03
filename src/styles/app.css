@@ -1252,12 +1252,13 @@ input:focus, select:focus { outline: none; }
   top: 0; bottom: 0;
   z-index: 1;
   pointer-events: none;
-  background: repeating-linear-gradient(
+  background-color: rgba(239, 68, 68, 0.08);
+  background-image: repeating-linear-gradient(
     -45deg,
     transparent,
-    transparent 4px,
-    rgba(239, 68, 68, 0.09) 4px,
-    rgba(239, 68, 68, 0.09) 8px
+    transparent 5px,
+    rgba(239, 68, 68, 0.13) 5px,
+    rgba(239, 68, 68, 0.13) 9px
   );
 }
 .timeline__timeoff-block--overlay {
