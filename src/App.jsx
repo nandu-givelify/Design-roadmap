@@ -16,7 +16,7 @@ import {
   subscribeUserPrefs, updateUserPrefs,
   DEFAULT_BOARD_PHASES,
   getUserProfile, setUserProfile, findBoardsByMemberEmail, subscribeUserProfile,
-  getPeopleOnce, addTimeOff, removeTimeOff,
+  getPeopleOnce, addTimeOff, removeTimeOff, addUserTimeOff, removeUserTimeOff,
 } from './firebase'
 import { useHistory } from './hooks/useHistory'
 import { parseLocalDate, diffDays, startOfDay, addDays, toDateString } from './utils/dateUtils'
@@ -470,8 +470,10 @@ function AuthenticatedApp({ user }) {
       if (!emailMatch && !nameMatch) return p
       return {
         ...p,
-        photo: userProfile.photo ?? p.photo ?? null,
-        name:  userProfile.name  ?? p.name,
+        photo:   userProfile.photo   ?? p.photo   ?? null,
+        name:    userProfile.name    ?? p.name,
+        // Global time off overrides board-level — applies across all boards
+        timeOff: userProfile.timeOff ?? p.timeOff ?? [],
       }
     })
   }, [people, user, userProfile]) // eslint-disable-line
@@ -1054,13 +1056,19 @@ function AuthenticatedApp({ user }) {
           const canEditPerson = isOwner || isOwnProfile
 
           const handleAddTO = async (entry) => {
-            if (!livePerson || !activeBoardId) return
-            await addTimeOff(activeBoardId, livePerson.id, entry)
-            // Auto-extend overlapping tasks
+            if (!livePerson) return
+            // Own time off → user-level (applies to all boards); others → board-level
+            if (isOwnProfile) {
+              await addUserTimeOff(user.uid, entry)
+            } else if (activeBoardId) {
+              await addTimeOff(activeBoardId, livePerson.id, entry)
+            }
+            // Auto-extend overlapping tasks on the current board
+            if (!activeBoardId) return
             const toS = parseLocalDate(entry.start)
             const toE = parseLocalDate(entry.end)
             const personTasks = tasks.filter(t =>
-              t.assigneeId === livePerson.id || t.pmId === livePerson.id
+              t.assigneeId === livePerson.id || t.pmId === livePerson.id || t.teamId === livePerson.id
             )
             for (const task of personTasks) {
               const tS = parseLocalDate(task.startDate)
@@ -1096,8 +1104,12 @@ function AuthenticatedApp({ user }) {
               onDelete={isOwner && livePerson ? () => { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) } : null}
               onAddTimeOff={handleAddTO}
               onRemoveTimeOff={async (entry) => {
-                if (!livePerson || !activeBoardId) return
-                await removeTimeOff(activeBoardId, livePerson.id, entry)
+                if (!livePerson) return
+                if (isOwnProfile) {
+                  await removeUserTimeOff(user.uid, entry)
+                } else if (activeBoardId) {
+                  await removeTimeOff(activeBoardId, livePerson.id, entry)
+                }
               }}
             />
           )

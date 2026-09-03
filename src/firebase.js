@@ -164,6 +164,12 @@ export const addTimeOff = (boardId, personId, entry) =>
 export const removeTimeOff = (boardId, personId, entry) =>
   updateDoc(doc(db, 'boards', boardId, 'people', personId), { timeOff: arrayRemove(entry) })
 
+// User-level time off — stored in userProfiles so it applies across all boards
+export const addUserTimeOff = (uid, entry) =>
+  setDoc(doc(db, 'userProfiles', uid), { timeOff: arrayUnion(entry) }, { merge: true })
+export const removeUserTimeOff = (uid, entry) =>
+  setDoc(doc(db, 'userProfiles', uid), { timeOff: arrayRemove(entry) }, { merge: true })
+
 // ── Tasks (board-scoped) ─────────────────────────────────────────────────────
 export const subscribeTasks = (boardId, cb, onError) =>
   onSnapshot(

@@ -472,7 +472,9 @@ const Timeline = forwardRef(function Timeline({
         >
           {/* Time off background — assignee's time off behind the task bar */}
           {(() => {
-            const assignee = people.find(p => p.id === task.assigneeId || p.id === (task.pmId || task.teamId))
+            // Use the first populated ID field — assigneeId for design tasks, pmId/teamId for PM tasks
+            const personId = task.assigneeId || task.pmId || task.teamId
+            const assignee = personId ? people.find(p => p.id === personId) : null
             return (assignee?.timeOff || []).map(to => {
               const s = parseLocalDate(to.start)
               const e = parseLocalDate(to.end)

@@ -210,20 +210,24 @@ export default function PersonDetailsDialog({
 
   const handleSaveTimeOff = async () => {
     if (!toStart || !toEnd || toEnd < toStart) return
+    // Capture values before resetting form (resetToForm clears these)
+    const start   = toStart
+    const end     = toEnd
+    const editing = editingTimeOff
+    const newEntry = {
+      id:    editing?.id || `to_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      start, end,
+    }
+    // Close form immediately so the snapshot re-render doesn't briefly show it again
+    resetToForm()
     setSavingTo(true)
     try {
-      const newEntry = {
-        id:    editingTimeOff?.id || `to_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        start: toStart,
-        end:   toEnd,
-      }
-      if (editingTimeOff) {
-        await onRemoveTimeOff?.(editingTimeOff)
+      if (editing) {
+        await onRemoveTimeOff?.(editing)
         await onAddTimeOff?.(newEntry)
       } else {
         await onAddTimeOff?.(newEntry)
       }
-      resetToForm()
     } finally {
       setSavingTo(false)
     }
