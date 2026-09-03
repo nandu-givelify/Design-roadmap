@@ -249,6 +249,10 @@ export default function LeftNav({
             const url = new URL(window.location)
             url.searchParams.delete('board')
             window.history.replaceState({}, '', url)
+            // Prevent the Credential Management API from silently re-signing in
+            if (navigator.credentials?.preventSilentAccess) {
+              navigator.credentials.preventSilentAccess()
+            }
             signOutUser(); setMenuAnchor(null)
           }} sx={{ color: 'error.main' }}>
             <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
