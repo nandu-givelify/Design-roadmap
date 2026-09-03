@@ -6,6 +6,7 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
+import Grow from '@mui/material/Grow'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -272,7 +273,7 @@ function RenameBoardDialog({ board, onSave, onClose }) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth TransitionComponent={Grow} TransitionProps={{ timeout: 220 }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Rename board
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>

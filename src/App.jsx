@@ -837,7 +837,9 @@ function AuthenticatedApp({ user }) {
     if (!activeBoardId || migratedBoardsRef.current.has(activeBoardId)) return
     if (!tasks.length || !boardPhases || !boardPhases.length) return
     migratedBoardsRef.current.add(activeBoardId)
-    const ids = boardPhases.map(p => p.id)
+    // Skip optional phases when computing defaults — they must be opted in per-task
+    const activePhases = boardPhases.filter(bp => !bp.optional)
+    const ids = activePhases.map(p => p.id)
     const hasSmart = ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')
     tasks.forEach(task => {
       if (task.phases && task.phases.length > 0) {
@@ -852,7 +854,7 @@ function AuthenticatedApp({ user }) {
         return
       }
       const d = Math.max(1, Math.round((new Date(task.endDate) - new Date(task.startDate)) / 86400000) + 1)
-      const n = boardPhases.length
+      const n = activePhases.length
       let phases
       if (hasSmart) {
         const discovery = Math.max(1, Math.min(7, Math.round(d * 0.25)))
@@ -860,7 +862,7 @@ function AuthenticatedApp({ user }) {
         const rem = Math.max(2, d - discovery - handoff)
         const ux = Math.max(1, Math.floor(rem / 2))
         const ui = Math.max(1, rem - ux)
-        phases = boardPhases.map(bp => ({
+        phases = activePhases.map(bp => ({
           id: bp.id,
           days: bp.id === 'discovery' ? discovery : bp.id === 'handoff' ? handoff
               : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
@@ -868,13 +870,38 @@ function AuthenticatedApp({ user }) {
         }))
       } else {
         const eq = Math.max(1, Math.floor(d / n))
-        phases = boardPhases.map((bp, i) => ({
+        phases = activePhases.map((bp, i) => ({
           id: bp.id, days: i === n - 1 ? Math.max(1, d - eq * (n - 1)) : eq,
         }))
       }
       updateTask(activeBoardId, task.id, { phases })
     })
   }, [activeBoardId, tasks, boardPhases]) // eslint-disable-line
+
+  // ── Migrate existing boards: inject new optional phases if missing ────────
+  const migratedPhasesRef = useRef(new Set())
+  useEffect(() => {
+    boards.forEach(board => {
+      if (migratedPhasesRef.current.has(board.id)) return
+      const phases = board.boardPhases
+      if (!phases) return
+      // Only migrate boards that have the 4 standard phases
+      if (!phases.some(p => p.id === 'handoff')) return
+      // Add usertesting before handoff if not already present
+      if (phases.some(p => p.id === 'usertesting')) {
+        migratedPhasesRef.current.add(board.id)
+        return
+      }
+      migratedPhasesRef.current.add(board.id)
+      const handoffIdx = phases.findIndex(p => p.id === 'handoff')
+      const newPhases = [
+        ...phases.slice(0, handoffIdx),
+        { id: 'usertesting', name: 'User testing', color: '#A78BFA', optional: true },
+        ...phases.slice(handoffIdx),
+      ]
+      updateBoard(board.id, { boardPhases: newPhases })
+    })
+  }, [boards]) // eslint-disable-line
 
   // Share: ?board=boardId URL
   const getBoardShareUrl = () => {

@@ -368,16 +368,19 @@ const Timeline = forwardRef(function Timeline({
   }
   const bulkDefaultPhases = (task) => {
     if (!boardPhases || !boardPhases.length) return []
-    const n   = boardPhases.length
+    // Optional phases off by default
+    const active = boardPhases.filter(bp => !bp.optional)
+    if (!active.length) return []
+    const n   = active.length
     const d   = bulkTaskDays(task)
-    const ids = boardPhases.map(p => p.id)
+    const ids = active.map(p => p.id)
     if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
       const discovery = Math.max(1, Math.min(7, Math.round(d * 0.25)))
       const handoff   = Math.max(1, Math.min(3, Math.round(d * 0.1)))
       const remaining = Math.max(2, d - discovery - handoff)
       const ux = Math.max(1, Math.floor(remaining / 2))
       const ui = Math.max(1, remaining - ux)
-      return boardPhases.map(bp => ({
+      return active.map(bp => ({
         id: bp.id,
         days: bp.id === 'discovery' ? discovery
             : bp.id === 'handoff'   ? handoff
@@ -387,7 +390,7 @@ const Timeline = forwardRef(function Timeline({
       }))
     }
     const eq = Math.max(1, Math.floor(d / n))
-    return boardPhases.map((bp, i) => ({ id: bp.id, days: i === n-1 ? Math.max(1, d - eq*(n-1)) : eq }))
+    return active.map((bp, i) => ({ id: bp.id, days: i === n-1 ? Math.max(1, d - eq*(n-1)) : eq }))
   }
   const bulkNormalize = (phases, task) => {
     const d = bulkTaskDays(task)

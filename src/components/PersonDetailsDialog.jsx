@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import Grow from '@mui/material/Grow'
+import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -117,8 +119,9 @@ function EditPersonDialog({ open, onClose, person, onUpdatePerson, onDelete, rol
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      // Keep parent dialog in background, not closing it
       disableEnforceFocus={false}
+      TransitionComponent={Grow}
+      TransitionProps={{ timeout: 220 }}
       PaperProps={{ sx: { borderRadius: 3 } }}
     >
       <DialogTitle sx={{ pr: 5 }}>
@@ -244,6 +247,8 @@ export default function PersonDetailsDialog({
         onClose={onClose}
         maxWidth="xs"
         fullWidth
+        TransitionComponent={Grow}
+        TransitionProps={{ timeout: 220 }}
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 5 }}>
@@ -329,18 +334,20 @@ export default function PersonDetailsDialog({
             </Box>
           ))}
 
-          {/* Add time off form */}
-          {canEdit && addingTimeOff && !editingTimeOff && (
-            <Box sx={{ mt: 0.5, mb: 0.5 }}>
-              <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
-              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
-                <Button size="small" onClick={resetToForm}>Cancel</Button>
-                <Button size="small" variant="contained" onClick={handleSaveTimeOff}
-                  disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
-                  {savingTo ? 'Adding…' : 'Add'}
-                </Button>
+          {/* Add time off form — collapses in/out */}
+          {canEdit && !editingTimeOff && (
+            <Collapse in={addingTimeOff} unmountOnExit>
+              <Box sx={{ mt: 0.5, mb: 0.5 }}>
+                <DateRangeInput start={toStart} end={toEnd} onStartChange={setToStart} onEndChange={setToEnd} />
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: -0.5 }}>
+                  <Button size="small" onClick={resetToForm}>Cancel</Button>
+                  <Button size="small" variant="contained" onClick={handleSaveTimeOff}
+                    disabled={savingTo || !toStart || !toEnd || toEnd < toStart}>
+                    {savingTo ? 'Adding…' : 'Add'}
+                  </Button>
+                </Box>
               </Box>
-            </Box>
+            </Collapse>
           )}
 
           {/* Add button — shown when not adding */}

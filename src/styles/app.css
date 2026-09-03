@@ -1271,3 +1271,62 @@ input:focus, select:focus { outline: none; }
     rgba(239, 68, 68, 0.13) 8px
   );
 }
+
+/* ── Motion design ───────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Timeline rows slide in when board loads */
+.timeline__person-row {
+  animation: fadeUp 0.18s ease both;
+}
+/* Stagger row entrances */
+.timeline__person-row:nth-child(1)  { animation-delay: 0.00s; }
+.timeline__person-row:nth-child(2)  { animation-delay: 0.03s; }
+.timeline__person-row:nth-child(3)  { animation-delay: 0.06s; }
+.timeline__person-row:nth-child(4)  { animation-delay: 0.09s; }
+.timeline__person-row:nth-child(5)  { animation-delay: 0.12s; }
+.timeline__person-row:nth-child(6)  { animation-delay: 0.15s; }
+.timeline__person-row:nth-child(n+7){ animation-delay: 0.18s; }
+
+/* Left nav board items */
+.left-nav__board-row {
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+.left-nav__board-row:active {
+  transform: scale(0.98);
+}
+
+/* Task bar context menu */
+.task-bar__menu {
+  animation: scaleIn 0.14s ease both;
+  transform-origin: top left;
+}
+
+/* Undo toast slides up */
+.undo-toast {
+  animation: fadeUp 0.2s ease both;
+}
+
+/* Phase chips: scale feedback on click */
+.phase-chip-active-scale {
+  transition: transform 0.1s ease;
+}
+.phase-chip-active-scale:active {
+  transform: scale(0.94);
+}
+
+/* Settings section tiles fade in */
+.settings-section {
+  animation: fadeIn 0.2s ease both;
+}

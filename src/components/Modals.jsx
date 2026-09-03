@@ -36,22 +36,25 @@ function normalizePhases(phases, totalDays) {
 
 function smartDefaultPhases(boardPhases, totalDays) {
   if (!boardPhases || boardPhases.length === 0) return []
-  const n   = boardPhases.length
-  const ids = boardPhases.map(p => p.id)
+  // Optional phases are off by default — new tasks only get non-optional phases
+  const active = boardPhases.filter(bp => !bp.optional)
+  if (active.length === 0) return []
+  const n   = active.length
+  const ids = active.map(p => p.id)
   if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
     const discovery = Math.max(1, Math.min(7, Math.round(totalDays * 0.25)))
     const handoff   = Math.max(1, Math.min(3, Math.round(totalDays * 0.1)))
     const remaining = Math.max(2, totalDays - discovery - handoff)
     const ux = Math.max(1, Math.floor(remaining / 2))
     const ui = Math.max(1, remaining - ux)
-    return boardPhases.map(bp => ({
+    return active.map(bp => ({
       id: bp.id,
       days: bp.id === 'discovery' ? discovery : bp.id === 'handoff' ? handoff
           : bp.id === 'ux' ? ux : bp.id === 'ui' ? ui
           : Math.max(1, Math.floor(totalDays / n)),
     }))
   }
-  return normalizePhases(boardPhases.map(bp => ({ id: bp.id })), totalDays)
+  return normalizePhases(active.map(bp => ({ id: bp.id })), totalDays)
 }
 
 // ── Photo picker ──────────────────────────────────────────────────────────────
@@ -359,6 +362,11 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
                   }} />
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
                   <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
+                  {bp.optional && (
+                    <Typography variant="caption" sx={{ fontSize: 9, color: isActive ? bp.color : 'text.disabled', fontWeight: 500, letterSpacing: 0.3 }}>
+                      optional
+                    </Typography>
+                  )}
                 </Box>
               )
             })}
