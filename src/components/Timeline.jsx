@@ -237,7 +237,8 @@ const Timeline = forwardRef(function Timeline({
   const startMoveDrag = useCallback((task, e, barRect) => {
     if (readOnly) return
     const drag = { task, origAssigneeId: task.assigneeId || null, targetAssigneeId: task.assigneeId || null,
-      startCursorX: e.clientX, startCursorY: e.clientY, cursorX: e.clientX, cursorY: e.clientY, barRect }
+      startCursorX: e.clientX, startCursorY: e.clientY, cursorX: e.clientX, cursorY: e.clientY, barRect,
+      startTime: Date.now() }
     const dragRef = { current: drag }
     setActiveDrag(drag)
 
@@ -254,7 +255,8 @@ const Timeline = forwardRef(function Timeline({
       if (d) {
         const ddx = d.cursorX - d.startCursorX
         const ddy = d.cursorY - d.startCursorY
-        if (Math.sqrt(ddx * ddx + ddy * ddy) < 5) {
+        const held = Date.now() - d.startTime
+        if (Math.sqrt(ddx * ddx + ddy * ddy) < 5 && held < 300) {
           if (onEditTask) onEditTask(d.task)
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
