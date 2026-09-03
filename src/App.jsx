@@ -1137,6 +1137,24 @@ function AuthenticatedApp({ user }) {
                 } else if (activeBoardId) {
                   await removeTimeOff(activeBoardId, livePerson.id, entry)
                 }
+                // Shrink tasks that were extended by this time off block
+                if (!activeBoardId) return
+                const toS = parseLocalDate(entry.start)
+                const toE = parseLocalDate(entry.end)
+                const personTasks = tasks.filter(t =>
+                  t.assigneeId === livePerson.id || t.pmId === livePerson.id || t.teamId === livePerson.id
+                )
+                for (const task of personTasks) {
+                  const tS = parseLocalDate(task.startDate)
+                  const tE = parseLocalDate(task.endDate)
+                  if (tE < toS || tS > toE) continue
+                  const overlapStart = tS > toS ? tS : toS
+                  const overlapEnd   = tE < toE ? tE : toE
+                  const overlapDays  = diffDays(startOfDay(overlapStart), startOfDay(overlapEnd)) + 1
+                  if (overlapDays > 0) {
+                    await updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, -overlapDays)) })
+                  }
+                }
               }}
             />
           )
