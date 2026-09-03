@@ -1,8 +1,8 @@
 import { useRef, useState, useLayoutEffect, useEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
-const BAR_H         = 46
-const PHASE_STRIP_H = 10   // 4px strip + 4px bottom gap + 2px above = 10. Gives ~6px gap above strip.
+const BAR_H         = 42
+const PHASE_STRIP_H = 7    // 3px strip + 4px bottom gap = 7. Inner constrained to 42-7=35px, centering 24px avatar → 5.5px equal gaps.
 
 export default function TaskBar({
   task, totalStart, dayWidth, laneIndex,

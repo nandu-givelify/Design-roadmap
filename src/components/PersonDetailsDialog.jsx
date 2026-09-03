@@ -238,8 +238,8 @@ export default function PersonDetailsDialog({
         onClose={onClose}
         maxWidth="xs"
         fullWidth
-        TransitionComponent={Grow}
-        TransitionProps={{ timeout: 220 }}
+        TransitionComponent={Slide}
+        TransitionProps={{ direction: 'up', timeout: 240 }}
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 5 }}>
