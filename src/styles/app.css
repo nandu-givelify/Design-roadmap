@@ -793,6 +793,41 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   transition: color 0.15s;
 }
 .login-forgot:hover { color: var(--m3-on-surface); }
+/* ── Account card (last-used account picker) ─────────────────────────────── */
+.login-account-card {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 12px 14px;
+  background: var(--m3-surface-container-low);
+  border: 1px solid var(--m3-outline-variant);
+  border-radius: 14px; cursor: pointer;
+  margin-bottom: 14px;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+.login-account-card:hover:not(:disabled) {
+  background: var(--m3-surface-container);
+  border-color: var(--m3-outline);
+}
+.login-account-card:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-account-card__avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+}
+.login-account-card__avatar--initial {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: #fff;
+}
+.login-account-card__info { flex: 1; min-width: 0; }
+.login-account-card__name {
+  font-size: 14px; font-weight: 600; color: var(--m3-on-surface);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.login-account-card__email {
+  font-size: 12px; color: var(--m3-on-surface-variant); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.login-account-card__arrow { color: var(--m3-on-surface-variant); flex-shrink: 0; }
+
 .login-reset-sent { text-align: center; }
 .login-reset-sent__icon { font-size: 36px; margin-bottom: 12px; }
 .login-reset-sent p { font-size: 13px; color: var(--m3-on-surface-variant); margin-bottom: 6px; line-height: 1.5; }

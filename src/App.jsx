@@ -332,12 +332,23 @@ function AuthenticatedApp({ user }) {
       // Merge Firestore data — only use Firestore photo if it's a real value (not null/empty)
       // Firestore can have photo:null if the user's profile panel saved with no photo selected,
       // which would wipe the locally-cached photo on every login.
-      setUserProfile_(prev => ({
-        ...(prev || {}),
-        ...profile,
-        photo: ('photo' in profile && profile.photo) ? profile.photo : (prev?.photo ?? null),
-        name:  'name'  in profile ? profile.name  : (prev?.name  ?? null),
-      }))
+      setUserProfile_(prev => {
+        const next = {
+          ...(prev || {}),
+          ...profile,
+          photo: ('photo' in profile && profile.photo) ? profile.photo : (prev?.photo ?? null),
+          name:  'name'  in profile ? profile.name  : (prev?.name  ?? null),
+        }
+        // Persist last-user info for the login page account picker
+        try {
+          localStorage.setItem('roadmap_lastUser', JSON.stringify({
+            email: user.email,
+            name:  next.name  || user.displayName || '',
+            photo: next.photo || user.photoURL    || null,
+          }))
+        } catch {}
+        return next
+      })
     })
   }, [user]) // eslint-disable-line
 

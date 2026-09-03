@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, resetPassword } from '../firebase'
+import { getAvatarColor } from '../utils/dateUtils'
 
 // Steps: 'email' → 'password' → ('register' if user not found) | 'reset-sent'
 export default function LoginPage() {
@@ -9,6 +10,15 @@ export default function LoginPage() {
   const [name,     setName]     = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
+  const [lastUser, setLastUser] = useState(null)
+
+  // Load last-used account from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('roadmap_lastUser')
+      if (stored) setLastUser(JSON.parse(stored))
+    } catch {}
+  }, [])
 
   const clearError = () => setError('')
 
@@ -16,6 +26,12 @@ export default function LoginPage() {
   const handleEmailContinue = (e) => {
     e.preventDefault()
     if (!email.trim()) return
+    setStep('password')
+  }
+
+  // ── Quick sign-in via saved account card ─────────────────────────────────
+  const handleLastUserClick = () => {
+    setEmail(lastUser.email)
     setStep('password')
   }
 
@@ -52,7 +68,6 @@ export default function LoginPage() {
     } catch (err) {
       const code = err.code
       if (code === 'auth/email-already-in-use') {
-        // Account exists — they had the wrong password, send them back
         setStep('password')
         setError('An account exists with this email. Please enter the correct password.')
       } else {
@@ -104,40 +119,71 @@ export default function LoginPage() {
           {step === 'reset-sent'&& ''}
         </p>
 
-        {/* Google — only on email step */}
+        {/* ── Email step ──────────────────────────────────── */}
         {step === 'email' && (
           <>
+            {/* Last-used account card — shown when a previous session exists */}
+            {lastUser && (
+              <>
+                <button
+                  type="button"
+                  className="login-account-card"
+                  onClick={handleLastUserClick}
+                  disabled={loading}
+                >
+                  <LastUserAvatar user={lastUser} />
+                  <div className="login-account-card__info">
+                    <div className="login-account-card__name">{lastUser.name || lastUser.email}</div>
+                    <div className="login-account-card__email">{lastUser.email}</div>
+                  </div>
+                  <svg className="login-account-card__arrow" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <div className="login-divider"><span>or use a different account</span></div>
+              </>
+            )}
+
+            {/* Google — always shown on email step */}
             <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
               <GoogleIcon />
               Continue with Google
             </button>
-            <div className="login-divider"><span>or</span></div>
-          </>
-        )}
 
-        {/* ── Email step ──────────────────────────────────── */}
-        {step === 'email' && (
-          <form onSubmit={handleEmailContinue}>
-            <input
-              className="login-input"
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); clearError() }}
-              autoFocus
-            />
-            {error && <div className="login-error">{error}</div>}
-            <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
-              Sign in
-            </button>
-            <button
-              type="button"
-              className="login-forgot"
-              onClick={() => { clearError(); setStep('register') }}
-            >
-              New to RoadMap? Create an account
-            </button>
-          </form>
+            {!lastUser && <div className="login-divider"><span>or</span></div>}
+
+            <form onSubmit={handleEmailContinue}>
+              {/*
+                autocomplete="username" tells Chrome this is a login email field.
+                The hidden password field lets Chrome match this form to saved credentials
+                and suggest them when the email field is focused.
+              */}
+              <input
+                className="login-input"
+                type="email"
+                name="email"
+                autoComplete="username"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); clearError() }}
+                autoFocus={!lastUser}
+              />
+              {/* Hidden — helps Chrome recognize this as a login form and suggest saved credentials */}
+              <input type="password" name="password" autoComplete="current-password"
+                style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" />
+              {error && <div className="login-error">{error}</div>}
+              <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
+                Sign in
+              </button>
+              <button
+                type="button"
+                className="login-forgot"
+                onClick={() => { clearError(); setStep('register') }}
+              >
+                New to RoadMap? Create an account
+              </button>
+            </form>
+          </>
         )}
 
         {/* ── Password step (sign in attempt) ─────────────── */}
@@ -150,6 +196,8 @@ export default function LoginPage() {
             <input
               className="login-input"
               type="password"
+              name="password"
+              autoComplete="current-password"
               placeholder="Password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); clearError() }}
@@ -172,7 +220,6 @@ export default function LoginPage() {
         {/* ── Register step ───────────────────────────────── */}
         {step === 'register' && (
           <form onSubmit={handleRegister}>
-            {/* If email was pre-filled show badge; otherwise show editable email field */}
             {email.trim() ? (
               <div className="login-email-badge">
                 <span>{email}</span>
@@ -234,6 +281,21 @@ export default function LoginPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Last-user avatar: photo or colored initial ────────────────────────────
+function LastUserAvatar({ user }) {
+  const color  = getAvatarColor(user.name || user.email)
+  const letter = (user.name || user.email || '?').charAt(0).toUpperCase()
+  if (user.photo) {
+    return <img className="login-account-card__avatar" src={user.photo} alt="" />
+  }
+  return (
+    <div className="login-account-card__avatar login-account-card__avatar--initial"
+      style={{ background: color }}>
+      {letter}
     </div>
   )
 }
