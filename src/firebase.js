@@ -44,8 +44,11 @@ export const getUserProfile = (uid) =>
   getDoc(doc(db, 'userProfiles', uid)).then(s => s.exists() ? { id: s.id, ...s.data() } : null)
 
 export const subscribeUserProfile = (uid, cb) =>
-  onSnapshot(doc(db, 'userProfiles', uid), s =>
-    cb(s.exists() ? { id: s.id, ...s.data() } : null))
+  onSnapshot(
+    doc(db, 'userProfiles', uid),
+    s  => cb(s.exists() ? { id: s.id, ...s.data() } : null, null),
+    err => cb(null, err)
+  )
 
 export const setUserProfile = (uid, data) =>
   setDoc(doc(db, 'userProfiles', uid), data, { merge: true })

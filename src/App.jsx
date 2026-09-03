@@ -199,15 +199,17 @@ function PublicBoardView({ boardId }) {
 }
 
 // Compress a base64 image to max 400px / 80% JPEG before writing to Firestore
-// (Firestore has a 1MB document limit — uncompressed photos easily exceed it)
-async function compressImage(dataUrl, maxPx = 400, quality = 0.80) {
+// Always compress + convert to JPEG so photos are small enough for Firestore
+// (1MB document limit) and consistent across browsers.
+// maxPx = 256 gives crisp avatars at ~15-30KB base64 — well within any limit.
+async function compressImage(dataUrl, maxPx = 256, quality = 0.82) {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
   try {
     return await new Promise((resolve) => {
       const img = new Image()
       img.onload = () => {
         let w = img.naturalWidth, h = img.naturalHeight
-        if (w <= maxPx && h <= maxPx) { resolve(dataUrl); return }
+        // Always scale to maxPx (ensures JPEG conversion even for small PNGs)
         if (w > h) { h = Math.round(h * maxPx / w); w = maxPx }
         else        { w = Math.round(w * maxPx / h); h = maxPx }
         const canvas = document.createElement('canvas')
@@ -327,7 +329,11 @@ function AuthenticatedApp({ user }) {
     if (user.displayName) loginData.name  = user.displayName
     if (user.photoURL)    loginData.photo = user.photoURL
     try { setUserProfile(user.uid, loginData) } catch {}
-    return subscribeUserProfile(user.uid, (profile) => {
+    return subscribeUserProfile(user.uid, (profile, error) => {
+      if (error) {
+        console.error('userProfile subscription error (check Firestore rules for userProfiles collection):', error)
+        return
+      }
       if (!profile) return
       // Merge Firestore data — only use Firestore photo if it's a real value (not null/empty)
       // Firestore can have photo:null if the user's profile panel saved with no photo selected,
@@ -482,10 +488,18 @@ function AuthenticatedApp({ user }) {
       // was selected, which would wipe the existing photo from all storage layers.
       delete saveData.photo
     }
-    // Update local state immediately — persists across board switches even if Firestore rules block writes
+    // Update local state immediately
     setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...saveData }))
-    // Best-effort Firestore write
-    try { await setUserProfile(user.uid, saveData) } catch (e) { console.warn('userProfile write:', e) }
+    // Firestore write — not best-effort: we await and surface errors so cloud sync failures are visible
+    try {
+      await setUserProfile(user.uid, saveData)
+    } catch (e) {
+      console.error('userProfile Firestore write failed:', e)
+      // Surface to user if this was a photo update (most common cross-device sync issue)
+      if (saveData.photo) {
+        showToast('Photo saved locally but could not sync to cloud. Check Firestore rules for the userProfiles collection.')
+      }
+    }
     // Push photo/name change to every board the user appears on
     // Use loaded `boards` (includes owned + member boards) — findBoardsByMemberEmail only
     // finds boards where the user's email is in memberEmails, missing owned boards.
@@ -503,7 +517,7 @@ function AuthenticatedApp({ user }) {
         if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
       }))
     } catch (e) { console.warn('Profile push failed:', e) }
-  }, [user, boards]) // eslint-disable-line
+  }, [user, boards, showToast]) // eslint-disable-line
 
   // ── Board person → profile sync handler ──────────────────────────────────
   const handleUpdatePerson = useCallback(async (id, data) => {
