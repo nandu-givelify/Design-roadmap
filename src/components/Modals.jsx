@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, forwardRef } from 'react'
 import Dialog from '@mui/material/Dialog'
+import Slide from '@mui/material/Slide'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
@@ -16,6 +17,8 @@ import Typography from '@mui/material/Typography'
 import InputAdornment from '@mui/material/InputAdornment'
 import CloseIcon from '@mui/icons-material/Close'
 import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
+
+const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 function getTaskDays(startDate, endDate) {
@@ -424,7 +427,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Add Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -466,7 +469,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Edit Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -510,7 +513,7 @@ export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
   const isPublic = access !== 'off'
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Share Board
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>

@@ -954,12 +954,9 @@ function AuthenticatedApp({ user }) {
           onDock={() => setNavDocked(true)}
           onEditProfile={() => {
             const userPerson = enrichedPeople.find(p => p.email?.toLowerCase() === user?.email?.toLowerCase())
-            if (userPerson) {
-              setSelectedPersonId(userPerson.id)
-              setPersonDetailsOpen(true)
-            } else {
-              // No person entry found — nothing to show
-            }
+            // Always open profile — fall back to '__own_profile__' sentinel when not on a board
+            setSelectedPersonId(userPerson ? userPerson.id : '__own_profile__')
+            setPersonDetailsOpen(true)
           }}
         />
       )}
@@ -1078,7 +1075,16 @@ function AuthenticatedApp({ user }) {
 
         {/* Unified person details + time off dialog */}
         {(() => {
-          const livePerson = enrichedPeople.find(p => p.id === selectedPersonId) || null
+          // When opening own profile from left nav while not on a board, use synthetic person
+          const boardPerson = enrichedPeople.find(p => p.id === selectedPersonId) || null
+          const livePerson = boardPerson || (selectedPersonId === '__own_profile__' ? {
+            id: '__own_profile__',
+            name: effectiveProfile.name || user?.displayName || user?.email?.split('@')[0] || 'Me',
+            email: user?.email || '',
+            photo: effectiveProfile.photo || user?.photoURL || null,
+            role: userProfile?.role || '',
+            timeOff: userProfile?.timeOff || [],
+          } : null)
           const isOwnProfile = livePerson?.email?.toLowerCase() === user?.email?.toLowerCase()
           const canEditPerson = isOwner || isOwnProfile
 
@@ -1112,9 +1118,9 @@ function AuthenticatedApp({ user }) {
 
           const handleUpdateP = isOwnProfile
             ? async (data) => {
-                // Own profile: update global profile + person entry
+                // Own profile: update global profile; also sync board entry if it exists
                 await handleUpdateProfile(data)
-                await handleUpdatePerson(livePerson.id, data)
+                if (livePerson.id !== '__own_profile__') await handleUpdatePerson(livePerson.id, data)
               }
             : canEditPerson
               ? async (data) => handleUpdatePerson(livePerson.id, data)
@@ -1128,7 +1134,7 @@ function AuthenticatedApp({ user }) {
               canEdit={canEditPerson}
               roles={boardRoles}
               onUpdatePerson={handleUpdateP}
-              onDelete={isOwner && livePerson ? () => { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) } : null}
+              onDelete={isOwner && livePerson && !isOwnProfile ? () => { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) } : null}
               onAddTimeOff={handleAddTO}
               onRemoveTimeOff={async (entry) => {
                 if (!livePerson) return

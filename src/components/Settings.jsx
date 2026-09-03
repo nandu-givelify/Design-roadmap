@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, forwardRef } from 'react'
 import TextField from '@mui/material/TextField'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
@@ -27,7 +27,7 @@ import { getAvatarColor } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
 
 // ── Shared slide-up transition ────────────────────────────────────────────────
-const SlideUp = (props) => <Slide direction="up" {...props} />
+const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
 // ── Phase colors palette ──────────────────────────────────────────────────────
 const PHASE_COLORS = ['#60A5FA','#FBBF24','#FB923C','#34D399','#A78BFA','#F87171','#4ADE80','#38BDF8']

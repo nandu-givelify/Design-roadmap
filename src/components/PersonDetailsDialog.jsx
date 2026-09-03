@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef } from 'react'
 import Slide from '@mui/material/Slide'
 import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
@@ -22,6 +22,8 @@ import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import { getAvatarColor } from '../utils/dateUtils'
 import { PhotoPicker } from './Modals'
+
+const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
 function formatDateRange(start, end) {
   const fmt = d => new Date(d + 'T00:00:00').toLocaleDateString(undefined, {
@@ -238,8 +240,8 @@ export default function PersonDetailsDialog({
         onClose={onClose}
         maxWidth="xs"
         fullWidth
-        TransitionComponent={Slide}
-        TransitionProps={{ direction: 'up', timeout: 240 }}
+        TransitionComponent={SlideUp}
+        TransitionProps={{ timeout: 280 }}
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 5 }}>
