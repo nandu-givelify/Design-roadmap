@@ -236,8 +236,10 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 
 
 /* Empty state */
-/* Zero-state messages — fixed overlay so they're always centered in the viewport,
-   not centered within the (much wider) scrollable year content. */
+/* Zero-state messages — fixed overlay centered in the viewport, not the scrollable year.
+   pointer-events: none on both so the nav, scroll, and all timeline interactions work
+   unobstructed. The overlay is purely visual — users add tasks via double-click on the
+   grid (which still fires beneath) or via the Add task button. */
 .timeline__empty,
 .timeline__empty-drop {
   position: fixed; inset: 0;
@@ -245,11 +247,9 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   align-items: center; justify-content: center;
   gap: 8px;
   color: #9ca3af; font-size: 14px;
-  /* No pointer-events on .timeline__empty (informational only) */
   pointer-events: none;
+  z-index: 5;
 }
-/* empty-drop allows double-click to add a task */
-.timeline__empty-drop { pointer-events: auto; }
 
 /* Hide both while the loading overlay is active — avoids flickering "no tasks" during load.
    :has(~ .timeline-loading) targets a .timeline whose next sibling is .timeline-loading. */
