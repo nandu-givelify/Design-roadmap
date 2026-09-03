@@ -470,6 +470,23 @@ const Timeline = forwardRef(function Timeline({
           style={{ minHeight: rowH }}
           onDoubleClick={(e) => handleGridDoubleClick(null, e)}
         >
+          {/* Time off background — assignee's time off behind the task bar */}
+          {(() => {
+            const assignee = people.find(p => p.id === task.assigneeId || p.id === (task.pmId || task.teamId))
+            return (assignee?.timeOff || []).map(to => {
+              const s = parseLocalDate(to.start)
+              const e = parseLocalDate(to.end)
+              const sIdx = diffDays(startOfDay(totalStart), startOfDay(s))
+              const eIdx = diffDays(startOfDay(totalStart), startOfDay(e))
+              if (eIdx < 0 || sIdx >= allDays.length) return null
+              const cStart = Math.max(0, sIdx)
+              const cEnd   = Math.min(allDays.length - 1, eIdx)
+              return (
+                <div key={`to-flat-${to.id}`} className="timeline__timeoff-block"
+                  style={{ left: cStart * dayWidth, width: (cEnd - cStart + 1) * dayWidth }} />
+              )
+            })
+          })()}
           {dayWidth > 0 && (
             <TaskBar
               task={task}
@@ -600,20 +617,6 @@ const Timeline = forwardRef(function Timeline({
               readOnly={readOnly}
             />
           ))}
-          {/* Time off overlay blocks (on top of task bars) */}
-          {(person?.timeOff || []).map(to => {
-            const s = parseLocalDate(to.start)
-            const e = parseLocalDate(to.end)
-            const sIdx = diffDays(startOfDay(totalStart), startOfDay(s))
-            const eIdx = diffDays(startOfDay(totalStart), startOfDay(e))
-            if (eIdx < 0 || sIdx >= allDays.length) return null
-            const cStart = Math.max(0, sIdx)
-            const cEnd   = Math.min(allDays.length - 1, eIdx)
-            return (
-              <div key={`to-ov-${to.id}`} className="timeline__timeoff-block timeline__timeoff-block--overlay"
-                style={{ left: cStart * dayWidth, width: (cEnd - cStart + 1) * dayWidth }} />
-            )
-          })}
         </div>
       </div>
     )

@@ -299,8 +299,8 @@ export default function Settings({
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
   isOwner, recentPeople = [],
   board, onRenameBoard, onDeleteBoard,
+  onPersonClick,  // (person) => void — opens person details dialog
 }) {
-  const [editingId,     setEditingId]     = useState(null)
   const [adding,        setAdding]        = useState(false)
   const [addingPhase,   setAddingPhase]   = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -335,50 +335,39 @@ export default function Settings({
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="subtitle2" color="text.secondary">People</Typography>
                 {!adding && (
-                  <Button size="small" startIcon={<AddIcon />} onClick={() => { setAdding(true); setEditingId(null) }}>
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => setAdding(true)}>
                     Add person
                   </Button>
                 )}
               </Box>
 
               {people.map(person => (
-                <Box key={person.id}>
-                  <Box
-                    onClick={() => setEditingId(editingId === person.id ? null : person.id)}
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
-                      borderRadius: 2, cursor: 'pointer', transition: 'background 0.12s',
-                      '&:hover': { background: '#f3f4f6' },
-                    }}
-                  >
-                    <Box sx={{
-                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                      background: getAvatarColor(person.name), overflow: 'hidden',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 12, fontWeight: 700, color: '#fff',
-                    }}>
-                      {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography component="div" variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
-                      <Typography component="div" variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
-                        {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
-                      </Typography>
-                    </Box>
-                    <ChevronRightIcon sx={{
-                      fontSize: 18, color: 'text.secondary', flexShrink: 0,
-                      transform: editingId === person.id ? 'rotate(90deg)' : 'none',
-                      transition: 'transform 0.2s',
-                    }} />
+                <Box
+                  key={person.id}
+                  onClick={() => onPersonClick?.(person)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
+                    borderRadius: 2, cursor: onPersonClick ? 'pointer' : 'default',
+                    transition: 'background 0.12s',
+                    '&:hover': onPersonClick ? { background: '#f3f4f6' } : {},
+                  }}
+                >
+                  <Box sx={{
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                    background: getAvatarColor(person.name), overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 700, color: '#fff',
+                  }}>
+                    {person.photo ? <img src={person.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : person.name?.charAt(0).toUpperCase()}
                   </Box>
-                  {editingId === person.id && (
-                    <PersonEditForm
-                      person={person} roles={roles}
-                      onSave={onUpdatePerson} onDone={() => setEditingId(null)}
-                      onAddRole={onAddRole}
-                      onDelete={() => setConfirmDelete({ id: person.id, name: person.name })}
-                    />
-                  )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography component="div" variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
+                    <Typography component="div" variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
+                      {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
+                      {person.timeOff?.length > 0 && ` · ${person.timeOff.length} time off`}
+                    </Typography>
+                  </Box>
+                  {onPersonClick && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
                 </Box>
               ))}
 

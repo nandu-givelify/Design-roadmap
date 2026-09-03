@@ -6,16 +6,7 @@ import Header from './components/Header'
 import Timeline from './components/Timeline'
 import Settings from './components/Settings'
 import PersonDetailsDialog from './components/PersonDetailsDialog'
-import { TaskModal, EditTaskModal, ShareModal, PhotoPicker } from './components/Modals'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
-import TextField from '@mui/material/TextField'
-import Stack from '@mui/material/Stack'
-import CloseIcon from '@mui/icons-material/Close'
+import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
 import {
   subscribeBoards, createBoard, updateBoard, deleteBoard,
   subscribePeople, subscribeTasks, subscribeBoard,
@@ -281,12 +272,9 @@ function AuthenticatedApp({ user }) {
   const [defaultAssigneeId, setDefaultAssigneeId]  = useState(null)
   const [defaultStartDate,  setDefaultStartDate]   = useState(null)
 
-  // Profile dialog
-  const [showProfileDialog, setShowProfileDialog] = useState(false)
-
-  // Person details dialog
+  // Person details dialog (unified for timeline click, settings, and profile)
   const [personDetailsOpen, setPersonDetailsOpen] = useState(false)
-  const [selectedPerson,    setSelectedPerson]    = useState(null)
+  const [selectedPersonId,  setSelectedPersonId]  = useState(null)
 
   // Filters
   const [filterPersonIds, setFilterPersonIds] = useState([])
@@ -676,10 +664,12 @@ function AuthenticatedApp({ user }) {
   }
 
   // ── Access level ─────────────────────────────────────────────────────────
-  const isOwner   = activeBoard?.ownerId === user.uid
-  const memberKey = user.email?.replace(/\./g, '_')
+  const isOwner      = activeBoard?.ownerId === user.uid
+  const memberKey    = user.email?.replace(/\./g, '_')
   const memberAccess = activeBoard?.members?.[memberKey]?.access
-  const canEdit   = isOwner || memberAccess === 'edit'
+  const isMember     = activeBoard?.memberEmails?.includes(user.email)
+  // Default: members added to the board get edit access unless explicitly restricted to 'view'
+  const canEdit   = isOwner || memberAccess === 'edit' || (isMember && memberAccess !== 'view')
   const readOnly  = !canEdit
 
   // ── GroupBy: persisted to board doc so shared/public viewers see owner's setting ──
@@ -926,7 +916,15 @@ function AuthenticatedApp({ user }) {
           isOverlay={isNavOverlay}
           onClose={() => { setNavOpen(false); setNavDocked(false) }}
           onDock={() => setNavDocked(true)}
-          onEditProfile={() => setShowProfileDialog(true)}
+          onEditProfile={() => {
+            const userPerson = enrichedPeople.find(p => p.email?.toLowerCase() === user?.email?.toLowerCase())
+            if (userPerson) {
+              setSelectedPersonId(userPerson.id)
+              setPersonDetailsOpen(true)
+            } else {
+              // No person entry found — nothing to show
+            }
+          }}
         />
       )}
 
@@ -977,7 +975,7 @@ function AuthenticatedApp({ user }) {
           readOnly={readOnly}
           loading={!tasksLoaded}
           personColWidth={isMobile && groupBy !== 'none' ? 52 : undefined}
-          onPersonClick={(person) => { setSelectedPerson(person); setPersonDetailsOpen(true) }}
+          onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
         />
 
         {/* Add Task modal */}
@@ -1038,52 +1036,65 @@ function AuthenticatedApp({ user }) {
             recentPeople={recentPeople}
             onRenameBoard={handleRenameBoard}
             onDeleteBoard={handleDeleteBoard}
+            onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
           />
         )}
 
-        {/* Person details + time off dialog */}
-        <PersonDetailsDialog
-          open={personDetailsOpen}
-          person={selectedPerson}
-          onClose={() => { setPersonDetailsOpen(false); setSelectedPerson(null) }}
-          canEdit={isOwner || (selectedPerson && user?.uid === selectedPerson?.uid)}
-          onAddTimeOff={async (entry) => {
-            if (!selectedPerson || !activeBoardId) return
-            await addTimeOff(activeBoardId, selectedPerson.id, entry)
-            // Auto-extend tasks that overlap with this time off period
-            const toStart = parseLocalDate(entry.start)
-            const toEnd   = parseLocalDate(entry.end)
+        {/* Unified person details + time off dialog */}
+        {(() => {
+          const livePerson = enrichedPeople.find(p => p.id === selectedPersonId) || null
+          const isOwnProfile = livePerson?.email?.toLowerCase() === user?.email?.toLowerCase()
+          const canEditPerson = isOwner || isOwnProfile
+
+          const handleAddTO = async (entry) => {
+            if (!livePerson || !activeBoardId) return
+            await addTimeOff(activeBoardId, livePerson.id, entry)
+            // Auto-extend overlapping tasks
+            const toS = parseLocalDate(entry.start)
+            const toE = parseLocalDate(entry.end)
             const personTasks = tasks.filter(t =>
-              t.assigneeId === selectedPerson.id || t.pmId === selectedPerson.id
+              t.assigneeId === livePerson.id || t.pmId === livePerson.id
             )
             for (const task of personTasks) {
-              const taskStart = parseLocalDate(task.startDate)
-              const taskEnd   = parseLocalDate(task.endDate)
-              if (taskEnd < toStart || taskStart > toEnd) continue
-              // Count days that fall within BOTH the task AND the time off
-              const overlapStart = taskStart > toStart ? taskStart : toStart
-              const overlapEnd   = taskEnd   < toEnd   ? taskEnd   : toEnd
+              const tS = parseLocalDate(task.startDate)
+              const tE = parseLocalDate(task.endDate)
+              if (tE < toS || tS > toE) continue
+              const overlapStart = tS > toS ? tS : toS
+              const overlapEnd   = tE < toE ? tE : toE
               const overlapDays  = diffDays(startOfDay(overlapStart), startOfDay(overlapEnd)) + 1
               if (overlapDays > 0) {
-                const newEnd = addDays(taskEnd, overlapDays)
-                await updateTask(activeBoardId, task.id, { endDate: toDateString(newEnd) })
+                await updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, overlapDays)) })
               }
             }
-          }}
-          onRemoveTimeOff={async (entry) => {
-            if (!selectedPerson || !activeBoardId) return
-            await removeTimeOff(activeBoardId, selectedPerson.id, entry)
-          }}
-        />
+          }
 
-        {/* Edit profile dialog */}
-        <ProfileDialog
-          open={showProfileDialog}
-          onClose={() => setShowProfileDialog(false)}
-          user={user}
-          userProfile={effectiveProfile}
-          onSave={handleUpdateProfile}
-        />
+          const handleUpdateP = isOwnProfile
+            ? async (data) => {
+                // Own profile: update global profile + person entry
+                await handleUpdateProfile(data)
+                await handleUpdatePerson(livePerson.id, data)
+              }
+            : canEditPerson
+              ? async (data) => handleUpdatePerson(livePerson.id, data)
+              : null
+
+          return (
+            <PersonDetailsDialog
+              open={personDetailsOpen}
+              person={livePerson}
+              onClose={() => { setPersonDetailsOpen(false); setSelectedPersonId(null) }}
+              canEdit={canEditPerson}
+              roles={boardRoles}
+              onUpdatePerson={handleUpdateP}
+              onDelete={isOwner && livePerson ? () => { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) } : null}
+              onAddTimeOff={handleAddTO}
+              onRemoveTimeOff={async (entry) => {
+                if (!livePerson || !activeBoardId) return
+                await removeTimeOff(activeBoardId, livePerson.id, entry)
+              }}
+            />
+          )
+        })()}
       </div>
 
       {undoToast && <div className="undo-toast">{undoToast}</div>}
@@ -1091,52 +1102,6 @@ function AuthenticatedApp({ user }) {
   )
 }
 
-// ── Edit profile dialog ──────────────────────────────────────────────────────
-function ProfileDialog({ open, onClose, user, userProfile, onSave }) {
-  const [name,   setName]   = useState(userProfile?.name  || user?.displayName || '')
-  const [photo,  setPhoto]  = useState(userProfile?.photo || user?.photoURL    || null)
-  const [saving, setSaving] = useState(false)
-
-  // Sync with latest profile when dialog opens
-  useEffect(() => {
-    if (open) {
-      setName(userProfile?.name  || user?.displayName || '')
-      setPhoto(userProfile?.photo || user?.photoURL   || null)
-    }
-  }, [open]) // eslint-disable-line
-
-  const handleSave = async () => {
-    setSaving(true)
-    try { await onSave({ name: name.trim() || null, photo: photo || null }) } finally { setSaving(false) }
-    onClose()
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-      <DialogTitle sx={{ pr: 5 }}>
-        Edit profile
-        <IconButton size="small" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent>
-        <PhotoPicker value={photo} onChange={setPhoto} />
-        <TextField
-          label="Display name" size="small" fullWidth
-          value={name} onChange={e => setName(e.target.value)}
-          sx={{ mt: 2 }}
-          onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} size="small">Cancel</Button>
-        <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
 
 function SplashScreen() {
   return (
