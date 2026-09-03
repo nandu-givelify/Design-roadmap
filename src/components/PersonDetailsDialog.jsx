@@ -84,7 +84,7 @@ function DateRangeInput({ start, end, onStartChange, onEndChange }) {
 }
 
 // ── Edit person stacked dialog ────────────────────────────────────────────────
-function EditPersonDialog({ open, onClose, person, onUpdatePerson, onDelete, roles }) {
+function EditPersonDialog({ open, onClose, person, onUpdatePerson, roles }) {
   const [editName,     setEditName]     = useState(person?.name  || '')
   const [editEmail,    setEditEmail]    = useState(person?.email || '')
   const [editRole,     setEditRole]     = useState(person?.role  || '')
@@ -149,21 +149,12 @@ function EditPersonDialog({ open, onClose, person, onUpdatePerson, onDelete, rol
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ px: 2, pb: 2, justifyContent: 'space-between' }}>
-        <Box>
-          {onDelete && (
-            <Button size="small" color="error" onClick={() => { onDelete?.(); onClose() }}>
-              Delete
-            </Button>
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Button size="small" onClick={onClose}>Cancel</Button>
-          <Button size="small" variant="contained" onClick={handleSave}
-            disabled={saving || !editName.trim()}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
-        </Stack>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button size="small" onClick={onClose}>Cancel</Button>
+        <Button size="small" variant="contained" onClick={handleSave}
+          disabled={saving || !editName.trim()}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
       </DialogActions>
     </Dialog>
   )
@@ -278,11 +269,19 @@ export default function PersonDetailsDialog({
               {person.role  && <Typography variant="body2" color="text.secondary">{person.role}</Typography>}
               {person.email && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{person.email}</Typography>}
             </Box>
-            {canEdit && onUpdatePerson && (
-              <IconButton size="small" onClick={() => setEditDialogOpen(true)} sx={{ flexShrink: 0 }}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            )}
+            <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
+              {canEdit && onUpdatePerson && (
+                <IconButton size="small" onClick={() => setEditDialogOpen(true)} title="Edit details">
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              )}
+              {onDelete && (
+                <IconButton size="small" color="error" title="Delete person"
+                  onClick={() => { if (window.confirm(`Remove ${person.name} from this board?`)) { onDelete(); onClose() } }}>
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
           </Box>
 
           {/* ── Time off section ── */}
@@ -369,7 +368,6 @@ export default function PersonDetailsDialog({
           onClose={() => setEditDialogOpen(false)}
           person={person}
           onUpdatePerson={onUpdatePerson}
-          onDelete={onDelete ? () => { onDelete(); onClose() } : null}
           roles={roles}
         />
       )}
