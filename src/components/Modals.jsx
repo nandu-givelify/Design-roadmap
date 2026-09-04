@@ -499,12 +499,13 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   }
 
   return (
-    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
+    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { overflow: 'visible' } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Add Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
           onCreatePerson={onCreatePerson} onAddRole={onAddRole}
@@ -541,12 +542,13 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
   }
 
   return (
-    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
+    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { overflow: 'visible' } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Edit Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
           onCreatePerson={onCreatePerson} onAddRole={onAddRole}
