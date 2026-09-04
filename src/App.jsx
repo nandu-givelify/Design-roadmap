@@ -1145,7 +1145,12 @@ function AuthenticatedApp({ user }) {
               canEdit={canEditPerson}
               roles={boardRoles}
               onUpdatePerson={handleUpdateP}
-              onDelete={isOwner && livePerson && !isOwnProfile ? () => { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) } : null}
+              onDelete={livePerson && livePerson.id !== '__own_profile__' && (isOwner || isOwnProfile) ? () => {
+                const msg = isOwnProfile
+                  ? `Remove yourself from this board's people list? You'll keep access as ${isOwner ? 'owner' : 'member'}.`
+                  : `Remove ${livePerson.name} from this board?`
+                if (window.confirm(msg)) { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) }
+              } : null}
               onAddTimeOff={handleAddTO}
               onRemoveTimeOff={async (entry) => {
                 if (!livePerson) return
