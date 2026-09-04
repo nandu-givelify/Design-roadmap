@@ -259,11 +259,29 @@ export default function LeftNav({
 // ── Logo ─────────────────────────────────────────────────────────────────────
 function NavLogo() {
   return (
-    <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-      <rect width="32" height="32" rx="8" fill="var(--m3-primary, #111827)"/>
-      <rect x="6" y="10" width="20" height="3" rx="1.5" fill="white"/>
-      <rect x="6" y="15" width="14" height="3" rx="1.5" fill="white" opacity="0.75"/>
-      <rect x="6" y="20" width="17" height="3" rx="1.5" fill="white" opacity="0.5"/>
+    <svg width="28" height="28" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="nl_shadow" x="16" y="27" width="167.441" height="148.195" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+          <feFlood floodOpacity="0" result="BackgroundImageFix"/>
+          <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+          <feOffset dy="1"/>
+          <feGaussianBlur stdDeviation="1"/>
+          <feComposite in2="hardAlpha" operator="out"/>
+          <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+          <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow"/>
+          <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+        </filter>
+        <linearGradient id="nl_grad" x1="136" y1="29.5" x2="70.5" y2="174.5" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFCC00"/>
+          <stop offset="0.5" stopColor="#FF6F00"/>
+          <stop offset="1" stopColor="#FF0000"/>
+        </linearGradient>
+      </defs>
+      <g filter="url(#nl_shadow)">
+        <path d="M181.441 104.153C181.526 134.165 153.197 153.615 126.941 168.153C89.5698 188.846 129.775 121.995 33.2753 148.995C-16.7456 162.99 67.7155 24.377 119.526 28.0726C158.914 30.8822 181.329 64.665 181.441 104.153Z" fill="url(#nl_grad)"/>
+        <path d="M79.748 50.4238C94.0164 38.2982 107.949 31.257 119.241 32.0625C155.877 34.6758 177.334 66.0332 177.441 104.165C177.48 117.772 171.116 129.177 161.229 139.138C151.294 149.148 138.064 157.422 125.003 164.653C120.506 167.143 117.648 168.036 115.838 168.176C114.322 168.292 113.583 167.896 112.91 167.236C111.983 166.327 111.125 164.823 109.934 162.337C108.836 160.046 107.499 157.025 105.679 154.097C101.85 147.938 95.7929 141.993 84.1758 139.591C72.8739 137.254 56.5662 138.324 32.1973 145.143C26.3663 146.774 24.1602 145.697 23.3623 144.877C22.3719 143.859 21.5114 141.31 22.3164 136.096C23.8756 125.997 30.9719 110.685 41.5557 94.5947C52.0637 78.6191 65.6744 62.384 79.748 50.4238Z" stroke="white" strokeWidth="8"/>
+      </g>
+      <path d="M129.881 105.137C129.881 105.137 144.434 110.858 153.654 110.047C162.875 109.236 175.26 101.791 175.26 101.791" stroke="white" strokeWidth="8" strokeLinecap="round"/>
     </svg>
   )
 }
