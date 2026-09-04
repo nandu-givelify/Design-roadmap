@@ -77,9 +77,9 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: 240 }}
-      PaperProps={{ sx: { overflow: 'visible' } }}>
+    <Dialog open={open} onClose={handleClose} maxWidth={false} fullWidth
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, minHeight: 360, overflow: 'visible' } }}>
       <DialogTitle sx={{ pr: 5 }}>
         Add person
         <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -89,6 +89,7 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
 
       <DialogContent sx={{ pt: '12px !important', overflow: 'visible' }}>
         <Stack spacing={2}>
+          {isNew && <PhotoPicker value={photo} onChange={setPhoto} />}
           <Box sx={{ position: 'relative' }}>
             <TextField
               label="Name or email" size="small" fullWidth autoFocus
@@ -185,10 +186,6 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
                 <TextField label="Role name" size="small" fullWidth
                   value={customRole} onChange={e => setCustomRole(e.target.value)} />
               )}
-              <Box sx={{ background: '#f3f4f6', borderRadius: 2, p: 1.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Profile photo</Typography>
-                <PhotoPicker value={photo} onChange={setPhoto} />
-              </Box>
             </>
           )}
 
@@ -214,7 +211,7 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
 }
 
 // ── Add / Edit phase dialog (stacked) ─────────────────────────────────────────
-function PhaseDialog({ open, onClose, existingPhases, phase, onSave }) {
+function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete }) {
   const isEditing = Boolean(phase)
   const usedColors = (existingPhases || []).filter(p => p.id !== phase?.id).map(p => p.color)
   const defaultColor = PHASE_COLORS.find(c => !usedColors.includes(c)) || PHASE_COLORS[0]
@@ -244,8 +241,9 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave }) {
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: 240 }}>
+    <Dialog open={open} onClose={handleClose} maxWidth={false} fullWidth
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
       <DialogTitle sx={{ pr: 5 }}>
         {isEditing ? 'Edit phase' : 'Add phase'}
         <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -298,6 +296,10 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2 }}>
+        {isEditing && onDelete && (
+          <Button color="error" onClick={() => { onDelete(phase.id); handleClose() }}>Delete</Button>
+        )}
+        <Box sx={{ flex: 1 }} />
         <Button onClick={handleClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={!name.trim()}>
           {isEditing ? 'Save' : 'Add phase'}
@@ -317,8 +319,9 @@ function RenameBoardDialog({ board, onSave, onClose }) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: 240 }}>
+    <Dialog open onClose={onClose} maxWidth={false} fullWidth
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
       <DialogTitle sx={{ pr: 5 }}>
         Rename board
         <IconButton size="small" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -388,12 +391,12 @@ export default function Settings({
       <Dialog
         open
         onClose={onClose}
-        maxWidth="sm"
+        maxWidth={false}
         fullWidth
         scroll="paper"
         TransitionComponent={SlideUp}
-        TransitionProps={{ timeout: 240 }}
-        PaperProps={{ sx: { maxHeight: '85vh' } }}
+        TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+        PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, maxHeight: '85vh' } }}
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
           Board settings
@@ -462,32 +465,24 @@ export default function Settings({
               </Box>
 
               {(boardPhases || []).map(phase => (
-                <Box key={phase.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '6px 10px', borderRadius: 2, '&:hover': { background: '#f9fafb' } }}>
+                <Box key={phase.id} onClick={isOwner ? () => openEditPhase(phase) : undefined} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px',
+                  borderRadius: 2,
+                  cursor: isOwner ? 'pointer' : 'default',
+                  '&:hover': isOwner ? { background: '#f3f4f6' } : {},
+                }}>
                   <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
                   <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
                   {phase.optional && (
                     <Typography variant="caption" sx={{
                       px: 0.75, py: 0.25, borderRadius: 1,
                       background: `${phase.color}22`, color: phase.color,
-                      fontWeight: 600, fontSize: 10, letterSpacing: 0.3,
-                      flexShrink: 0,
+                      fontWeight: 600, fontSize: 10, letterSpacing: 0.3, flexShrink: 0,
                     }}>
                       optional
                     </Typography>
                   )}
-                  {isOwner && (
-                    <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                      <IconButton size="small" sx={{ width: 28, height: 28, color: 'text.secondary', '&:hover': { color: 'text.primary' } }} title="Edit phase"
-                        onClick={() => openEditPhase(phase)}>
-                        <EditIcon sx={{ fontSize: 15 }} />
-                      </IconButton>
-                      <IconButton size="small" sx={{ width: 28, height: 28, color: 'text.secondary', '&:hover:not(:disabled)': { color: 'error.main' } }} title="Delete phase"
-                        onClick={() => handleDeletePhase(phase.id)}
-                        disabled={(boardPhases || []).length <= 1}>
-                        <DeleteIcon sx={{ fontSize: 15 }} />
-                      </IconButton>
-                    </Box>
-                  )}
+                  {isOwner && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
                 </Box>
               ))}
             </Box>
@@ -543,6 +538,7 @@ export default function Settings({
         existingPhases={boardPhases || []}
         phase={editingPhase}
         onSave={handlePhaseSave}
+        onDelete={handleDeletePhase}
       />
 
       {/* ── Stacked: rename board ── */}

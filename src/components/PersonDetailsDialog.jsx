@@ -21,7 +21,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import { getAvatarColor } from '../utils/dateUtils'
-import { PhotoPicker } from './Modals'
+import { PhotoPicker, DateRangeInput } from './Modals'
 
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
@@ -30,59 +30,6 @@ function formatDateRange(start, end) {
     month: 'short', day: 'numeric', year: 'numeric',
   })
   return start === end ? fmt(start) : `${fmt(start)} – ${fmt(end)}`
-}
-
-// ── Inline date range widget (no MUI label overlap) ───────────────────────────
-function DateRangeInput({ start, end, onStartChange, onEndChange }) {
-  const startRef = useRef(null)
-  const endRef   = useRef(null)
-
-  const openPicker = (ref) => {
-    try { ref.current?.showPicker() } catch {}
-  }
-
-  const handleStartChange = (value) => {
-    onStartChange(value)
-    // Auto-open end date after start is chosen
-    if (value) setTimeout(() => openPicker(endRef), 80)
-  }
-
-  const fieldBox = { flex: 1, p: 1.25, cursor: 'pointer', userSelect: 'none' }
-
-  return (
-    <Box sx={{
-      display: 'flex',
-      border: '1px solid', borderColor: 'divider', borderRadius: 2,
-      overflow: 'hidden', mb: 1.5,
-    }}>
-      <Box sx={{ ...fieldBox, borderRight: '1px solid', borderColor: 'divider' }}
-        onClick={() => openPicker(startRef)}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
-          Start
-        </Typography>
-        <input
-          ref={startRef}
-          type="date"
-          value={start}
-          onChange={e => handleStartChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
-        />
-      </Box>
-      <Box sx={fieldBox} onClick={() => openPicker(endRef)}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
-          End
-        </Typography>
-        <input
-          ref={endRef}
-          type="date"
-          value={end}
-          min={start || undefined}
-          onChange={e => onEndChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
-        />
-      </Box>
-    </Box>
-  )
 }
 
 // ── Edit person stacked dialog ────────────────────────────────────────────────
@@ -119,12 +66,12 @@ function EditPersonDialog({ open, onClose, person, onUpdatePerson, roles }) {
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="xs"
+      maxWidth={false}
       fullWidth
       disableEnforceFocus={false}
-      TransitionComponent={Slide}
-      TransitionProps={{ direction: 'up', timeout: 240 }}
-      PaperProps={{ sx: { borderRadius: 3 } }}
+      TransitionComponent={SlideUp}
+      TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, borderRadius: 3 } }}
     >
       <DialogTitle sx={{ pr: 5 }}>
         Edit details
@@ -238,11 +185,11 @@ export default function PersonDetailsDialog({
       <Dialog
         open={open}
         onClose={onClose}
-        maxWidth="xs"
+        maxWidth={false}
         fullWidth
         TransitionComponent={SlideUp}
-        TransitionProps={{ timeout: 280 }}
-        PaperProps={{ sx: { borderRadius: 3 } }}
+        TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
+        PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, borderRadius: 3 } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 5 }}>
           {person.name}

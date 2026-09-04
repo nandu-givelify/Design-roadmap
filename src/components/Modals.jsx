@@ -111,6 +111,58 @@ export function PhotoPicker({ value, onChange }) {
   )
 }
 
+// ── Date range input (click-anywhere-to-open, auto-advance, min-date) ─────────
+export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
+  const startRef = useRef(null)
+  const endRef   = useRef(null)
+
+  const openPicker = (ref) => {
+    try { ref.current?.showPicker() } catch {}
+  }
+
+  const handleStartChange = (value) => {
+    onStartChange(value)
+    if (value) setTimeout(() => openPicker(endRef), 80)
+  }
+
+  const fieldBox = { flex: 1, p: 1.25, cursor: 'pointer', userSelect: 'none' }
+
+  return (
+    <Box sx={{
+      display: 'flex',
+      border: '1px solid', borderColor: 'divider', borderRadius: 2,
+      overflow: 'hidden',
+    }}>
+      <Box sx={{ ...fieldBox, borderRight: '1px solid', borderColor: 'divider' }}
+        onClick={() => openPicker(startRef)}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
+          Start date
+        </Typography>
+        <input
+          ref={startRef}
+          type="date"
+          value={start}
+          onChange={e => handleStartChange(e.target.value)}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
+        />
+      </Box>
+      <Box sx={fieldBox} onClick={() => openPicker(endRef)}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, lineHeight: 1.2, pointerEvents: 'none' }}>
+          End date
+        </Typography>
+        <input
+          ref={endRef}
+          type="date"
+          value={end}
+          min={start || undefined}
+          onChange={e => onEndChange(e.target.value)}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
+        />
+      </Box>
+    </Box>
+  )
+}
+
 // ── Combobox ──────────────────────────────────────────────────────────────────
 function PersonCombobox({ value, onChange, options, label, placeholder, defaultRole, onCreatePerson, onAddRole, roles }) {
   const [open,        setOpen]        = useState(false)
@@ -338,25 +390,18 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
         roles={roles}
       />
 
-      <Stack direction="row" spacing={2}>
-        <TextField
-          label="Start date"
-          type="date"
-          value={form.startDate}
-          onChange={(e) => onStartDateChange ? onStartDateChange(e.target.value) : set('startDate', e.target.value)}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="End date"
-          type="date"
-          value={form.endDate}
-          inputProps={{ min: form.startDate }}
-          onChange={(e) => onEndDateChange ? onEndDateChange(e.target.value) : set('endDate', e.target.value)}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-        />
-      </Stack>
+      <DateRangeInput
+        start={form.startDate}
+        end={form.endDate}
+        onStartChange={v => {
+          if (onStartDateChange) onStartDateChange(v)
+          else set('startDate', v)
+        }}
+        onEndChange={v => {
+          if (onEndDateChange) onEndDateChange(v)
+          else set('endDate', v)
+        }}
+      />
 
       {boardPhases && boardPhases.length > 0 && (
         <Box>
@@ -454,7 +499,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
+    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Add Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -496,7 +541,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
+    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Edit Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -540,7 +585,7 @@ export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
   const isPublic = access !== 'off'
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth TransitionComponent={SlideUp}>
+    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Share Board
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>

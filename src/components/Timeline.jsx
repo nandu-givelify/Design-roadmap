@@ -832,7 +832,11 @@ const Timeline = forwardRef(function Timeline({
             </div>
 
             {/* ── Body ────────────────────────────────────────── */}
-            <div className="timeline__body">
+            <div className="timeline__body"
+              onDoubleClick={groupBy === 'none' ? (e) => {
+                if (!e.target.closest('.task-bar')) handleGridDoubleClick(null, e)
+              } : undefined}
+            >
               {/* Weekend shading */}
               {allDays.map((d, i) => isWeekend(d) ? (
                 <div key={`we-${i}`} className="timeline__weekend-col"
