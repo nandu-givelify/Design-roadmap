@@ -349,7 +349,7 @@ function RoadmapLogo() {
         </g>
         <path d="M133.366 98.7796C133.366 98.7796 149.495 105.12 159.713 104.221C169.932 103.322 183.658 95.0716 183.658 95.0716" stroke="white" strokeWidth="8" strokeLinecap="round"/>
       </svg>
-      <span style={{ fontSize: 22, fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>RoadMap</span>
+      <span style={{ fontSize: 26, fontFamily: "'Cherry Bomb One', cursive", fontWeight: 400, color: '#111827', letterSpacing: 0 }}>RoadMap</span>
     </div>
   )
 }
