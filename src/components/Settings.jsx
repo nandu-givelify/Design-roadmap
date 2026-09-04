@@ -77,9 +77,9 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth={false} fullWidth
+    <Dialog open={open} onClose={handleClose}
       TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, minHeight: 360, overflow: 'visible' } }}>
+      PaperProps={{ sx: { minHeight: 360, overflow: 'visible' } }}>
       <DialogTitle sx={{ pr: 5 }}>
         Add person
         <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -241,9 +241,8 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth={false} fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
+    <Dialog open={open} onClose={handleClose}
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
       <DialogTitle sx={{ pr: 5 }}>
         {isEditing ? 'Edit phase' : 'Add phase'}
         <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -319,9 +318,8 @@ function RenameBoardDialog({ board, onSave, onClose }) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth={false} fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
+    <Dialog open onClose={onClose}
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
       <DialogTitle sx={{ pr: 5 }}>
         Rename board
         <IconButton size="small" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -391,12 +389,10 @@ export default function Settings({
       <Dialog
         open
         onClose={onClose}
-        maxWidth={false}
-        fullWidth
         scroll="paper"
         TransitionComponent={SlideUp}
         TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-        PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, maxHeight: '85vh' } }}
+        PaperProps={{ sx: { maxHeight: '85vh' } }}
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
           Board settings

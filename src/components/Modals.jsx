@@ -499,7 +499,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
+    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Add Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -541,7 +541,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
+    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Edit Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -585,7 +585,7 @@ export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
   const isPublic = access !== 'off'
 
   return (
-    <Dialog open onClose={onClose} maxWidth={false} fullWidth TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }} PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2 } }}>
+    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Share Board
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>

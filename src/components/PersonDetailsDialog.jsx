@@ -66,12 +66,9 @@ function EditPersonDialog({ open, onClose, person, onUpdatePerson, roles }) {
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth={false}
-      fullWidth
       disableEnforceFocus={false}
       TransitionComponent={SlideUp}
       TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, borderRadius: 3 } }}
     >
       <DialogTitle sx={{ pr: 5 }}>
         Edit details
@@ -185,11 +182,8 @@ export default function PersonDetailsDialog({
       <Dialog
         open={open}
         onClose={onClose}
-        maxWidth={false}
-        fullWidth
         TransitionComponent={SlideUp}
         TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-        PaperProps={{ sx: { maxWidth: 480, width: '100%', m: 2, borderRadius: 3 } }}
       >
         <DialogTitle sx={{ pb: 1, pr: 5 }}>
           {person.name}

@@ -92,8 +92,15 @@ const theme = createTheme({
       defaultProps: { size: 'small' },
     },
     MuiDialog: {
+      defaultProps: { maxWidth: false },
       styleOverrides: {
-        paper: { borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
+        paper: {
+          borderRadius: 16,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          width: '100%',
+          maxWidth: 480,
+          margin: 16,
+        },
       },
     },
     MuiDialogTitle: {
