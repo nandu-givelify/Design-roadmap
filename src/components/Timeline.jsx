@@ -474,7 +474,7 @@ const Timeline = forwardRef(function Timeline({
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
-          onDoubleClick={(e) => handleGridDoubleClick(null, e)}
+          onDoubleClick={(e) => { e.stopPropagation(); handleGridDoubleClick(null, e) }}
         >
           {/* Time off background — assignee's time off behind the task bar */}
           {(() => {
@@ -587,7 +587,7 @@ const Timeline = forwardRef(function Timeline({
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
-          onDoubleClick={(e) => handleGridDoubleClick(personId, e)}
+          onDoubleClick={(e) => { e.stopPropagation(); handleGridDoubleClick(personId, e) }}
         >
           {/* Time off background blocks (behind task bars) */}
           {(person?.timeOff || []).map(to => {
@@ -833,9 +833,10 @@ const Timeline = forwardRef(function Timeline({
 
             {/* ── Body ────────────────────────────────────────── */}
             <div className="timeline__body"
-              onDoubleClick={groupBy === 'none' ? (e) => {
-                if (!e.target.closest('.task-bar')) handleGridDoubleClick(null, e)
-              } : undefined}
+              onDoubleClick={(e) => {
+                if (!e.target.closest('.task-bar') && !e.target.closest('.timeline__grid-area'))
+                  handleGridDoubleClick(null, e)
+              }}
             >
               {/* Weekend shading */}
               {allDays.map((d, i) => isWeekend(d) ? (
