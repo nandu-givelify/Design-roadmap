@@ -121,6 +121,7 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
   const [newRole,     setNewRole]     = useState(defaultRole || 'Designer')
   const [creating,    setCreating]    = useState(false)
   const [customRole,  setCustomRole]  = useState('')
+  const [focusedIdx,  setFocusedIdx]  = useState(-1)
   const wrapRef = useRef()
 
   const selected = options.find((o) => o.id === value)
@@ -169,18 +170,42 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
         fullWidth
         value={inputValue}
         placeholder={!selected ? placeholder : undefined}
-        onChange={(e) => { setInputValue(e.target.value); setOpen(true) }}
+        onChange={(e) => {
+          const v = e.target.value
+          setInputValue(v)
+          setOpen(true)
+          setFocusedIdx(-1)
+          // Clear the selected person immediately so the avatar updates
+          if (value) onChange(null)
+        }}
         onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          const list = filtered
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setFocusedIdx(i => Math.min(i + 1, list.length - 1))
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setFocusedIdx(i => Math.max(i - 1, 0))
+          } else if (e.key === 'Enter') {
+            if (focusedIdx >= 0 && list[focusedIdx]) {
+              e.preventDefault()
+              const opt = list[focusedIdx]
+              onChange(opt.id); setInputValue(opt.name || ''); setOpen(false); setFocusedIdx(-1)
+            }
+          } else if (e.key === 'Escape') {
+            setOpen(false); setFocusedIdx(-1)
+          }
+        }}
         slotProps={{
           input: {
             startAdornment: selected && (
-              <InputAdornment position="start">
+              <InputAdornment position="start" sx={{ mr: 0 }}>
                 <Box sx={{
-                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
                   background: getAvatarColor(selected.name),
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, fontWeight: 700, color: '#fff', overflow: 'hidden',
-                  mr: 0.5,
                 }}>
                   {selected.photo
                     ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -212,11 +237,13 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
           borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           maxHeight: 240, overflowY: 'auto', mt: 0.5,
         }}>
-          {filtered.map((opt) => (
+          {filtered.map((opt, idx) => (
             <Box key={opt.id} sx={{
               display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
-              cursor: 'pointer', '&:hover': { background: '#f3f4f6' },
-            }} onMouseDown={e => { e.preventDefault(); onChange(opt.id); setInputValue(opt.name || ''); setOpen(false) }}>
+              cursor: 'pointer',
+              background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
+              '&:hover': { background: '#f3f4f6' },
+            }} onMouseDown={e => { e.preventDefault(); onChange(opt.id); setInputValue(opt.name || ''); setOpen(false); setFocusedIdx(-1) }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                 background: getAvatarColor(opt.name),
@@ -277,7 +304,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
   const pmPeople = people.filter(p => p.role === 'PM')
 
   return (
-    <Stack spacing={2} sx={{ pt: 1.5 }}>
+    <Stack spacing={2.5} sx={{ pt: 1.5 }}>
       <TextField
         label="Task title *"
         value={form.title}

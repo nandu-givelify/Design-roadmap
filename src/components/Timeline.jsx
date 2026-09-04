@@ -302,6 +302,7 @@ const Timeline = forwardRef(function Timeline({
     if (e.target.closest('.task-bar')) return
     if (e.target.closest('.timeline__person-col')) return
     if (e.target.closest('.timeline__bulk-bar')) return
+    if (e.detail >= 2) return   // let dblclick events fire through
     e.preventDefault()
     const scrollEl = scrollRef.current; if (!scrollEl) return
     const cr = scrollEl.getBoundingClientRect()

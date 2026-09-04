@@ -1061,7 +1061,18 @@ function AuthenticatedApp({ user }) {
             roles={boardRoles}
             boardPhases={boardPhases}
             onUpdatePerson={handleUpdatePerson}
-            onDeletePerson={(id) => deletePerson(activeBoardId, id)}
+            onDeletePerson={(id) => {
+              // Remove from localStorage suggestion cache so they stop appearing in "Add person" dropdown
+              const person = enrichedPeople.find(p => p.id === id)
+              if (person?.email) {
+                try {
+                  const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
+                  delete cache[person.email]
+                  localStorage.setItem('recentPeople', JSON.stringify(cache))
+                } catch {}
+              }
+              deletePerson(activeBoardId, id)
+            }}
             onAddPerson={(data) => addPerson(activeBoardId, data)}
             onAddRole={handleAddRole}
             onUpdateBoardPhases={handleUpdateBoardPhases}

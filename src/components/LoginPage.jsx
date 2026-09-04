@@ -325,13 +325,31 @@ function LastUserAvatar({ user }) {
 function RoadmapLogo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
-        <rect width="32" height="32" rx="8" fill="#111827"/>
-        <rect x="6" y="10" width="20" height="3" rx="1.5" fill="white"/>
-        <rect x="6" y="15" width="14" height="3" rx="1.5" fill="white" opacity="0.7"/>
-        <rect x="6" y="20" width="17" height="3" rx="1.5" fill="white" opacity="0.5"/>
+      <svg width="48" height="48" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="lp_shadow" x="8" y="14" width="184" height="174" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+            <feFlood floodOpacity="0" result="BackgroundImageFix"/>
+            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+            <feOffset dy="1"/>
+            <feGaussianBlur stdDeviation="1"/>
+            <feComposite in2="hardAlpha" operator="out"/>
+            <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+            <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow"/>
+            <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+          </filter>
+          <linearGradient id="lp_grad" x1="139.761" y1="17.0932" x2="59.2775" y2="183.632" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#FFCC00"/>
+            <stop offset="0.5" stopColor="#FF6F00"/>
+            <stop offset="1" stopColor="#FF0000"/>
+          </linearGradient>
+        </defs>
+        <g filter="url(#lp_shadow)">
+          <path d="M189.741 104.936C187.297 140.166 158.676 163.138 129.798 180.244C88.6943 204.592 132.915 125.93 26.7776 157.701C-28.2389 174.169 64.8715 21.9895 121.642 15.4134C169.767 9.83879 192.737 61.7385 189.741 104.936Z" fill="url(#lp_grad)"/>
+          <path d="M122.103 19.3867C144.349 16.81 160.763 27.3786 171.499 44.0508C182.338 60.8834 187.199 83.7669 185.75 104.659C183.459 137.684 156.599 159.719 127.759 176.803C122.79 179.746 119.616 180.81 117.595 180.977C115.914 181.115 115.026 180.652 114.181 179.766C113.075 178.606 112.085 176.724 110.774 173.799C109.555 171.075 108.108 167.578 106.134 164.18C102.019 157.096 95.4648 150.154 82.7354 147.338C70.3345 144.595 52.4202 145.85 25.6309 153.869C19.1187 155.818 16.5292 154.723 15.5527 153.751C14.395 152.598 13.4573 149.743 14.3594 143.957C16.1058 132.756 23.9791 115.651 35.6611 97.3506C47.2622 79.1773 62.3001 60.32 77.875 45.6475C93.6152 30.8192 109.27 20.8732 122.103 19.3867Z" stroke="white" strokeWidth="8"/>
+        </g>
+        <path d="M133.366 98.7796C133.366 98.7796 149.495 105.12 159.713 104.221C169.932 103.322 183.658 95.0716 183.658 95.0716" stroke="white" strokeWidth="8" strokeLinecap="round"/>
       </svg>
-      <span style={{ fontSize: 20, fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>RoadMap</span>
+      <span style={{ fontSize: 22, fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>RoadMap</span>
     </div>
   )
 }

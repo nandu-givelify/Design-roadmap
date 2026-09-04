@@ -42,10 +42,12 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
   const [role,       setRole]       = useState('Designer')
   const [customRole, setCustomRole] = useState('')
   const [saving,     setSaving]     = useState(false)
+  const [focusedIdx, setFocusedIdx] = useState(-1)
 
   const reset = () => {
     setQuery(''); setDropOpen(false); setSelected(null)
     setEmail(''); setPhoto(null); setRole('Designer'); setCustomRole('')
+    setFocusedIdx(-1)
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -54,11 +56,12 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
     !query || p.name?.toLowerCase().includes(query.toLowerCase()) ||
     p.email?.toLowerCase().includes(query.toLowerCase())
   )
+  const dropList = query.length === 0 ? recentPeople : filtered
 
   const handleSelect = (person) => {
     setSelected(person); setQuery(person.name)
     setEmail(person.email || ''); setPhoto(person.photo || null)
-    setRole(person.role || 'Designer'); setDropOpen(false)
+    setRole(person.role || 'Designer'); setDropOpen(false); setFocusedIdx(-1)
   }
 
   const isNew = !selected && query.trim().length > 0
@@ -75,7 +78,8 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth
-      TransitionComponent={SlideUp} TransitionProps={{ timeout: 240 }}>
+      TransitionComponent={SlideUp} TransitionProps={{ timeout: 240 }}
+      PaperProps={{ sx: { overflow: 'visible' } }}>
       <DialogTitle sx={{ pr: 5 }}>
         Add person
         <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
@@ -83,65 +87,77 @@ function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople
         </IconButton>
       </DialogTitle>
 
-      <DialogContent sx={{ pt: '12px !important' }}>
-        <Stack spacing={1.5}>
+      <DialogContent sx={{ pt: '12px !important', overflow: 'visible' }}>
+        <Stack spacing={2}>
           <Box sx={{ position: 'relative' }}>
             <TextField
               label="Name or email" size="small" fullWidth autoFocus
               value={query}
-              onChange={e => { setQuery(e.target.value); setSelected(null); setDropOpen(true) }}
+              onChange={e => {
+                setQuery(e.target.value); setSelected(null); setDropOpen(true); setFocusedIdx(-1)
+              }}
               onFocus={() => setDropOpen(true)}
               onBlur={() => setTimeout(() => setDropOpen(false), 150)}
               onKeyDown={e => {
-                if (e.key === 'Enter') {
+                if (e.key === 'ArrowDown') {
                   e.preventDefault()
-                  const list = query.length > 0 ? filtered : recentPeople
-                  if (list.length > 0 && !selected) {
-                    handleSelect(list[0])
+                  setFocusedIdx(i => Math.min(i + 1, dropList.length - 1))
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setFocusedIdx(i => Math.max(i - 1, 0))
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (focusedIdx >= 0 && dropList[focusedIdx]) {
+                    handleSelect(dropList[focusedIdx])
+                  } else if (dropList.length > 0 && !selected) {
+                    handleSelect(dropList[0])
                   } else {
                     setDropOpen(false)
                   }
                 } else if (e.key === 'Escape') {
-                  setDropOpen(false)
-                } else if (e.key === 'ArrowDown' && dropOpen) {
-                  e.preventDefault()
-                  const list = query.length > 0 ? filtered : recentPeople
-                  if (list.length > 0) handleSelect(list[0])
+                  setDropOpen(false); setFocusedIdx(-1)
                 }
               }}
-              InputProps={selected ? {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Box sx={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: getAvatarColor(selected.name),
-                      overflow: 'hidden', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
-                    }}>
-                      {selected.photo
-                        ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : selected.name?.charAt(0).toUpperCase()}
-                    </Box>
-                  </InputAdornment>
-                )
+              slotProps={selected ? {
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start" sx={{ mr: 0 }}>
+                      <Box sx={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        background: getAvatarColor(selected.name),
+                        overflow: 'hidden', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+                      }}>
+                        {selected.photo
+                          ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : selected.name?.charAt(0).toUpperCase()}
+                      </Box>
+                    </InputAdornment>
+                  )
+                }
               } : undefined}
             />
             {dropOpen && recentPeople.length > 0 && (
               <Box sx={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1400,
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1500,
                 background: '#fff', border: '1px solid', borderColor: 'divider',
                 borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-                maxHeight: 200, overflowY: 'auto', mt: 0.5,
+                maxHeight: 220, overflowY: 'auto', mt: 0.5,
               }}>
-                {(query.length === 0 ? recentPeople : filtered).map(p => (
+                {dropList.map((p, idx) => (
                   <Box key={p.email || p.name} onMouseDown={() => handleSelect(p)}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px', cursor: 'pointer', '&:hover': { background: '#f3f4f6' } }}>
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
+                      cursor: 'pointer',
+                      background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
+                      '&:hover': { background: '#f3f4f6' },
+                    }}>
                     <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0, overflow: 'hidden' }}>
                       {p.photo ? <img src={p.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : p.name?.charAt(0).toUpperCase()}
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                       <Typography variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{p.name}</Typography>
-                      {p.email && <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{p.email}</Typography>}
+                      {p.role && <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{p.role}</Typography>}
                     </Box>
                   </Box>
                 ))}
@@ -419,10 +435,11 @@ export default function Settings({
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={500} noWrap sx={{ lineHeight: 1.2 }}>{person.name}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
-                      {person.role || 'No role'}{person.email ? ` · ${person.email}` : ''}
-                      {person.timeOff?.length > 0 && ` · ${person.timeOff.length} time off`}
-                    </Typography>
+                    {person.role && (
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.2 }}>
+                        {person.role}
+                      </Typography>
+                    )}
                   </Box>
                   {onPersonClick && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
                 </Box>
