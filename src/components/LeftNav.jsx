@@ -160,7 +160,7 @@ export default function LeftNav({
       <Box className="left-nav__header" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '12px 12px 12px 16px' }}>
         <Box className="left-nav__brand" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <NavLogo />
-          <Typography variant="subtitle1" className="left-nav__brand-name">RoadMap</Typography>
+          <Typography variant="subtitle1" className="left-nav__brand-name" sx={{ fontFamily: '"Cherry Bomb One", system-ui', fontWeight: 400, letterSpacing: 0 }}>RoadMap</Typography>
         </Box>
         <Tooltip title={isOverlay ? 'Dock navigation' : 'Collapse navigation'} placement="right">
           <IconButton size="small" className="left-nav__toggle" onClick={isOverlay ? onDock : onClose}>
