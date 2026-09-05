@@ -10,17 +10,13 @@ import IconButton from '@mui/material/IconButton'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
 import Stack from '@mui/material/Stack'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import { getAvatarColor } from '../utils/dateUtils'
-import { PhotoPicker, DateRangeInput } from './Modals'
+import { PhotoPicker, DateRangeInput, RoleField, ConfirmDialog } from './Modals'
 
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
@@ -42,6 +38,7 @@ export default function PersonDetailsDialog({
   onUpdatePerson,   // async (data: {name, role, email, photo}) => void  — null = no person edit
   onDelete,         // () => void — null = no delete option
   roles,            // string[] board roles for the role select
+  onAddRole,        // async (role: string) => void — registers a brand-new role typed in the field
 }) {
   // Time off form
   const [addingTimeOff,  setAddingTimeOff]  = useState(false)
@@ -56,9 +53,14 @@ export default function PersonDetailsDialog({
   const [editRole,  setEditRole]  = useState('')
   const [editPhoto, setEditPhoto] = useState(null)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const lastPersonRef = useRef(null)
 
-  // Reset profile fields whenever the dialog opens for a (possibly different) person
+  // Reset profile fields whenever the dialog opens for a (possibly different) person.
+  // Also re-sync on name/email/role/photo change, not just id — the own-profile view
+  // uses a synthetic person object with a constant id ('__own_profile__'), so if the
+  // dialog opens before the real profile data has finished loading, watching id alone
+  // would never notice the fields filling in afterward and they'd stay stuck empty.
   useEffect(() => {
     if (open && person) {
       setEditName(person.name  || '')
@@ -66,7 +68,7 @@ export default function PersonDetailsDialog({
       setEditRole(person.role  || '')
       setEditPhoto(person.photo || null)
     }
-  }, [open, person?.id]) // eslint-disable-line
+  }, [open, person?.id, person?.name, person?.email, person?.role, person?.photo]) // eslint-disable-line
 
   // Reset time off forms when dialog closes
   useEffect(() => {
@@ -94,7 +96,9 @@ export default function PersonDetailsDialog({
     if (!editName.trim()) return
     setSavingProfile(true)
     try {
-      await onUpdatePerson?.({ name: editName.trim(), email: editEmail.trim() || null, role: editRole, photo: editPhoto })
+      const roleToUse = editRole.trim()
+      if (roleToUse && !allRoles.includes(roleToUse)) await onAddRole?.(roleToUse)
+      await onUpdatePerson?.({ name: editName.trim(), email: editEmail.trim() || null, role: roleToUse, photo: editPhoto })
     } finally {
       setSavingProfile(false)
     }
@@ -140,6 +144,7 @@ export default function PersonDetailsDialog({
   }
 
   return (
+    <>
       <Dialog
         open={open}
         onClose={onClose}
@@ -169,12 +174,7 @@ export default function PersonDetailsDialog({
                 onChange={e => setEditName(e.target.value)} />
               <TextField size="small" label="Email" fullWidth type="email" value={editEmail}
                 onChange={e => setEditEmail(e.target.value)} />
-              <FormControl size="small" fullWidth>
-                <InputLabel>Role</InputLabel>
-                <Select label="Role" value={editRole} onChange={e => setEditRole(e.target.value)}>
-                  {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                </Select>
-              </FormControl>
+              <RoleField value={editRole} onChange={setEditRole} roles={allRoles} />
             </Stack>
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -276,7 +276,7 @@ export default function PersonDetailsDialog({
 
         <DialogActions>
           {onDelete && (
-            <Button color="error" onClick={() => { if (window.confirm(`Remove ${displayPerson.name} from this board?`)) { onDelete(); onClose() } }}>
+            <Button color="error" onClick={() => setDeleteConfirmOpen(true)}>
               Delete
             </Button>
           )}
@@ -291,5 +291,14 @@ export default function PersonDetailsDialog({
           )}
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="Remove person"
+        message={`Remove ${displayPerson.name} from this board?`}
+        onConfirm={() => { setDeleteConfirmOpen(false); onDelete(); onClose() }}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+    </>
   )
 }

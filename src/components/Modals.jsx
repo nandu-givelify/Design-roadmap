@@ -5,10 +5,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import InputLabel from '@mui/material/InputLabel'
-import FormControl from '@mui/material/FormControl'
+import Autocomplete from '@mui/material/Autocomplete'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
@@ -19,6 +16,23 @@ import CloseIcon from '@mui/icons-material/Close'
 import { toDateString, nextWorkday, isWeekend, addDays, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
+
+// ── Confirm dialog (replaces window.confirm, which browsers can silently
+// auto-suppress after repeated calls, and which stacks unusably if nested) ────
+export function ConfirmDialog({ open, title = 'Are you sure?', message, confirmLabel = 'Delete', onConfirm, onCancel }) {
+  return (
+    <Dialog open={open} onClose={onCancel} slots={{ transition: SlideUp }} transitionDuration={{ enter: 300, exit: 220 }}>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary">{message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button color="error" variant="contained" onClick={onConfirm}>{confirmLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 function getTaskDays(startDate, endDate) {
@@ -111,15 +125,31 @@ export function PhotoPicker({ value, onChange }) {
   )
 }
 
+// ── Role field — pick an existing role or type a brand-new one directly,     ─
+// no separate "add new role" field needed (same free-text-entry idea as the
+// person combobox's "+ Add new person").
+export function RoleField({ label = 'Role', value, onChange, roles, size = 'small', fullWidth = true, autoFocus = false }) {
+  return (
+    <Autocomplete
+      freeSolo
+      size={size}
+      fullWidth={fullWidth}
+      options={roles || []}
+      inputValue={value || ''}
+      onInputChange={(e, newValue) => onChange(newValue)}
+      renderInput={(params) => <TextField {...params} label={label} autoFocus={autoFocus} />}
+    />
+  )
+}
+
 // ── Add person dialog (shared by Board settings and the Assignee/PM combobox) ─
-export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople = [], orgOptions = [], initialName = '', defaultRole = 'Designer' }) {
+export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople = [], initialName = '', defaultRole = 'Designer' }) {
   const [query,      setQuery]      = useState(initialName)
   const [dropOpen,   setDropOpen]   = useState(false)
   const [selected,   setSelected]   = useState(null)
   const [email,      setEmail]      = useState('')
   const [photo,      setPhoto]      = useState(null)
   const [role,       setRole]       = useState(defaultRole)
-  const [customRole, setCustomRole] = useState('')
   const [saving,     setSaving]     = useState(false)
   const [focusedIdx, setFocusedIdx] = useState(-1)
 
@@ -130,15 +160,15 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
 
   const reset = () => {
     setDropOpen(false); setSelected(null)
-    setEmail(''); setPhoto(null); setRole(defaultRole); setCustomRole('')
+    setEmail(''); setPhoto(null); setRole(defaultRole)
     setFocusedIdx(-1)
   }
 
   const handleClose = () => { reset(); setQuery(''); onClose() }
 
-  // Org-directory members first, then locally-remembered people — deduped by email.
+  // People from my other boards — deduped by email.
   const seenEmails = new Set()
-  const combined = [...orgOptions, ...recentPeople].filter(p => {
+  const combined = recentPeople.filter(p => {
     const key = p.email?.toLowerCase()
     if (!key || seenEmails.has(key)) return false
     seenEmails.add(key)
@@ -162,7 +192,7 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
   const handleSave = async () => {
     if (!query.trim()) return
     setSaving(true)
-    const roleToUse = role === '__custom__' ? customRole.trim() : role
+    const roleToUse = role.trim()
     if (roleToUse && !roles?.includes(roleToUse)) await onAddRole?.(roleToUse)
     await onSave({ name: query.trim(), email: email.trim() || null, photo: photo || null, role: roleToUse || 'Designer' })
     setSaving(false)
@@ -187,7 +217,7 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
           {isNew && <PhotoPicker value={photo} onChange={setPhoto} />}
           <Box sx={{ position: 'relative' }}>
             <TextField
-              label="Name or email" size="small" fullWidth autoFocus
+              label="Name or email" size="small" fullWidth autoFocus={!initialName}
               value={query}
               onChange={e => {
                 setQuery(e.target.value); setSelected(null); setDropOpen(true); setFocusedIdx(-1)
@@ -233,7 +263,7 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
                 }
               } : undefined}
             />
-            {dropOpen && combined.length > 0 && (
+            {dropOpen && dropList.length > 0 && (
               <Box sx={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1500,
                 background: '#fff', border: '1px solid', borderColor: 'divider',
@@ -257,40 +287,20 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
                     </Box>
                   </Box>
                 ))}
-                {query.length > 0 && filtered.length === 0 && (
-                  <Typography variant="caption" sx={{ p: '8px 12px', display: 'block', color: 'text.secondary' }}>
-                    Press Save to add "{query}" as a new person
-                  </Typography>
-                )}
               </Box>
             )}
           </Box>
 
           {isNew && (
             <>
-              <TextField label="Email (optional)" size="small" fullWidth type="email"
+              <TextField label="Email (optional)" size="small" fullWidth type="email" autoFocus={!!initialName}
                 value={email} onChange={e => setEmail(e.target.value)} />
-              <FormControl size="small" fullWidth>
-                <InputLabel>Role</InputLabel>
-                <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
-                  {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                  <MenuItem value="__custom__">+ New role…</MenuItem>
-                </Select>
-              </FormControl>
-              {role === '__custom__' && (
-                <TextField label="Role name" size="small" fullWidth
-                  value={customRole} onChange={e => setCustomRole(e.target.value)} />
-              )}
+              <RoleField value={role} onChange={setRole} roles={roles || ['Designer', 'PM', 'Dev']} />
             </>
           )}
 
           {selected && (
-            <FormControl size="small" fullWidth>
-              <InputLabel>Role</InputLabel>
-              <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
-                {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-              </Select>
-            </FormControl>
+            <RoleField value={role} onChange={setRole} roles={roles || ['Designer', 'PM', 'Dev']} />
           )}
         </Stack>
       </DialogContent>
@@ -299,6 +309,56 @@ export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recen
         <Button onClick={handleClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving || !query.trim()}>
           {saving ? 'Saving…' : selected ? 'Add to board' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ── New board dialog ──────────────────────────────────────────────────────────
+// window.prompt() isn't supported in every environment (some embedded/PWA
+// contexts throw instead of showing it), so board creation gets a real dialog.
+export function NewBoardDialog({ open, onClose, onCreate }) {
+  const [name,   setName]   = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef(null)
+
+  useEffect(() => { if (!open) { setName(''); setSaving(false) } }, [open])
+
+  const handleCreate = async () => {
+    if (!name.trim() || saving) return
+    setSaving(true)
+    try { await onCreate(name.trim()) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+      // autoFocus alone can lose the race against the Slide-in transition (the
+      // field isn't visible/laid out yet when it fires, which some browsers
+      // silently ignore) — focus explicitly once the transition has finished.
+      slotProps={{ transition: { onEntered: () => inputRef.current?.focus() } }}
+    >
+      <DialogTitle sx={{ pr: 5 }}>
+        New board
+        <IconButton size="small" onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <TextField
+          label="Board name" size="small" fullWidth autoFocus
+          inputRef={inputRef}
+          value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreate() } }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleCreate} disabled={saving || !name.trim()}>
+          {saving ? 'Creating…' : 'Create'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -376,7 +436,7 @@ const recencyMs = (o) => {
   return null
 }
 
-function PersonCombobox({ value, onChange, options, orgOptions, label, placeholder, defaultRole, onCreatePerson, onCreatePersonWithId, onAddRole, roles }) {
+function PersonCombobox({ value, onChange, options, recentPeople, label, placeholder, defaultRole, onCreatePerson, onCreatePersonWithId, onAddRole, roles }) {
   const [open,               setOpen]               = useState(false)
   const [inputValue,         setInputValue]         = useState('')
   const [focusedIdx,         setFocusedIdx]         = useState(-1)
@@ -392,6 +452,13 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
   // Close on outside click
   useEffect(() => {
     const handler = (e) => {
+      // The Add Person dialog is portaled outside this component's own DOM
+      // subtree (wrapRef), so while it's open, clicks inside IT (e.g. its
+      // Email field) would otherwise be misread as "outside" clicks on this
+      // combobox — resetting inputValue, which flows into the dialog as a
+      // new `initialName` prop and wipes out whatever the user was typing
+      // there. Skip entirely while that dialog owns the interaction.
+      if (addPersonDialogOpen) return
       // Use composedPath (captured at dispatch time) instead of contains(e.target):
       // a click that swaps out the clicked row can detach it from the DOM before
       // this document-level listener runs, so by the time we get here e.target
@@ -407,12 +474,12 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [selected])
+  }, [selected, addPersonDialogOpen])
 
   // Keep the keyboard-focused row in view once it scrolls past the fold.
   useEffect(() => {
     if (focusedIdx >= 0) itemRefs.current[focusedIdx]?.scrollIntoView({ block: 'nearest' })
-  }, [focusedIdx])
+  }, [focusedIdx]) // eslint-disable-line
 
   // Filter options based on what's typed (only filter when input differs from selected name)
   const isTyping = !selected || inputValue !== selected.name
@@ -420,29 +487,36 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
     ? options.filter(o => o.name?.toLowerCase().includes(inputValue.toLowerCase()))
     : options
 
-  // Org-directory members (same company email domain, from other boards) not
-  // already an option here — offered as one-click adds instead of re-entering them.
+  // People from my other boards, not already an option here — offered as
+  // one-click adds instead of re-entering them. Never includes anyone I don't
+  // share a board with.
   const optionEmails = new Set(options.map(o => o.email?.toLowerCase()).filter(Boolean))
-  const orgSuggestions = (orgOptions || []).filter(m => !optionEmails.has(m.email?.toLowerCase()))
-  const filteredOrgSuggestions = isTyping && inputValue
-    ? orgSuggestions.filter(m => m.name?.toLowerCase().includes(inputValue.toLowerCase()))
-    : orgSuggestions
+  const knownSuggestions = (recentPeople || []).filter(m => !optionEmails.has(m.email?.toLowerCase()))
+  const filteredKnownSuggestions = isTyping && inputValue
+    ? knownSuggestions.filter(m => m.name?.toLowerCase().includes(inputValue.toLowerCase()))
+    : knownSuggestions
 
-  // One flat, keyboard-navigable list: board people and org suggestions merged
-  // (no group label) — most recently added to this board first, then anyone
-  // without a recency signal (e.g. org suggestions not yet on this board)
-  // alphabetically by name.
+  // One flat, keyboard-navigable list: board people and known-from-elsewhere
+  // suggestions merged (no group label) — most recently added to this board
+  // first, then anyone without a recency signal alphabetically by name.
   const combinedList = [
     ...filtered.map(o => ({ ...o, __kind: 'person' })),
-    ...filteredOrgSuggestions.map(m => ({ ...m, __kind: 'org' })),
+    ...filteredKnownSuggestions.map(m => ({ ...m, __kind: 'known' })),
   ].sort((a, b) => {
     const ra = recencyMs(a), rb = recencyMs(b)
     if (ra !== rb) return (rb ?? -Infinity) - (ra ?? -Infinity)
     return (a.name || '').localeCompare(b.name || '')
   })
 
+  // "Add new person" is a virtual extra row at the end of the keyboard-
+  // navigable list. When there's nothing to pick (no matches, or the board
+  // has no people yet), it's the only option — pre-focus it so Enter goes
+  // straight there instead of doing nothing.
+  const addNewIdx = combinedList.length
+  const effectiveFocusedIdx = focusedIdx === -1 && combinedList.length === 0 ? addNewIdx : focusedIdx
+
   const selectItem = (item) => {
-    if (item.__kind === 'org') {
+    if (item.__kind === 'known') {
       // Instant: generate the id client-side and select right away — the
       // Firestore write happens in the background instead of blocking the UI.
       const id = `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -472,18 +546,22 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
           // Clear the selected person immediately so the avatar updates
           if (value) onChange(null)
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (!selected) setOpen(true) }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') {
             e.preventDefault()
-            setFocusedIdx(i => Math.min(i + 1, combinedList.length - 1))
+            setOpen(true)
+            setFocusedIdx(i => Math.min((i === -1 ? -1 : i) + 1, addNewIdx))
           } else if (e.key === 'ArrowUp') {
             e.preventDefault()
             setFocusedIdx(i => Math.max(i - 1, 0))
           } else if (e.key === 'Enter') {
-            if (focusedIdx >= 0 && combinedList[focusedIdx]) {
+            if (effectiveFocusedIdx === addNewIdx) {
               e.preventDefault()
-              selectItem(combinedList[focusedIdx])
+              setOpen(false); setAddPersonDialogOpen(true)
+            } else if (effectiveFocusedIdx >= 0 && combinedList[effectiveFocusedIdx]) {
+              e.preventDefault()
+              selectItem(combinedList[effectiveFocusedIdx])
             }
           } else if (e.key === 'Escape') {
             setOpen(false); setFocusedIdx(-1)
@@ -530,12 +608,12 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
           maxHeight: 240, overflowY: 'auto', mt: 0.5,
         }}>
           {combinedList.map((item, idx) => (
-            <Box key={item.__kind === 'org' ? `org_${item.id}` : item.id}
+            <Box key={item.__kind === 'known' ? `known_${item.id}` : item.id}
               ref={el => { itemRefs.current[idx] = el }}
               sx={{
                 display: 'flex', alignItems: 'center', gap: 2, p: '8px 12px',
                 cursor: 'pointer',
-                background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
+                background: effectiveFocusedIdx === idx ? '#f3f4f6' : 'transparent',
                 '&:hover': { background: '#f3f4f6' },
               }} onMouseDown={e => { e.preventDefault(); selectItem(item) }}>
               <Box sx={{
@@ -552,7 +630,13 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
               </Box>
             </Box>
           ))}
-          <Box sx={{ p: '8px 12px', cursor: 'pointer', color: 'primary.main', fontSize: 13, '&:hover': { background: '#f3f4f6' } }}
+          <Box
+            ref={el => { itemRefs.current[addNewIdx] = el }}
+            sx={{
+              p: '8px 12px', cursor: 'pointer', color: 'primary.main', fontSize: 13,
+              background: effectiveFocusedIdx === addNewIdx ? '#f3f4f6' : 'transparent',
+              '&:hover': { background: '#f3f4f6' },
+            }}
             onMouseDown={e => { e.preventDefault(); setOpen(false); setAddPersonDialogOpen(true) }}>
             + Add new person…
           </Box>
@@ -564,13 +648,14 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
         onClose={() => setAddPersonDialogOpen(false)}
         roles={roles}
         onAddRole={onAddRole}
-        orgOptions={orgSuggestions}
+        recentPeople={knownSuggestions}
         initialName={inputValue}
         defaultRole={defaultRole || 'Designer'}
         onSave={async (data) => {
           const id = await onCreatePerson(data)
           onChange(id)
           setInputValue(data.name)
+          setOpen(false)
         }}
       />
     </Box>
@@ -578,7 +663,7 @@ function PersonCombobox({ value, onChange, options, orgOptions, label, placehold
 }
 
 // ── Task fields ───────────────────────────────────────────────────────────────
-function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWithId, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases, orgOptions }) {
+function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWithId, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases, recentPeople }) {
   const pmPeople = people.filter(p => p.role === 'PM')
 
   return (
@@ -597,7 +682,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
         value={form.assigneeId}
         onChange={(v) => set('assigneeId', v)}
         options={people}
-        orgOptions={orgOptions}
+        recentPeople={recentPeople}
         placeholder="Search or add…"
         defaultRole="Designer"
         onCreatePerson={onCreatePerson}
@@ -611,7 +696,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
         value={form.pmId}
         onChange={(v) => set('pmId', v)}
         options={pmPeople}
-        orgOptions={orgOptions}
+        recentPeople={recentPeople}
         placeholder="Search or add PM…"
         defaultRole="PM"
         onCreatePerson={onCreatePerson}
@@ -700,7 +785,7 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
 }
 
 // ── Add Task Modal ────────────────────────────────────────────────────────────
-export function TaskModal({ open = true, onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreatePersonWithId, onAddRole, orgOptions }) {
+export function TaskModal({ open = true, onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople }) {
   const today     = new Date()
   const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
@@ -716,6 +801,20 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
   })
   const [endDateTouched, setEndDateTouched] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Reset the form whenever the dialog (re)opens — it's kept mounted across
+  // opens (see useMountWhileOpen in App.jsx) so a plain useState initializer
+  // alone would leave a quick close-then-reopen (e.g. for a different day/
+  // person) showing whatever was typed into the previous "Add Task" session.
+  useEffect(() => {
+    if (!open) return
+    setForm({
+      title: '', assigneeId: defaultAssigneeId || '', pmId: '',
+      startDate: toDateString(startDate), endDate: toDateString(endDate),
+      taskColor: 'white', phases: defaultPhases,
+    })
+    setEndDateTouched(false)
+  }, [open]) // eslint-disable-line
 
   const handleStartDateChange = (v) => {
     set('startDate', v)
@@ -741,7 +840,7 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
       <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
-          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} orgOptions={orgOptions}
+          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} recentPeople={recentPeople}
           onStartDateChange={handleStartDateChange}
           onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
@@ -756,7 +855,8 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
 }
 
 // ── Edit Task Modal ───────────────────────────────────────────────────────────
-export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onCreatePersonWithId, onAddRole, orgOptions }) {
+export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople }) {
+  task = task || {}
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
@@ -767,6 +867,24 @@ export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, pe
     phases:     task.phases     || [],
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Re-seed the form whenever a (possibly different) task is opened — this
+  // dialog is kept mounted across opens (see useMountWhileOpen in App.jsx),
+  // so without this, closing Task A and opening Task B before the ~220ms
+  // exit transition finishes would reuse the same instance and silently
+  // save Task A's stale field values onto Task B.
+  useEffect(() => {
+    if (!open) return
+    setForm({
+      title:      task.title      || '',
+      assigneeId: task.assigneeId || '',
+      pmId:       task.pmId       || task.teamId || '',
+      startDate:  task.startDate  || '',
+      endDate:    task.endDate    || '',
+      taskColor:  task.taskColor  || 'white',
+      phases:     task.phases     || [],
+    })
+  }, [open, task.id]) // eslint-disable-line
 
   const handleSave = () => {
     if (!form.title.trim()) return
@@ -787,7 +905,7 @@ export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, pe
       <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
-          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} orgOptions={orgOptions}
+          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} recentPeople={recentPeople}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
         />
       </DialogContent>

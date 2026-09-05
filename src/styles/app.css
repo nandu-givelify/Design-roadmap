@@ -756,10 +756,10 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   box-shadow: 0 8px 40px rgba(0,0,0,0.1);
   padding: 40px 40px 32px; width: 400px; max-width: 90vw;
 }
-.login-card__logo { margin-bottom: 20px; }
-.login-card__title { font-size: 24px; font-weight: 600; color: var(--m3-on-surface); margin-bottom: 24px; }
+.login-card__logo { display: flex; justify-content: center; margin-bottom: 20px; }
+.login-card__title { font-size: 24px; font-weight: 600; color: var(--m3-on-surface); text-align: center; margin-bottom: 24px; }
 .login-card__title--tight { margin-bottom: 12px; }
-.login-card__sub { font-size: 14px; color: var(--m3-on-surface-variant); margin-bottom: 28px; }
+.login-card__sub { font-size: 14px; color: var(--m3-on-surface-variant); text-align: center; margin-bottom: 28px; }
 .login-google-btn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; padding: 12px 16px; border-radius: 50px;
@@ -774,13 +774,6 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   margin: 20px 0; color: var(--m3-on-surface-variant); font-size: 12px;
 }
 .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--m3-outline-variant); }
-.login-input {
-  display: block; width: 100%;
-  padding: 12px 16px; border: 1.5px solid var(--m3-outline-variant); border-radius: 12px;
-  font-size: 14px; color: var(--m3-on-surface); font-family: inherit; background: var(--m3-surface-container-low);
-  transition: border-color 0.15s; margin-bottom: 10px;
-}
-.login-input:focus { border-color: var(--m3-primary); outline: none; box-shadow: 0 0 0 3px var(--m3-primary-container); }
 .login-error { font-size: 12px; color: var(--m3-error); margin-bottom: 10px; padding: 10px 14px; background: var(--m3-error-container); border-radius: 12px; color: var(--m3-on-error-container); }
 .login-submit-btn {
   width: 100%; padding: 13px; border-radius: 50px;
@@ -865,6 +858,22 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   animation: login-spin 0.7s linear infinite;
 }
 @keyframes login-spin { to { transform: rotate(360deg); } }
+
+/* On mobile the sign-in card fills the screen edge-to-edge instead of
+   floating as a card, and sits at the top rather than vertically centered.
+   (The welcome dialog is a plain MUI Dialog and stays dialog-shaped on
+   mobile too — this only applies to the LoginPage card.) */
+@media (max-width: 740px) {
+  .login-page {
+    height: 100vh; align-items: flex-start; justify-content: flex-start;
+    background: var(--m3-surface);
+  }
+  .login-card {
+    width: 100%; max-width: none; min-height: 100vh;
+    border-radius: 0; box-shadow: none;
+    padding: 32px 24px;
+  }
+}
 
 .login-reset-sent { text-align: center; }
 .login-reset-sent__icon { font-size: 36px; margin-bottom: 12px; }

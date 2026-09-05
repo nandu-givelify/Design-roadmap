@@ -20,7 +20,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import ShareIcon from '@mui/icons-material/IosShare'
 import { getAvatarColor } from '../utils/dateUtils'
-import { AddPersonDialog } from './Modals'
+import { AddPersonDialog, ConfirmDialog } from './Modals'
 import { useMountWhileOpen } from '../hooks/useMountWhileOpen'
 
 // ── Shared slide-up transition ────────────────────────────────────────────────
@@ -134,7 +134,7 @@ function RenameBoardDialog({ open, board, onSave, onClose }) {
   const [name, setName] = useState(board?.name || '')
 
   const handleSave = () => {
-    if (name.trim() && name.trim() !== board?.name) onSave(board.id, name.trim())
+    if (board && name.trim() && name.trim() !== board.name) onSave(board.id, name.trim())
     onClose()
   }
 
@@ -169,7 +169,7 @@ export default function Settings({
   open = true, onClose, boardId, people, roles,
   boardPhases, onUpdateBoardPhases,
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
-  isOwner, recentPeople = [], orgOptions = [],
+  isOwner, recentPeople = [],
   board, onRenameBoard, onDeleteBoard, onShare,
   onPersonClick,
 }) {
@@ -177,6 +177,7 @@ export default function Settings({
   const [phaseDialogOpen,  setPhaseDialogOpen]  = useState(false)
   const [editingPhase,     setEditingPhase]     = useState(null)  // phase object | null
   const [showRename,       setShowRename]       = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const renameMounted = useMountWhileOpen(showRename)
 
   const openAddPhase  = () => { setEditingPhase(null); setPhaseDialogOpen(true) }
@@ -333,7 +334,7 @@ export default function Settings({
                   )}
                   {onDeleteBoard && (
                     <Box
-                      onClick={() => { if (window.confirm(`Delete "${board?.name}"? This cannot be undone.`)) { onDeleteBoard(board.id); onClose() } }}
+                      onClick={() => setShowDeleteConfirm(true)}
                       sx={{
                         display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px',
                         borderRadius: 2, cursor: 'pointer', '&:hover': { background: '#fff0f0' }, color: 'error.main',
@@ -358,7 +359,6 @@ export default function Settings({
         onSave={onAddPerson}
         onAddRole={onAddRole}
         recentPeople={recentPeople}
-        orgOptions={orgOptions}
       />
 
       {/* ── Stacked: add / edit phase ── */}
@@ -375,6 +375,15 @@ export default function Settings({
       {renameMounted && (
         <RenameBoardDialog open={showRename} board={board} onSave={onRenameBoard} onClose={() => setShowRename(false)} />
       )}
+
+      {/* ── Stacked: delete board confirm ── */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete board"
+        message={`Delete "${board?.name}"? This cannot be undone.`}
+        onConfirm={() => { setShowDeleteConfirm(false); onDeleteBoard(board.id); onClose() }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </>
   )
 }

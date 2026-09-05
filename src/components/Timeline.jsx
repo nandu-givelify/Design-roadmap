@@ -348,8 +348,8 @@ const Timeline = forwardRef(function Timeline({
   }, [readOnly])
 
   // ── Bulk actions ──────────────────────────────────────────────────────────
+  // No confirm dialog — task deletion is undoable (see pushHistory in App.jsx).
   const handleBulkDelete = () => {
-    if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size > 1 ? 's' : ''}?`)) return
     selectedTaskIds.forEach((id) => onDeleteTask(id))
     setSelectedTaskIds(new Set())
   }

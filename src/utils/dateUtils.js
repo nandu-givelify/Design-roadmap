@@ -109,7 +109,8 @@ export const getLaneCount = (tasks) => {
 
 // Deterministic avatar color from name string
 export const AVATAR_COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6','#f97316','#84cc16']
-export const getAvatarColor = (name = '') => {
+export const getAvatarColor = (name) => {
+  name = name || ''
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]

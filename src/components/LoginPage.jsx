@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, resetPassword } from '../firebase'
+import TextField from '@mui/material/TextField'
+import Stack from '@mui/material/Stack'
+import { signInWithGoogle, signInEmail, signUpEmail, updateUserProfile, resetPassword, getSignInMethods } from '../firebase'
 import { getAvatarColor } from '../utils/dateUtils'
 
 /*
@@ -55,14 +57,37 @@ export default function LoginPage() {
     finally { setLoading(false) }
   }
 
-  // ── Email step → password step ────────────────────────────────────────────
-  const handleEmailContinue = (e) => {
+  // ── Email step → password or register step ───────────────────────────────
+  // Email enumeration protection is off for this project, so
+  // fetchSignInMethodsForEmail reliably reflects whether the account exists —
+  // routes a brand-new email straight to account creation.
+  const handleEmailContinue = async (e) => {
     e.preventDefault()
     if (!email.trim()) return
     // Capture any Chrome-autofilled password from the hidden field
     const autofilled = hiddenPasswordRef.current?.value || ''
     if (autofilled) setPassword(autofilled)
-    setStep('password')
+    clearError()
+    setLoading(true)
+    try {
+      const methods = await getSignInMethods(email.trim())
+      if (methods.length === 0) {
+        setStep('register')
+      } else if (!methods.includes('password')) {
+        setError(methods.includes('google.com')
+          ? 'This email is registered with Google. Use "Continue with Google" above to sign in.'
+          : 'This email uses a different sign-in method.')
+      } else {
+        setStep('password')
+      }
+    } catch {
+      // Network hiccup or similar — fall back to the password step, which
+      // still recovers via the "email-already-in-use" redirect in
+      // handleRegister if the account turns out to exist.
+      setStep('password')
+    } finally {
+      setLoading(false)
+    }
   }
 
   // ── Account card tap — try saved credential, fall back to password step ───
@@ -78,8 +103,14 @@ export default function LoginPage() {
       }
       setStep('password')
     } catch (err) {
-      if (err?.code) { setError(friendlyError(err.code)); setStep('password') }
-      else setStep('password')
+      // Only surface real Firebase Auth errors (string codes like 'auth/...').
+      // A browser without Credential Management API support throws a generic
+      // DOMException here (e.g. NotSupportedError) — that's not a sign-in
+      // failure, so just fall through to the password step quietly.
+      if (typeof err?.code === 'string' && err.code.startsWith('auth/')) {
+        setError(friendlyError(err.code))
+      }
+      setStep('password')
     } finally {
       setLoading(false)
     }
@@ -105,7 +136,7 @@ export default function LoginPage() {
   // ── Register ──────────────────────────────────────────────────────────────
   const handleRegister = async (e) => {
     e.preventDefault()
-    if (!name.trim() || password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (!name.trim() || password.length < 6) return
     setLoading(true); clearError()
     try {
       await signUpEmail(email, password)
@@ -176,16 +207,18 @@ export default function LoginPage() {
             <div className="login-divider"><span>or</span></div>
 
             <form onSubmit={handleEmailContinue}>
-              <input
-                className="login-input"
-                type="email"
-                name="email"
-                autoComplete="username"
-                placeholder="Your email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); clearError() }}
-                autoFocus
-              />
+              <Stack spacing={2} sx={{ mb: 2 }}>
+                <TextField
+                  label="Email"
+                  type="email"
+                  name="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); clearError() }}
+                  autoFocus
+                  fullWidth
+                />
+              </Stack>
               {/*
                 Hidden password — Chrome autofills username+password together.
                 We read this value on Continue and pre-populate the password step
@@ -202,11 +235,7 @@ export default function LoginPage() {
               />
               {error && <div className="login-error">{error}</div>}
               <button className="login-submit-btn" type="submit" disabled={loading || !email.trim()}>
-                Continue
-              </button>
-              <button type="button" className="login-forgot"
-                onClick={() => { clearError(); setStep('register') }}>
-                New to Planner? Create an account
+                {loading ? 'Checking…' : 'Continue'}
               </button>
             </form>
           </>
@@ -217,24 +246,26 @@ export default function LoginPage() {
           <>
             <h1 className="login-card__title login-card__title--tight">Welcome back</h1>
             <form onSubmit={handleSignIn}>
-              <div className="login-email-badge">
-                <span>{email}</span>
-                <button type="button"
-                  onClick={() => {
-                    setStep(lastUser ? 'account' : 'email')
-                    setPassword(''); clearError()
-                  }}>Change</button>
-              </div>
-              <input
-                className="login-input"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); clearError() }}
-                autoFocus
-              />
+              <Stack spacing={2} sx={{ mb: 2 }}>
+                <div className="login-email-badge">
+                  <span>{email}</span>
+                  <button type="button"
+                    onClick={() => {
+                      setStep(lastUser ? 'account' : 'email')
+                      setPassword(''); clearError()
+                    }}>Change</button>
+                </div>
+                <TextField
+                  label="Password"
+                  type="password"
+                  name="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); clearError() }}
+                  autoFocus
+                  fullWidth
+                />
+              </Stack>
               {error && <div className="login-error">{error}</div>}
               <button className="login-submit-btn" type="submit" disabled={loading || !password}>
                 {loading ? 'Signing in…' : 'Sign in'}
@@ -255,24 +286,28 @@ export default function LoginPage() {
           <>
             <h1 className="login-card__title">Create your account</h1>
             <form onSubmit={handleRegister}>
-              {email.trim() ? (
-                <div className="login-email-badge">
-                  <span>{email}</span>
-                  <button type="button"
-                    onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
-                </div>
-              ) : (
-                <input className="login-input" type="email" name="email" autoComplete="email"
-                  placeholder="Your email" value={email}
-                  onChange={(e) => { setEmail(e.target.value); clearError() }} autoFocus />
-              )}
-              <input className="login-input" type="text" name="name" autoComplete="name"
-                placeholder="Your full name" value={name}
-                onChange={(e) => { setName(e.target.value); clearError() }}
-                autoFocus={!!email.trim()} />
-              <input className="login-input" type="password" name="new-password" autoComplete="new-password"
-                placeholder="Create a password (6+ chars)" value={password}
-                onChange={(e) => { setPassword(e.target.value); clearError() }} />
+              <Stack spacing={2} sx={{ mb: 2 }}>
+                {email.trim() ? (
+                  <div className="login-email-badge">
+                    <span>{email}</span>
+                    <button type="button"
+                      onClick={() => { setStep('email'); setPassword(''); clearError() }}>Change</button>
+                  </div>
+                ) : (
+                  <TextField label="Email" type="email" name="email" autoComplete="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); clearError() }}
+                    autoFocus fullWidth />
+                )}
+                <TextField label="Full name" type="text" name="name" autoComplete="name"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); clearError() }}
+                  autoFocus={!!email.trim()} fullWidth />
+                <TextField label="Password" type="password" name="new-password" autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); clearError() }}
+                  helperText="6+ characters" fullWidth />
+              </Stack>
               {error && <div className="login-error">{error}</div>}
               <button className="login-submit-btn" type="submit"
                 disabled={loading || !email.trim() || !name.trim() || password.length < 6}>
@@ -343,7 +378,7 @@ function GoogleIcon() {
 function friendlyError(code) {
   switch (code) {
     case 'auth/wrong-password':
-    case 'auth/invalid-credential':  return 'Incorrect password. Try again or use "Forgot password".'
+    case 'auth/invalid-credential':  return 'That password didn\'t work. If you don\'t have an account yet, create one below — or try "Forgot password".'
     case 'auth/email-already-in-use':return 'An account already exists with this email.'
     case 'auth/weak-password':       return 'Password must be at least 6 characters.'
     case 'auth/invalid-email':       return 'Please enter a valid email address.'

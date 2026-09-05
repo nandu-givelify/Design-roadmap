@@ -6,7 +6,8 @@ import Header from './components/Header'
 import Timeline from './components/Timeline'
 import Settings from './components/Settings'
 import PersonDetailsDialog from './components/PersonDetailsDialog'
-import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
+import WelcomeSetupDialog from './components/WelcomeSetupDialog'
+import { TaskModal, EditTaskModal, ShareModal, NewBoardDialog } from './components/Modals'
 import { useMountWhileOpen } from './hooks/useMountWhileOpen'
 import { initStackedDialogs } from './utils/stackedDialogs'
 
@@ -323,6 +324,18 @@ function AuthenticatedApp({ user }) {
   const [favoriteBoardIds,setFavoriteBoardIds]= useState([])
   const boardSetupStarted = useRef(false)  // prevent double-creation
 
+  // First-ever session for this account (Firebase sets these equal only on the
+  // sign-in that follows account creation) — gates the one-time welcome
+  // dialog so returning users never see it.
+  const isFirstSession = !!user?.metadata?.creationTime
+    && user.metadata.creationTime === user.metadata.lastSignInTime
+  const [welcomeOpen,     setWelcomeOpen]     = useState(false)
+  const [welcomeIsNewUser,setWelcomeIsNewUser]= useState(false)
+  const welcomeShownRef = useRef(false)  // only ever show once per app load
+  const welcomeMounted = useMountWhileOpen(welcomeOpen)
+  const [newBoardOpen, setNewBoardOpen] = useState(false)
+  const newBoardMounted = useMountWhileOpen(newBoardOpen)
+
   const timelineRef = useRef(null)
 
   // Undo/redo
@@ -432,25 +445,64 @@ function AuthenticatedApp({ user }) {
       setDbError(null)
       setBoards(bs)
       setLoadingBoards(false)
+      const urlId = getBoardIdFromUrl()
       if (bs.length > 0) {
-        const urlId = getBoardIdFromUrl()
         const found = bs.find((b) => b.id === urlId) || bs[0]
         setActiveBoardId((prev) => {
           if (prev && bs.find((b) => b.id === prev)) return prev
           setBoardIdInUrl(found.id)
           return found.id
         })
+        // First-ever sign-in landing with existing board access (e.g. invited
+        // to a board before signing up) — land them on the first one (above)
+        // and show the welcome dialog as an overlay so they can jump to a
+        // different one or add a new one instead.
+        if (isFirstSession && !welcomeShownRef.current) {
+          welcomeShownRef.current = true
+          setWelcomeIsNewUser(false)
+          setWelcomeOpen(true)
+        }
       } else if (!boardSetupStarted.current) {
         // No boards yet — guard against double-fire from two onSnapshot listeners
         boardSetupStarted.current = true
+        // Claim the welcome-dialog slot synchronously, before any awaits below:
+        // once the board we're about to create lands, Firestore's listener
+        // fires this same callback again with bs.length > 0, and without
+        // claiming it now that second call would win the race and show the
+        // wrong ("existing boards") variant instead of the new-user one.
+        const showWelcomeAsNewUser = isFirstSession && !welcomeShownRef.current
+        if (showWelcomeAsNewUser) welcomeShownRef.current = true
         setMigrating(true)
         try {
-          const migratedId = await checkAndRunMigration(user.uid, user.email)
-          if (!migratedId) {
-            // Brand new user — create empty board
-            const ref = await createBoard({ name: 'My Board', ownerId: user.uid, ownerEmail: user.email })
+          // Migration only ever matters for pre-existing (legacy single-board)
+          // accounts — it must never block a brand-new signup from getting
+          // their first board just because this lookup failed for some reason.
+          let migratedId = null
+          try {
+            migratedId = await checkAndRunMigration(user.uid, user.email)
+          } catch (err) {
+            console.warn('[migration] check failed, treating as brand-new user:', err.message)
+          }
+          if (migratedId) {
+            setBoardIdInUrl(migratedId)
+            setActiveBoardId(migratedId)
+          } else {
+            // Brand-new user with no boards — auto-create their first one
+            // and greet them with the welcome dialog on top of it.
+            const ref = await createBoard({ name: 'Your New Board', ownerId: user.uid, ownerEmail: user.email })
+            const currentProfile = await getUserProfile(user.uid)
+            await addPerson(ref.id, {
+              name:  currentProfile?.name  || user.displayName || user.email.split('@')[0],
+              email: user.email,
+              photo: currentProfile?.photo || user.photoURL || null,
+              role:  null,
+            })
             setBoardIdInUrl(ref.id)
             setActiveBoardId(ref.id)
+            if (showWelcomeAsNewUser) {
+              setWelcomeIsNewUser(true)
+              setWelcomeOpen(true)
+            }
           }
         } finally {
           setMigrating(false)
@@ -473,17 +525,7 @@ function AuthenticatedApp({ user }) {
     setTasksLoaded(false)
     setPeople([])
     setTasks([])
-    const u1 = subscribePeople(activeBoardId, (ps) => {
-      setPeople(ps)
-      // Cache people to localStorage for "recently added" suggestions
-      try {
-        const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
-        ps.forEach(p => {
-          if (p.email) cache[p.email] = { name: p.name, email: p.email, photo: p.photo || null, role: p.role || null }
-        })
-        localStorage.setItem('recentPeople', JSON.stringify(cache))
-      } catch {}
-    })
+    const u1 = subscribePeople(activeBoardId, setPeople)
     const u2 = subscribeTasks(activeBoardId, (ts) => { setTasks(ts); setTasksLoaded(true) })
     return () => { u1(); u2() }
   }, [activeBoardId])
@@ -541,14 +583,49 @@ function AuthenticatedApp({ user }) {
     return orgMembers.filter(m => m.email && !currentEmails.has(m.email.toLowerCase()))
   }, [orgMembers, people])
 
-  // ── Recent people (from localStorage cache, excluding current board members) ──
+  // ── People from boards I'm actually part of (owned or member), not the whole
+  // browser's history — refetched whenever my board list changes. Suggested
+  // when adding people so I don't have to re-add someone I already work with
+  // elsewhere, without ever surfacing someone I have no shared board with.
+  const [myBoardsPeople, setMyBoardsPeople] = useState([])
+  const boardIdsKey = boards.map(b => b.id).sort().join(',')
+  useEffect(() => {
+    if (!boards.length) { setMyBoardsPeople([]); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const lists = await Promise.all(boards.map(b => getPeopleOnce(b.id)))
+        if (cancelled) return
+        const byEmail = new Map()
+        lists.flat().forEach(p => {
+          const key = p.email?.toLowerCase()
+          if (!key) return
+          const existing = byEmail.get(key)
+          if (!existing || (p.createdAt?.seconds || 0) > (existing.createdAt?.seconds || 0)) {
+            byEmail.set(key, p)
+          }
+        })
+        setMyBoardsPeople([...byEmail.values()])
+      } catch (err) {
+        console.warn('[myBoardsPeople] fetch failed:', err.message)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [boardIdsKey]) // eslint-disable-line
+
+  // ── Recent people — merges two sources, deduped by email, excluding current
+  // board's members: (1) people from boards I actually own/belong to, and
+  // (2) org-directory colleagues sharing my company email domain. ──────────
   const recentPeople = useMemo(() => {
-    try {
-      const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
-      const currentEmails = new Set(people.map(p => p.email).filter(Boolean))
-      return Object.values(cache).filter(p => p.email && !currentEmails.has(p.email))
-    } catch { return [] }
-  }, [people, activeBoardId]) // eslint-disable-line
+    const currentEmails = new Set(people.map(p => p.email?.toLowerCase()).filter(Boolean))
+    const seen = new Set()
+    return [...myBoardsPeople, ...orgOptions].filter(p => {
+      const key = p.email?.toLowerCase()
+      if (!key || currentEmails.has(key) || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [myBoardsPeople, orgOptions, people])
 
   // ── Profile update handler — saves to userProfile + pushes to ALL boards ──
   const handleUpdateProfile = useCallback(async (data) => {
@@ -577,20 +654,21 @@ function AuthenticatedApp({ user }) {
     // Push photo/name change to every board the user appears on
     // Use loaded `boards` (includes owned + member boards) — findBoardsByMemberEmail only
     // finds boards where the user's email is in memberEmails, missing owned boards.
-    try {
-      const ue = user.email.toLowerCase()
-      const un = (saveData.name || user.displayName || '').toLowerCase()
-      await Promise.all(boards.map(async (board) => {
-        const boardPeople = await getPeopleOnce(board.id)
-        const match = boardPeople.find(p => p.email?.toLowerCase() === ue)
-          || (un ? boardPeople.find(p => !p.email && p.name?.toLowerCase() === un) : null)
-        if (!match) return
-        const patch = {}
-        if (saveData.name  !== undefined) patch.name  = saveData.name
-        if (saveData.photo !== undefined) patch.photo = saveData.photo
-        if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
-      }))
-    } catch (e) { console.warn('Profile push failed:', e) }
+    // Fire-and-forget: this is one Firestore round-trip per board, so awaiting it here
+    // would leave the profile dialog stuck on "Saving…" for several seconds on an
+    // account with many boards. The primary write above already completed.
+    const ue = user.email.toLowerCase()
+    const un = (saveData.name || user.displayName || '').toLowerCase()
+    Promise.all(boards.map(async (board) => {
+      const boardPeople = await getPeopleOnce(board.id)
+      const match = boardPeople.find(p => p.email?.toLowerCase() === ue)
+        || (un ? boardPeople.find(p => !p.email && p.name?.toLowerCase() === un) : null)
+      if (!match) return
+      const patch = {}
+      if (saveData.name  !== undefined) patch.name  = saveData.name
+      if (saveData.photo !== undefined) patch.photo = saveData.photo
+      if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
+    })).catch((e) => console.warn('Profile push failed:', e))
   }, [user, boards, showToast]) // eslint-disable-line
 
   // ── Board person → profile sync handler ──────────────────────────────────
@@ -631,34 +709,34 @@ function AuthenticatedApp({ user }) {
       setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...patch }))
       // Best-effort Firestore write to userProfile collection
       try { await setUserProfile(user.uid, patch) } catch (e) { console.warn('userProfile write:', e) }
-      // Push directly to ALL other boards using email OR person name for matching
-      try {
-        const ue = userEmail
-        const un = personName  // use the actual person name, not displayName
-        await Promise.all(boards.map(async (board) => {
-          if (board.id === activeBoardId) return // already updated at top of this handler
-          const ppl = await getPeopleOnce(board.id)
-          const match = (ue && ppl.find(p => p.email?.toLowerCase() === ue))
-            || (un && ppl.find(p => !p.email && p.name?.toLowerCase() === un))
-          if (match) await updatePerson(board.id, match.id, patch)
-        }))
-      } catch (e) { console.warn('Cross-board push failed:', e) }
+      // Push directly to ALL other boards using email OR person name for matching.
+      // Fire-and-forget — one Firestore round-trip per board, so awaiting it would
+      // leave the profile dialog stuck on "Saving…" for several seconds on an
+      // account with many boards. The primary write above already completed.
+      const ue = userEmail
+      const un = personName  // use the actual person name, not displayName
+      Promise.all(boards.map(async (board) => {
+        if (board.id === activeBoardId) return // already updated at top of this handler
+        const ppl = await getPeopleOnce(board.id)
+        const match = (ue && ppl.find(p => p.email?.toLowerCase() === ue))
+          || (un && ppl.find(p => !p.email && p.name?.toLowerCase() === un))
+        if (match) await updatePerson(board.id, match.id, patch)
+      })).catch((e) => console.warn('Cross-board push failed:', e))
       return
     }
 
     // For any other person: push the change to all boards they appear on.
     // Use loaded `boards` state and match by email OR name (for entries without email).
+    // Fire-and-forget, same reasoning as above.
     const pn = (person?.name || '').toLowerCase()
     if (!email && !pn) return
-    try {
-      await Promise.all(boards.map(async (board) => {
-        if (board.id === activeBoardId) return  // already updated above
-        const ppl   = await getPeopleOnce(board.id)
-        const match = (email && ppl.find(p => p.email?.toLowerCase() === email))
-          || (pn && ppl.find(p => !p.email && p.name?.toLowerCase() === pn))
-        if (match) await updatePerson(board.id, match.id, patch)
-      }))
-    } catch (e) { console.warn('Cross-board person sync failed:', e) }
+    Promise.all(boards.map(async (board) => {
+      if (board.id === activeBoardId) return  // already updated above
+      const ppl   = await getPeopleOnce(board.id)
+      const match = (email && ppl.find(p => p.email?.toLowerCase() === email))
+        || (pn && ppl.find(p => !p.email && p.name?.toLowerCase() === pn))
+      if (match) await updatePerson(board.id, match.id, patch)
+    })).catch((e) => console.warn('Cross-board person sync failed:', e))
   }, [user, people, activeBoardId, userProfile, boards]) // eslint-disable-line
 
   // (per-board reconciliation removed — userProfile is now the single source of truth;
@@ -770,9 +848,13 @@ function AuthenticatedApp({ user }) {
   }, [])
 
   // ── New board ────────────────────────────────────────────────────────────
-  const handleNewBoard = useCallback(async () => {
-    const name = window.prompt('Board name:')
-    if (!name?.trim()) return
+  // window.prompt() isn't supported in every environment (some embedded/PWA
+  // contexts throw instead of showing it), so this opens a proper dialog.
+  const handleNewBoard = useCallback(() => {
+    setNewBoardOpen(true)
+  }, [])
+
+  const handleCreateBoard = useCallback(async (name) => {
     const ref = await createBoard({ name: name.trim(), ownerId: user.uid, ownerEmail: user.email })
     // Auto-add creator as a person so their photo shows immediately
     const currentProfile = await getUserProfile(user.uid)
@@ -784,6 +866,8 @@ function AuthenticatedApp({ user }) {
     })
     setBoardIdInUrl(ref.id)
     setActiveBoardId(ref.id)
+    setNewBoardOpen(false)
+    setWelcomeOpen(false)
   }, [user])
 
   // ── Rename board ──────────────────────────────────────────────────────────
@@ -1107,7 +1191,7 @@ function AuthenticatedApp({ user }) {
             onCreatePerson={handleCreatePerson}
             onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
-            orgOptions={orgOptions}
+            recentPeople={recentPeople}
           />
         )}
 
@@ -1125,7 +1209,7 @@ function AuthenticatedApp({ user }) {
             onCreatePerson={handleCreatePerson}
             onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
-            orgOptions={orgOptions}
+            recentPeople={recentPeople}
           />
         )}
 
@@ -1151,28 +1235,38 @@ function AuthenticatedApp({ user }) {
             roles={boardRoles}
             boardPhases={boardPhases}
             onUpdatePerson={handleUpdatePerson}
-            onDeletePerson={(id) => {
-              // Remove from localStorage suggestion cache so they stop appearing in "Add person" dropdown
-              const person = enrichedPeople.find(p => p.id === id)
-              if (person?.email) {
-                try {
-                  const cache = JSON.parse(localStorage.getItem('recentPeople') || '{}')
-                  delete cache[person.email]
-                  localStorage.setItem('recentPeople', JSON.stringify(cache))
-                } catch {}
-              }
-              deletePerson(activeBoardId, id)
-            }}
+            onDeletePerson={(id) => deletePerson(activeBoardId, id)}
             onAddPerson={(data) => addPerson(activeBoardId, data)}
             onAddRole={handleAddRole}
             onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
             recentPeople={recentPeople}
-            orgOptions={orgOptions}
             onRenameBoard={handleRenameBoard}
             onDeleteBoard={handleDeleteBoard}
             onShare={handleShareBoard}
             onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
+          />
+        )}
+
+        {/* New board dialog (left nav "+", and welcome dialog's "add new board") */}
+        {newBoardMounted && (
+          <NewBoardDialog
+            open={newBoardOpen}
+            onClose={() => setNewBoardOpen(false)}
+            onCreate={handleCreateBoard}
+          />
+        )}
+
+        {/* First-session welcome dialog */}
+        {welcomeMounted && (
+          <WelcomeSetupDialog
+            open={welcomeOpen}
+            name={effectiveProfile.name || user?.displayName || user?.email?.split('@')[0] || ''}
+            isNewUser={welcomeIsNewUser}
+            boards={sortedBoards}
+            activeBoardId={activeBoardId}
+            onSelectBoard={(id) => { setBoardIdInUrl(id); setActiveBoardId(id); setWelcomeOpen(false) }}
+            onClose={() => setWelcomeOpen(false)}
           />
         )}
 
@@ -1208,17 +1302,19 @@ function AuthenticatedApp({ user }) {
             const personTasks = tasks.filter(t =>
               t.assigneeId === livePerson.id || t.pmId === livePerson.id || t.teamId === livePerson.id
             )
-            for (const task of personTasks) {
+            // Independent writes to different tasks — run in parallel instead
+            // of one Firestore round trip at a time, so "Adding…" doesn't sit
+            // stuck for however many tasks this person happens to have.
+            await Promise.all(personTasks.map((task) => {
               const tS = parseLocalDate(task.startDate)
               const tE = parseLocalDate(task.endDate)
-              if (tE < toS || tS > toE) continue
+              if (tE < toS || tS > toE) return null
               const overlapStart = tS > toS ? tS : toS
               const overlapEnd   = tE < toE ? tE : toE
               const overlapDays  = diffDays(startOfDay(overlapStart), startOfDay(overlapEnd)) + 1
-              if (overlapDays > 0) {
-                await updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, overlapDays)) })
-              }
-            }
+              if (overlapDays <= 0) return null
+              return updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, overlapDays)) })
+            }))
           }
 
           const handleUpdateP = isOwnProfile
@@ -1238,11 +1334,10 @@ function AuthenticatedApp({ user }) {
               onClose={() => { setPersonDetailsOpen(false); setSelectedPersonId(null) }}
               canEdit={canEditPerson}
               roles={boardRoles}
+              onAddRole={handleAddRole}
               onUpdatePerson={handleUpdateP}
               onDelete={livePerson && !isOwnProfile && canEditPerson ? () => {
-                if (window.confirm(`Remove ${livePerson.name} from this board?`)) {
-                  deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false)
-                }
+                deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false)
               } : null}
               onAddTimeOff={handleAddTO}
               onRemoveTimeOff={async (entry) => {
@@ -1259,17 +1354,18 @@ function AuthenticatedApp({ user }) {
                 const personTasks = tasks.filter(t =>
                   t.assigneeId === livePerson.id || t.pmId === livePerson.id || t.teamId === livePerson.id
                 )
-                for (const task of personTasks) {
+                // Independent writes to different tasks — run in parallel (see
+                // handleAddTO above for why this isn't a sequential for-loop).
+                await Promise.all(personTasks.map((task) => {
                   const tS = parseLocalDate(task.startDate)
                   const tE = parseLocalDate(task.endDate)
-                  if (tE < toS || tS > toE) continue
+                  if (tE < toS || tS > toE) return null
                   const overlapStart = tS > toS ? tS : toS
                   const overlapEnd   = tE < toE ? tE : toE
                   const overlapDays  = diffDays(startOfDay(overlapStart), startOfDay(overlapEnd)) + 1
-                  if (overlapDays > 0) {
-                    await updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, -overlapDays)) })
-                  }
-                }
+                  if (overlapDays <= 0) return null
+                  return updateTask(activeBoardId, task.id, { endDate: toDateString(addDays(tE, -overlapDays)) })
+                }))
               }}
             />
           )

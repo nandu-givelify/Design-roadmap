@@ -8,7 +8,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut as fbSignOut, onAuthStateChanged, updateProfile,
-  sendPasswordResetEmail,
+  sendPasswordResetEmail, fetchSignInMethodsForEmail,
 } from 'firebase/auth'
 
 export const DEFAULT_BOARD_PHASES = [
@@ -44,6 +44,12 @@ export const signOutUser        = () => fbSignOut(auth)
 export const onAuthChange       = (cb) => onAuthStateChanged(auth, cb)
 export const updateUserProfile  = (data) => updateProfile(auth.currentUser, data)
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email)
+
+// Sign-in methods already registered for this email ([] means no account
+// exists yet) — reliable now that email enumeration protection is off for
+// this project. Used on the sign-in screen to route a brand-new email
+// straight to account creation instead of a dead-end password field.
+export const getSignInMethods = (email) => fetchSignInMethodsForEmail(auth, email)
 
 // ── User Profiles (global, cross-board) ──────────────────────────────────────
 export const getUserProfile = (uid) =>
@@ -82,19 +88,26 @@ export const updateUserPrefs = (uid, data) =>
 export const subscribeBoards = (uid, email, cb, onError) => {
   let owned = [], membered = [], q1Done = false, q2Done = false
   const merge = () => {
+    // Wait for BOTH queries to report at least once — firing after only one
+    // has resolved reports a board list that's missing every board the other
+    // query would have contributed (e.g. every board this user is a member
+    // of but doesn't own), which downstream code reads as "no boards yet"
+    // and reacts to by auto-creating a brand-new board.
+    if (!q1Done || !q2Done) return
     const map = {}
     ;[...owned, ...membered].forEach((b) => { map[b.id] = b })
     cb(Object.values(map).sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)))
   }
-  const handleError = (err) => {
+  const handleError = (markDone) => (err) => {
     console.error('Firestore boards error:', err.code, err.message)
+    markDone()
     if (onError) onError(err)
-    else merge() // fire with empty so app doesn't hang
+    else merge() // fire with whatever's available so the app doesn't hang
   }
   const q1 = query(collection(db, 'boards'), where('ownerId', '==', uid))
   const q2 = query(collection(db, 'boards'), where('memberEmails', 'array-contains', email))
-  const u1 = onSnapshot(q1, (s) => { owned    = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() }, handleError)
-  const u2 = onSnapshot(q2, (s) => { membered = s.docs.map((d) => ({ id: d.id, ...d.data() })); merge() }, handleError)
+  const u1 = onSnapshot(q1, (s) => { owned    = s.docs.map((d) => ({ id: d.id, ...d.data() })); q1Done = true; merge() }, handleError(() => { q1Done = true }))
+  const u2 = onSnapshot(q2, (s) => { membered = s.docs.map((d) => ({ id: d.id, ...d.data() })); q2Done = true; merge() }, handleError(() => { q2Done = true }))
   return () => { u1(); u2() }
 }
 
