@@ -31,7 +31,7 @@
 /* ── Reset ──────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
-body { font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--m3-surface); color: var(--m3-on-surface); line-height: normal; }
+body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--m3-surface); color: var(--m3-on-surface); line-height: normal; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 input, select { font-family: inherit; }
 input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset: 1px; }
@@ -42,18 +42,28 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 
 /* ── App Shell ──────────────────────────────────────────────────────────────── */
 .app { height: 100vh; display: flex; flex-direction: row; overflow: hidden; }
-.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+/* Neutral canvas so the floating translucent header reads as a card, not a flat bar */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; background: #f2f3f5; }
 
-/* ── Header ─────────────────────────────────────────────────────────────────── */
+/* ── Header (floating card) ──────────────────────────────────────────────────── */
 .header {
-  display: flex; align-items: center; gap: 10px;
-  height: 56px; padding: 0 16px;
-  background: var(--m3-surface-container); border-bottom: 1px solid var(--m3-outline-variant);
+  display: flex; align-items: center; gap: 4px;
+  height: 48px; padding: 0 16px 0 4px;
+  margin: 8px 8px 0;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.7);
   flex-shrink: 0; position: relative; z-index: 50;
 }
-.header__brand { display: flex; align-items: center; gap: 10px; }
+.header__brand { display: flex; align-items: center; gap: 8px; }
 .header__title { font-size: 15px; font-weight: 700; color: var(--m3-on-surface); white-space: nowrap; }
-.header__board-title { font-size: 15px; font-weight: 700; color: var(--m3-on-surface); white-space: nowrap; padding: 4px 10px; border-radius: 50px; cursor: default; transition: background 0.12s; } .header__board-title:hover { background: var(--m3-surface-container-high); cursor: text; }
+.header__board-title {
+  font-size: 20px; font-weight: 700; color: var(--m3-on-surface); white-space: nowrap;
+  padding: 4px 8px; border-radius: 12px; cursor: default; transition: background 0.12s;
+  display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.header__board-title:hover { background: var(--m3-surface-container-high); cursor: text; }
 .header__add-btn {
   background: var(--m3-primary); color: var(--m3-on-primary); padding: 8px 20px; border-radius: 50px;
   font-size: 13px; font-weight: 600; transition: background 0.15s, box-shadow 0.15s;
@@ -93,7 +103,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   color: var(--m3-on-surface-variant); background: var(--m3-surface-container-low); transition: all 0.15s;
 }
 .header__nav-arrow:hover { border-color: var(--m3-outline); color: var(--m3-on-surface); background: var(--m3-surface-container-high); }
-.header__nav-label { font-size: 13px; font-weight: 700; min-width: 72px; text-align: center; color: var(--m3-on-surface); }
+.header__nav-label { font-size: 13px; font-weight: 700; min-width: 72px; text-align: center; color: var(--m3-on-surface); white-space: nowrap; }
 .header__spacer { flex: 1; }
 .header__today-btn, .header__share-btn, .header__filter-btn, .header__settings-btn {
   width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--m3-outline-variant);
@@ -126,7 +136,10 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .filter-row__label { font-size: 13px; color: var(--m3-on-surface-variant); }
 
 /* ── Timeline ────────────────────────────────────────────────────────────────── */
-.timeline { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.timeline {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  margin: 8px; border-radius: 16px; background: #fff;
+}
 .timeline__scroll { flex: 1; overflow: auto; user-select: none; display: grid; }
 .timeline__inner { position: relative; min-width: 100%; display: flex; flex-direction: column; }
 
@@ -141,14 +154,14 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   position: sticky; left: 0; z-index: 31;
   background: #fff; border-right: 1px solid #ddd;
   display: flex; align-items: flex-end; padding: 0 12px 6px;
-  font-size: 11px; font-weight: 600; color: #9ca3af;
+  font-size: 11px; font-weight: 600; color: #666;
   letter-spacing: 0.05em;
 }
 .timeline__header-grid { flex: 1; overflow: hidden; }
 .timeline__quarter-row { display: flex; height: 22px; }
 .timeline__quarter-cell {
   display: flex; align-items: center; padding-left: 8px;
-  font-size: 11px; font-weight: 700; color: #6b7280;
+  font-size: 11px; font-weight: 700; color: #666;
   border-right: 1px solid #ddd; flex-shrink: 0;
 }
 .timeline__quarter-cell--even { background: #f9fafb; }
@@ -194,10 +207,10 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .timeline__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .timeline__person-info { min-width: 0; }
 .timeline__person-name { font-size: 13px; font-weight: 600; color: #111827; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.timeline__person-team { font-size: 11px; color: #9ca3af; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline__person-team { font-size: 11px; color: #666; line-height: 1.2; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timeline__add-task-btn {
   margin-top: 4px; background: none; border: 1px dashed #d1d5db;
-  border-radius: 4px; padding: 1px 6px; font-size: 10px; color: #6b7280; transition: all 0.15s;
+  border-radius: 4px; padding: 1px 6px; font-size: 10px; color: #666; transition: all 0.15s;
 }
 .timeline__add-task-btn:hover { border-color: #111827; color: #111827; }
 
@@ -246,7 +259,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 8px;
-  color: #9ca3af; font-size: 14px;
+  color: #666; font-size: 14px;
   pointer-events: none;
   z-index: 5;
 }
@@ -354,7 +367,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 }
 .task-bar__menu-info { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; }
 .task-bar__menu-task-title { font-size: 13px; font-weight: 600; color: #111827; }
-.task-bar__menu-dates { font-size: 11px; color: #6b7280; margin-top: 2px; }
+.task-bar__menu-dates { font-size: 11px; color: #666; margin-top: 2px; }
 .task-bar__menu-item { display: block; width: 100%; text-align: left; padding: 9px 14px; font-size: 13px; color: #111827; cursor: pointer; transition: background 0.1s; }
 .task-bar__menu-item:hover { background: #f9fafb; }
 .task-bar__menu-item--delete { color: #ef4444; }
@@ -414,7 +427,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .timeline__bulk-btn--delete { color: #fca5a5; }
 .timeline__bulk-btn--delete:hover { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.3); }
 .timeline__bulk-close {
-  font-size: 20px; line-height: 1; color: #6b7280; padding: 0 4px;
+  font-size: 20px; line-height: 1; color: #666; padding: 0 4px;
   background: none; border: none; cursor: pointer; transition: color 0.15s;
 }
 .timeline__bulk-close:hover { color: #fff; }
@@ -639,7 +652,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .left-nav__section-label {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0; margin-bottom: 2px; height: 28px;
-  font-size: 11px; font-weight: 600; color: var(--m3-on-surface-variant);
+  font-size: 11px; font-weight: 400; color: var(--m3-on-surface-variant);
 }
 .left-nav__new-btn {
   width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
@@ -674,7 +687,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   font-size: 13px; font-weight: 500; color: var(--m3-on-surface-variant);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.left-nav__board-row--active .left-nav__board-name { color: var(--m3-on-secondary-container); font-weight: 700; }
+.left-nav__board-row--active .left-nav__board-name { color: var(--m3-on-secondary-container); font-weight: 400; }
 .left-nav__board-initial {
   font-size: 13px; font-weight: 600; color: var(--m3-on-surface-variant);
   width: 100%; text-align: center; display: block;
@@ -744,7 +757,8 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   padding: 40px 40px 32px; width: 400px; max-width: 90vw;
 }
 .login-card__logo { margin-bottom: 20px; }
-.login-card__title { font-size: 24px; font-weight: 600; color: var(--m3-on-surface); margin-bottom: 4px; }
+.login-card__title { font-size: 24px; font-weight: 600; color: var(--m3-on-surface); margin-bottom: 24px; }
+.login-card__title--tight { margin-bottom: 12px; }
 .login-card__sub { font-size: 14px; color: var(--m3-on-surface-variant); margin-bottom: 28px; }
 .login-google-btn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -875,7 +889,9 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .timeline__grid-area--fill { flex: 1; }
 
 /* ── Header board area ───────────────────────────────────────────────────────── */
-.header__board-area { display: flex; align-items: center; gap: 4px; }
+/* min-width:0 lets this flex item shrink below its content's natural width so the
+   title can ellipsis as the window narrows, instead of overflowing the header. */
+.header__board-area { display: flex; align-items: center; gap: 4px; min-width: 0; flex-shrink: 1; }
 .header__board-dots {
   width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--m3-outline-variant);
   display: flex; align-items: center; justify-content: center;
@@ -883,11 +899,15 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 }
 .header__board-dots:hover { background: var(--m3-surface-container-high); color: var(--m3-on-surface); }
 .header__board-rename-input {
-  font-size: 15px; font-weight: 700; color: var(--m3-on-surface);
-  border: none; border-bottom: 2px solid var(--m3-primary);
-  outline: none; background: transparent;
+  /* Match .header__board-title exactly (including its padding) so entering edit
+     mode doesn't visibly resize/reweight/shift the text — the wrapper box is
+     frozen to the title's actual measured size (see Header.jsx), so this same
+     padding here just keeps the text aligned instead of widening anything. */
+  font-size: 20px; font-weight: 700; color: var(--m3-on-surface);
+  border: none; outline: none;
+  background: var(--m3-surface-container-high);
   font-family: inherit;
-  padding: 4px 10px; border-radius: 0;
+  padding: 4px 8px; border-radius: 12px;
 }
 .header__dropdown--left { right: auto; left: 0; }
 .header__dropdown-item--danger { color: var(--m3-error); }
@@ -1027,7 +1047,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.timeline-loading__text { font-size: 13px; color: #6b7280; }
+.timeline-loading__text { font-size: 13px; color: #666; }
 
 /* ── Profile panel (LeftNav) ─────────────────────────────────────────────── */
 .left-nav__profile-panel {
@@ -1124,7 +1144,7 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .header .header__board-dots.MuiIconButton-root:hover { background: var(--m3-surface-container-high) !important; color: var(--m3-on-surface) !important; }
 
 /* ── Mobile responsive header ────────────────────────────────────────────── */
-@media (max-width: 640px) {
+@media (max-width: 740px) {
   /* Two-row layout */
   .header {
     flex-wrap: wrap;
@@ -1329,4 +1349,18 @@ input:focus, select:focus { outline: none; }
 /* Settings section tiles fade in */
 .settings-section {
   animation: fadeIn 0.2s ease both;
+}
+
+/* ── Stacked dialogs (iPadOS-style) ──────────────────────────────────────────
+   The scale itself is toggled from JS (src/utils/stackedDialogs.js) as an
+   inline style on .MuiDialog-paper — a :has()-based selector doesn't reliably
+   transition when triggered by DOM removal. This rule just enables the
+   transition for whatever value JS sets.
+   !important is required: MUI's own Paper elevation style declares
+   `transition: box-shadow ...` on this same element, and since `transition`
+   is a shorthand, Emotion's injected style (which loads after this
+   stylesheet) fully replaces ours rather than merging with it — silently
+   dropping the `transform` transition entirely. */
+.MuiDialog-paper {
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }

@@ -796,8 +796,6 @@ const Timeline = forwardRef(function Timeline({
     ? [...filteredTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
     : []
 
-  // ── Render header label for left col ─────────────────────────────────────
-  const headerColLabel = groupBy === 'none' ? '' : groupBy
 
   return (
     <>
@@ -813,7 +811,7 @@ const Timeline = forwardRef(function Timeline({
             {/* ── Sticky header ─────────────────────────────────── */}
             <div className="timeline__header">
               {groupBy !== 'none' && (
-                <div className="timeline__header-person-col">{headerColLabel}</div>
+                <div className="timeline__header-person-col" />
               )}
               <div className="timeline__header-grid">
                 <div className="timeline__month-row">

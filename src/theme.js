@@ -19,12 +19,12 @@ const theme = createTheme({
     },
     text: {
       primary: '#111827',
-      secondary: '#6b7280',
+      secondary: '#666',
     },
     divider: '#e5e7eb',
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
     // Base = 16px (browser default). All sizes in rem match that.
     h5: { fontWeight: 700, fontSize: '1.5rem',   lineHeight: 1.3 },  // 24px — large titles
     h6: { fontWeight: 600, fontSize: '1.125rem', lineHeight: 1.35 }, // 18px — dialog titles, panel headings
@@ -32,7 +32,7 @@ const theme = createTheme({
     subtitle2: { fontWeight: 600, fontSize: '0.875rem',lineHeight: 1.4 }, // 14px — sub-section labels
     body1: { fontSize: '1rem',      lineHeight: 1.55 }, // 16px — primary body text (browser default)
     body2: { fontSize: '0.875rem', lineHeight: 1.5  }, // 14px — secondary body, list items
-    caption: { fontSize: '0.75rem', lineHeight: 1.4, color: '#6b7280' }, // 12px — hints, metadata (minimum size)
+    caption: { fontSize: '0.75rem', lineHeight: 1.4, color: '#666' }, // 12px — hints, metadata (minimum size)
     overline: { fontSize: '0.6875rem', letterSpacing: '0.08em', fontWeight: 600, textTransform: 'uppercase', lineHeight: 1.4 }, // 11px — only for intentional overlines
     button: { textTransform: 'none', fontWeight: 500, fontSize: '0.875rem', lineHeight: 1.4 }, // 14px
   },

@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Cherry+Bomb+One&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
-body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

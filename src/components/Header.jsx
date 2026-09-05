@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import IconButton from '@mui/material/IconButton'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
@@ -34,6 +34,18 @@ export default function Header({
   const [showViewPicker, setShowViewPicker] = useState(false)
   const [renaming,       setRenaming]       = useState(false)
   const [renameVal,      setRenameVal]      = useState('')
+  const [renameBoxSize,  setRenameBoxSize]  = useState(null) // {width, height} frozen at click time
+  const titleRef = useRef(null)
+
+  const startRenaming = () => {
+    // Freeze the edit box to the title's current on-screen size (which may
+    // already be ellipsis-truncated) so switching into edit mode doesn't
+    // resize/shift to fit the full untruncated name or overlap other controls.
+    const rect = titleRef.current?.getBoundingClientRect()
+    if (rect) setRenameBoxSize({ width: rect.width, height: rect.height })
+    setRenameVal(boardName)
+    setRenaming(true)
+  }
 
   const handleRenameSubmit = () => {
     const name = renameVal.trim()
@@ -71,20 +83,16 @@ export default function Header({
     <header className="header">
       {/* ── Row 1: hamburger + board title + settings ── */}
       {navCollapsed && (
-        <Tooltip title="Open navigation" placement="bottom">
-          <IconButton className="header__hamburger" onClick={onOpenNav} size="small">
-            <MenuIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <IconButton className="header__hamburger" onClick={onOpenNav} size="small">
+          <MenuIcon fontSize="small" />
+        </IconButton>
       )}
 
       {/* Board title — natural width on desktop; flex:1 on mobile via CSS */}
       <Box className="header__board-area">
         {renaming ? (
-          <Box component="span" sx={{ position: 'relative', display: 'inline-block' }}>
-            <span className="header__board-title" style={{ visibility: 'hidden', display: 'inline-block', minWidth: 80 }} aria-hidden>
-              {renameVal || ' '}
-            </span>
+          <Box component="span" sx={{ position: 'relative', display: 'inline-block' }}
+            style={renameBoxSize ? { width: renameBoxSize.width, height: renameBoxSize.height } : undefined}>
             <input
               className="header__board-rename-input"
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%' }}
@@ -97,8 +105,9 @@ export default function Header({
           </Box>
         ) : (
           <span
+            ref={titleRef}
             className="header__board-title"
-            onClick={() => { if (!readOnly) { setRenameVal(boardName); setRenaming(true) } }}
+            onClick={() => { if (!readOnly) startRenaming() }}
             title={readOnly ? undefined : 'Click to rename'}
             style={{ cursor: readOnly ? 'default' : 'text' }}
           >{boardName}</span>

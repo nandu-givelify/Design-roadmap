@@ -7,10 +7,15 @@ import Timeline from './components/Timeline'
 import Settings from './components/Settings'
 import PersonDetailsDialog from './components/PersonDetailsDialog'
 import { TaskModal, EditTaskModal, ShareModal } from './components/Modals'
+import { useMountWhileOpen } from './hooks/useMountWhileOpen'
+import { initStackedDialogs } from './utils/stackedDialogs'
+
+initStackedDialogs()
 import {
   subscribeBoards, createBoard, updateBoard, deleteBoard,
   subscribePeople, subscribeTasks, subscribeBoard,
-  addPerson, updatePerson, deletePerson,
+  addPerson, addPersonWithId, updatePerson, deletePerson,
+  getEmailDomain, isOrgDomain, subscribeOrgMembers,
   addTask, updateTask, deleteTask, addTaskWithId,
   checkAndRunMigration,
   subscribeUserPrefs, updateUserPrefs,
@@ -91,6 +96,8 @@ function PublicBoardView({ boardId }) {
   const [quarter,  setQuarter]  = useState(Math.floor(now.getMonth() / 3) + 1)
   const [editingTask, setEditingTask] = useState(null)
   const [modal, setModal] = useState(null)
+  const taskModalMounted = useMountWhileOpen(modal?.type === 'task')
+  const editTaskMounted   = useMountWhileOpen(!!editingTask)
 
   useEffect(() => {
     const handleError = (err) => {
@@ -111,17 +118,20 @@ function PublicBoardView({ boardId }) {
 
   if (board === undefined && !error) return <div className="loading-screen"><div>Loading board…</div></div>
 
+  // Not publicly viewable: send them through the real sign-in flow first (keeping
+  // ?board=… in the URL) rather than a dead-end message — once they're signed in,
+  // AuthenticatedApp re-checks their actual access to this specific board and
+  // shows the right state (owner/editor/read-only) instead of guessing up front.
+  if (error === 'private') return <LoginPage />
+
   if (error) return (
     <div className="loading-screen">
       <div style={{ fontSize: 32 }}>🔒</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginTop: 12 }}>
-        Sign in to access this board
+        Can't open this board
       </div>
       <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6, marginBottom: 20 }}>
-        {error === 'private'
-          ? 'This board is private.'
-          : 'This board isn\'t publicly accessible.'}
-        {' '}Sign in to request access.
+        {error === 'Board not found.' ? 'This board doesn\'t exist or was deleted.' : error}
       </div>
       <button style={{ padding: '10px 24px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
         onClick={() => { window.location.search = '' }}>Sign in</button>
@@ -134,6 +144,19 @@ function PublicBoardView({ boardId }) {
   const handleUpdateTask = canEdit ? (id, data) => updateTask(boardId, id, data) : () => {}
   const handleDeleteTask = canEdit ? (id)       => deleteTask(boardId, id)        : () => {}
   const handleAddTask    = canEdit ? async (data) => { await addTask(boardId, data) } : () => {}
+  const handleCreatePerson = canEdit
+    ? async (data) => { const ref = await addPerson(boardId, data); return ref.id }
+    : () => {}
+  const handleCreatePersonWithId = canEdit
+    ? (id, data) => { addPersonWithId(boardId, id, data).catch(err => console.warn('[createPerson] failed:', err.message)) }
+    : () => {}
+  const handleAddRole = canEdit
+    ? async (role) => {
+        const roles = board.roles || ['Designer', 'PM', 'Dev']
+        if (roles.includes(role)) return
+        await updateBoard(boardId, { roles: [...roles, role] })
+      }
+    : () => {}
 
   return (
     <div className="app">
@@ -169,21 +192,24 @@ function PublicBoardView({ boardId }) {
           readOnly={!canEdit}
         />
 
-        {canEdit && modal?.type === 'task' && (
+        {canEdit && taskModalMounted && (
           <TaskModal
+            open={modal?.type === 'task'}
             onClose={() => setModal(null)}
             onSave={handleAddTask}
             people={people}
             roles={board.roles || ['Designer', 'PM', 'Dev']}
             boardPhases={boardPhases}
-            defaultAssigneeId={modal.assigneeId}
-            defaultStartDate={modal.startDate}
-            onCreatePerson={() => {}}
-            onAddRole={() => {}}
+            defaultAssigneeId={modal?.assigneeId}
+            defaultStartDate={modal?.startDate}
+            onCreatePerson={handleCreatePerson}
+            onCreatePersonWithId={handleCreatePersonWithId}
+            onAddRole={handleAddRole}
           />
         )}
-        {canEdit && editingTask && (
+        {canEdit && editTaskMounted && (
           <EditTaskModal
+            open={!!editingTask}
             task={editingTask}
             onClose={() => setEditingTask(null)}
             onSave={(data) => handleUpdateTask(editingTask.id, data)}
@@ -191,8 +217,9 @@ function PublicBoardView({ boardId }) {
             people={people}
             roles={board.roles || ['Designer', 'PM', 'Dev']}
             boardPhases={boardPhases}
-            onCreatePerson={() => {}}
-            onAddRole={() => {}}
+            onCreatePerson={handleCreatePerson}
+            onCreatePersonWithId={handleCreatePersonWithId}
+            onAddRole={handleAddRole}
           />
         )}
       </div>
@@ -232,11 +259,17 @@ function AuthenticatedApp({ user }) {
     new URLSearchParams(window.location.search).get('board') || null
   )
   const [people,        setPeople]        = useState([])
+  const [orgMembers,    setOrgMembers]    = useState([])
+  // Fallback fetch for a board opened via link that isn't in this user's own
+  // owned/member boards list — lets us tell "not a member, but board allows
+  // guest access" apart from "no access at all" instead of just rendering blank.
+  const [fetchedBoard,  setFetchedBoard]  = useState(undefined) // undefined = not looked up, null = doesn't exist
   const [tasks,         setTasks]         = useState([])
   const [tasksLoaded,   setTasksLoaded]   = useState(false)
   const [loadingBoards, setLoadingBoards] = useState(true)
   const [migrating,     setMigrating]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
+  const settingsMounted = useMountWhileOpen(settingsOpen)
   const [dbError,       setDbError]       = useState(null)
   // Initialize from localStorage so the left nav always shows the right photo
   // even on boards where the user isn't a member, and even if Firestore rules
@@ -257,7 +290,7 @@ function AuthenticatedApp({ user }) {
   }
 
   // Nav state — collapsed by default on mobile
-  const isMobileInit = typeof window !== 'undefined' && window.innerWidth <= 640
+  const isMobileInit = typeof window !== 'undefined' && window.innerWidth <= 740
   const [isMobile,  setIsMobile]  = useState(isMobileInit)
   const [navOpen,   setNavOpen]   = useState(!isMobileInit)
   const [navDocked, setNavDocked] = useState(!isMobileInit)
@@ -274,6 +307,9 @@ function AuthenticatedApp({ user }) {
   const [editingTask,       setEditingTask]        = useState(null)
   const [defaultAssigneeId, setDefaultAssigneeId]  = useState(null)
   const [defaultStartDate,  setDefaultStartDate]   = useState(null)
+  const taskModalMounted  = useMountWhileOpen(modal === 'task')
+  const editTaskMounted   = useMountWhileOpen(!!editingTask)
+  const shareModalMounted = useMountWhileOpen(modal === 'share')
 
   // Person details dialog (unified for timeline click, settings, and profile)
   const [personDetailsOpen, setPersonDetailsOpen] = useState(false)
@@ -298,7 +334,7 @@ function AuthenticatedApp({ user }) {
   useEffect(() => {
     const autoCollapsed = { current: false }
     const handle = () => {
-      const mobile = window.innerWidth <= 640
+      const mobile = window.innerWidth <= 740
       setIsMobile(mobile)
       if (mobile && !autoCollapsed.current) {
         autoCollapsed.current = true
@@ -452,8 +488,29 @@ function AuthenticatedApp({ user }) {
     return () => { u1(); u2() }
   }, [activeBoardId])
 
+  // ── Org directory: everyone sharing the signed-in user's company email domain,
+  // across all their boards — lets "Add new person" suggest people already known
+  // instead of re-adding them per board. No-ops for personal email domains.
+  useEffect(() => {
+    const domain = getEmailDomain(user?.email)
+    if (!isOrgDomain(domain)) { setOrgMembers([]); return }
+    return subscribeOrgMembers(domain, setOrgMembers)
+  }, [user?.email])
+
   // ── Active board object ──────────────────────────────────────────────────
-  const activeBoard = boards.find((b) => b.id === activeBoardId) || null
+  const ownBoard = boards.find((b) => b.id === activeBoardId) || null
+
+  // If the board isn't among this user's own owned/member boards (e.g. they
+  // followed a share link they're not a member of), fetch it directly so we
+  // can tell "not a member, but board allows guest access" apart from "no
+  // access at all" — any signed-in user is allowed to read the board doc itself.
+  useEffect(() => {
+    setFetchedBoard(undefined)
+    if (!activeBoardId || loadingBoards || ownBoard) return
+    return subscribeBoard(activeBoardId, setFetchedBoard, () => setFetchedBoard(null))
+  }, [activeBoardId, loadingBoards, !!ownBoard]) // eslint-disable-line
+
+  const activeBoard = ownBoard || (fetchedBoard || null)
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
   const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
 
@@ -477,6 +534,12 @@ function AuthenticatedApp({ user }) {
       }
     })
   }, [people, user, userProfile]) // eslint-disable-line
+
+  // ── Org directory members not yet on this board — suggested when adding people ──
+  const orgOptions = useMemo(() => {
+    const currentEmails = new Set(people.map(p => p.email?.toLowerCase()).filter(Boolean))
+    return orgMembers.filter(m => m.email && !currentEmails.has(m.email.toLowerCase()))
+  }, [orgMembers, people])
 
   // ── Recent people (from localStorage cache, excluding current board members) ──
   const recentPeople = useMemo(() => {
@@ -673,9 +736,11 @@ function AuthenticatedApp({ user }) {
   const memberKey    = user.email?.replace(/\./g, '_')
   const memberAccess = activeBoard?.members?.[memberKey]?.access
   const isMember     = activeBoard?.memberEmails?.includes(user.email)
+  const hasGuestAccess = activeBoard?.publicAccess === 'edit' || activeBoard?.publicAccess === 'view' || activeBoard?.isPublic === true
   // Default: members added to the board get edit access unless explicitly restricted to 'view'
-  const canEdit   = isOwner || memberAccess === 'edit' || (isMember && memberAccess !== 'view')
+  const canEdit   = isOwner || memberAccess === 'edit' || (isMember && memberAccess !== 'view') || activeBoard?.publicAccess === 'edit'
   const readOnly  = !canEdit
+  const hasBoardAccess = isOwner || isMember || hasGuestAccess
 
   // ── GroupBy: persisted to board doc so shared/public viewers see owner's setting ──
   const activeBoardIdRef = useRef(null)
@@ -817,6 +882,13 @@ function AuthenticatedApp({ user }) {
     return ref.id
   }, [activeBoardId])
 
+  // Fire-and-forget variant: caller already knows the id (generated client-side)
+  // so the UI can select the person instantly instead of waiting on the round trip.
+  const handleCreatePersonWithId = useCallback((id, data) => {
+    if (!activeBoardId) return
+    addPersonWithId(activeBoardId, id, data).catch(err => console.warn('[createPerson] failed:', err.message))
+  }, [activeBoardId])
+
   // ── Board roles management ───────────────────────────────────────────────
   const handleAddRole = useCallback(async (role) => {
     if (!activeBoardId || !activeBoard) return
@@ -932,6 +1004,16 @@ function AuthenticatedApp({ user }) {
   if (migrating) return <SplashScreen />
   if (loadingBoards) return <SplashScreen />
 
+  // A board id in the URL that isn't one of this user's own boards: we already
+  // fetched it directly above, so we now know whether it's a guest-accessible
+  // board (fine — render normally with fetchedBoard as activeBoard) or one this
+  // account genuinely has no access to.
+  if (activeBoardId && !ownBoard) {
+    if (fetchedBoard === undefined) return <SplashScreen />
+    if (fetchedBoard === null) return <BoardNotFoundScreen />
+    if (!hasBoardAccess) return <NoBoardAccessScreen board={fetchedBoard} user={user} />
+  }
+
   const isNavHidden  = !navOpen
   const isNavOverlay = navOpen && !navDocked
 
@@ -1012,8 +1094,9 @@ function AuthenticatedApp({ user }) {
         />
 
         {/* Add Task modal */}
-        {modal === 'task' && (
+        {taskModalMounted && (
           <TaskModal
+            open={modal === 'task'}
             onClose={() => { setModal(null); setDefaultStartDate(null) }}
             onSave={handleAddTask}
             people={enrichedPeople}
@@ -1022,13 +1105,16 @@ function AuthenticatedApp({ user }) {
             defaultAssigneeId={defaultAssigneeId}
             defaultStartDate={defaultStartDate}
             onCreatePerson={handleCreatePerson}
+            onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
+            orgOptions={orgOptions}
           />
         )}
 
         {/* Edit Task modal */}
-        {editingTask && (
+        {editTaskMounted && (
           <EditTaskModal
+            open={!!editingTask}
             task={editingTask}
             onClose={() => setEditingTask(null)}
             onSave={(data) => handleUpdateTask(editingTask.id, data)}
@@ -1037,13 +1123,16 @@ function AuthenticatedApp({ user }) {
             roles={boardRoles}
             boardPhases={boardPhases}
             onCreatePerson={handleCreatePerson}
+            onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
+            orgOptions={orgOptions}
           />
         )}
 
         {/* Share modal */}
-        {modal === 'share' && (
+        {shareModalMounted && (
           <ShareModal
+            open={modal === 'share'}
             onClose={() => setModal(null)}
             shareUrl={getBoardShareUrl()}
             board={activeBoard}
@@ -1052,8 +1141,9 @@ function AuthenticatedApp({ user }) {
         )}
 
         {/* Settings dialog */}
-        {settingsOpen && (
+        {settingsMounted && (
           <Settings
+            open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             boardId={activeBoardId}
             board={activeBoard}
@@ -1078,8 +1168,10 @@ function AuthenticatedApp({ user }) {
             onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
             recentPeople={recentPeople}
+            orgOptions={orgOptions}
             onRenameBoard={handleRenameBoard}
             onDeleteBoard={handleDeleteBoard}
+            onShare={handleShareBoard}
             onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
           />
         )}
@@ -1097,7 +1189,9 @@ function AuthenticatedApp({ user }) {
             timeOff: userProfile?.timeOff || [],
           } : null)
           const isOwnProfile = livePerson?.email?.toLowerCase() === user?.email?.toLowerCase()
-          const canEditPerson = isOwner || isOwnProfile
+          // Anyone who can edit the board (not just its owner) can manage its people —
+          // matches the fact that any board editor can already add/remove people freely.
+          const canEditPerson = canEdit || isOwnProfile
 
           const handleAddTO = async (entry) => {
             if (!livePerson) return
@@ -1145,11 +1239,10 @@ function AuthenticatedApp({ user }) {
               canEdit={canEditPerson}
               roles={boardRoles}
               onUpdatePerson={handleUpdateP}
-              onDelete={livePerson && livePerson.id !== '__own_profile__' && (isOwner || isOwnProfile) ? () => {
-                const msg = isOwnProfile
-                  ? `Remove yourself from this board's people list? You'll keep access as ${isOwner ? 'owner' : 'member'}.`
-                  : `Remove ${livePerson.name} from this board?`
-                if (window.confirm(msg)) { deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false) }
+              onDelete={livePerson && !isOwnProfile && canEditPerson ? () => {
+                if (window.confirm(`Remove ${livePerson.name} from this board?`)) {
+                  deletePerson(activeBoardId, livePerson.id); setPersonDetailsOpen(false)
+                }
               } : null}
               onAddTimeOff={handleAddTO}
               onRemoveTimeOff={async (entry) => {
@@ -1217,12 +1310,47 @@ function PermissionErrorScreen() {
   )
 }
 
+function BoardNotFoundScreen() {
+  return (
+    <div className="setup-screen">
+      <div className="setup-card">
+        <div className="setup-card__icon">🔍</div>
+        <div className="setup-card__title">Board not found</div>
+        <div className="setup-card__sub">This board doesn't exist or was deleted.</div>
+        <button className="setup-card__hint" style={{ marginTop: 16, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', font: 'inherit' }}
+          onClick={() => { window.location.search = '' }}>
+          Go to your boards
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function NoBoardAccessScreen({ board, user }) {
+  return (
+    <div className="setup-screen">
+      <div className="setup-card">
+        <div className="setup-card__icon">🔒</div>
+        <div className="setup-card__title">You don't have access to "{board?.name || 'this board'}"</div>
+        <div className="setup-card__sub">
+          You're signed in as {user?.email}, but this board hasn't been shared with you.
+          Ask its owner to add you, or share a link they've made public.
+        </div>
+        <button className="setup-card__hint" style={{ marginTop: 16, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', font: 'inherit' }}
+          onClick={() => { window.location.search = '' }}>
+          Go to your boards
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SetupScreen() {
   return (
     <div className="setup-screen">
       <div className="setup-card">
         <div className="setup-card__icon">🗓</div>
-        <div className="setup-card__title">Design Roadmap</div>
+        <div className="setup-card__title">Planner</div>
         <div className="setup-card__sub">Firebase setup required.</div>
         <div className="setup-card__code">
           VITE_FIREBASE_API_KEY=your_apiKey<br/>

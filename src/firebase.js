@@ -122,6 +122,72 @@ export const subscribeBoard = (boardId, cb, onError) =>
     onError || (() => {})
   )
 
+// ── Org directory ─────────────────────────────────────────────────────────────
+// People whose email is on a company domain (not gmail/outlook/etc.) are treated
+// as belonging to one shared "organization" behind the scenes: we keep a single
+// canonical orgMembers/{email} record for them so they can be found and reused
+// across every board that shares that domain, instead of being re-entered per board.
+const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com',
+  'icloud.com', 'aol.com', 'live.com', 'msn.com',
+  'protonmail.com', 'gmx.com',
+])
+
+export const getEmailDomain = (email) => email?.split('@')[1]?.trim().toLowerCase() || null
+export const isOrgDomain = (domain) => !!domain && !GENERIC_EMAIL_DOMAINS.has(domain)
+
+// Create/update the canonical org-directory entry for this person, keyed by email.
+// No-ops for people without an email or on a generic personal-email domain.
+// Best-effort: this is a nice-to-have directory sync, so a failure here (e.g.
+// Firestore rules not yet updated to allow the `orgMembers` collection) must
+// never block or fail the actual add/update-person action it's attached to.
+const upsertOrgMember = async ({ name, email, photo }) => {
+  const domain = getEmailDomain(email)
+  if (!isOrgDomain(domain)) return false
+  try {
+    await setDoc(doc(db, 'orgMembers', email.trim().toLowerCase()), {
+      name: name || null, email: email.trim().toLowerCase(), photo: photo || null, domain,
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+    return true
+  } catch (err) {
+    console.warn('[orgMembers] sync skipped:', err.message)
+    return false
+  }
+}
+
+// All org-directory members sharing a company domain, e.g. everyone @givelify.com
+// across every board — used to suggest already-known people instead of re-adding them.
+export const subscribeOrgMembers = (domain, cb, onError) => {
+  if (!isOrgDomain(domain)) { cb([]); return () => {} }
+  return onSnapshot(
+    query(collection(db, 'orgMembers'), where('domain', '==', domain)),
+    (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError || (() => {})
+  )
+}
+
+// One-time (safely re-runnable) backfill: scan every board's people and register
+// anyone on a company email domain into the org directory, so existing colleagues
+// show up as suggestions immediately instead of only people added from now on.
+export const backfillOrgDirectory = async () => {
+  const boardsSnap = await getDocs(collection(db, 'boards'))
+  let scanned = 0, added = 0
+  const addedEmails = []
+  for (const boardDoc of boardsSnap.docs) {
+    const peopleSnap = await getDocs(collection(db, 'boards', boardDoc.id, 'people'))
+    for (const personDoc of peopleSnap.docs) {
+      const data = personDoc.data()
+      scanned++
+      const domain = getEmailDomain(data.email)
+      if (!isOrgDomain(domain)) continue
+      const ok = await upsertOrgMember(data)
+      if (ok) { added++; addedEmails.push(data.email.toLowerCase()) }
+    }
+  }
+  return { boards: boardsSnap.size, scanned, added, addedEmails: [...new Set(addedEmails)] }
+}
+
 // ── People (board-scoped) ────────────────────────────────────────────────────
 export const subscribePeople = (boardId, cb, onError) =>
   onSnapshot(
@@ -134,12 +200,18 @@ export const addPerson = async (boardId, data) => {
   const ref = await addDoc(collection(db, 'boards', boardId, 'people'), { ...data, createdAt: serverTimestamp() })
   if (data.email) {
     await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await upsertOrgMember(data)
   }
   return ref
 }
 
-export const addPersonWithId = (boardId, id, data) =>
-  setDoc(doc(db, 'boards', boardId, 'people', id), { ...data, createdAt: serverTimestamp() })
+export const addPersonWithId = async (boardId, id, data) => {
+  await setDoc(doc(db, 'boards', boardId, 'people', id), { ...data, createdAt: serverTimestamp() })
+  if (data.email) {
+    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await upsertOrgMember(data)
+  }
+}
 
 export const updatePerson = async (boardId, id, data) => {
   await updateDoc(doc(db, 'boards', boardId, 'people', id), data)
@@ -147,6 +219,7 @@ export const updatePerson = async (boardId, id, data) => {
   // so findBoardsByMemberEmail can discover this board for that person
   if (data.email) {
     await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await upsertOrgMember(data)
   }
 }
 

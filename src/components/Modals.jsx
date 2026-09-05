@@ -16,7 +16,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import InputAdornment from '@mui/material/InputAdornment'
 import CloseIcon from '@mui/icons-material/Close'
-import { toDateString, nextWorkday, isWeekend, addMonths, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
+import { toDateString, nextWorkday, isWeekend, addDays, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
@@ -111,6 +111,200 @@ export function PhotoPicker({ value, onChange }) {
   )
 }
 
+// ── Add person dialog (shared by Board settings and the Assignee/PM combobox) ─
+export function AddPersonDialog({ open, onClose, roles, onSave, onAddRole, recentPeople = [], orgOptions = [], initialName = '', defaultRole = 'Designer' }) {
+  const [query,      setQuery]      = useState(initialName)
+  const [dropOpen,   setDropOpen]   = useState(false)
+  const [selected,   setSelected]   = useState(null)
+  const [email,      setEmail]      = useState('')
+  const [photo,      setPhoto]      = useState(null)
+  const [role,       setRole]       = useState(defaultRole)
+  const [customRole, setCustomRole] = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [focusedIdx, setFocusedIdx] = useState(-1)
+
+  // Carry over whatever was already typed (e.g. in the assignee search box) and
+  // the field's default role each time the dialog opens, so the user doesn't
+  // have to retype the name or reselect the role.
+  useEffect(() => { if (open) { setQuery(initialName || ''); setRole(defaultRole) } }, [open, initialName, defaultRole])
+
+  const reset = () => {
+    setDropOpen(false); setSelected(null)
+    setEmail(''); setPhoto(null); setRole(defaultRole); setCustomRole('')
+    setFocusedIdx(-1)
+  }
+
+  const handleClose = () => { reset(); setQuery(''); onClose() }
+
+  // Org-directory members first, then locally-remembered people — deduped by email.
+  const seenEmails = new Set()
+  const combined = [...orgOptions, ...recentPeople].filter(p => {
+    const key = p.email?.toLowerCase()
+    if (!key || seenEmails.has(key)) return false
+    seenEmails.add(key)
+    return true
+  })
+
+  const filtered = combined.filter(p =>
+    !query || p.name?.toLowerCase().includes(query.toLowerCase()) ||
+    p.email?.toLowerCase().includes(query.toLowerCase())
+  )
+  const dropList = query.length === 0 ? combined : filtered
+
+  const handleSelect = (person) => {
+    setSelected(person); setQuery(person.name)
+    setEmail(person.email || ''); setPhoto(person.photo || null)
+    setRole(person.role || 'Designer'); setDropOpen(false); setFocusedIdx(-1)
+  }
+
+  const isNew = !selected && query.trim().length > 0
+
+  const handleSave = async () => {
+    if (!query.trim()) return
+    setSaving(true)
+    const roleToUse = role === '__custom__' ? customRole.trim() : role
+    if (roleToUse && !roles?.includes(roleToUse)) await onAddRole?.(roleToUse)
+    await onSave({ name: query.trim(), email: email.trim() || null, photo: photo || null, role: roleToUse || 'Designer' })
+    setSaving(false)
+    handleClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+      slotProps={{ paper: { sx: { minHeight: 360, overflow: 'visible' } } }}
+    >
+      <DialogTitle sx={{ pr: 5 }}>
+        Add person
+        <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: '12px !important', overflow: 'visible' }}>
+        <Stack spacing={2}>
+          {isNew && <PhotoPicker value={photo} onChange={setPhoto} />}
+          <Box sx={{ position: 'relative' }}>
+            <TextField
+              label="Name or email" size="small" fullWidth autoFocus
+              value={query}
+              onChange={e => {
+                setQuery(e.target.value); setSelected(null); setDropOpen(true); setFocusedIdx(-1)
+              }}
+              onFocus={() => setDropOpen(true)}
+              onBlur={() => setTimeout(() => setDropOpen(false), 150)}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setFocusedIdx(i => Math.min(i + 1, dropList.length - 1))
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setFocusedIdx(i => Math.max(i - 1, 0))
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (focusedIdx >= 0 && dropList[focusedIdx]) {
+                    handleSelect(dropList[focusedIdx])
+                  } else if (dropList.length > 0 && !selected) {
+                    handleSelect(dropList[0])
+                  } else {
+                    setDropOpen(false)
+                  }
+                } else if (e.key === 'Escape') {
+                  setDropOpen(false); setFocusedIdx(-1)
+                }
+              }}
+              slotProps={selected ? {
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start" sx={{ mr: '4px' }}>
+                      <Box sx={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        background: getAvatarColor(selected.name),
+                        overflow: 'hidden', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+                      }}>
+                        {selected.photo
+                          ? <img src={selected.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : selected.name?.charAt(0).toUpperCase()}
+                      </Box>
+                    </InputAdornment>
+                  )
+                }
+              } : undefined}
+            />
+            {dropOpen && combined.length > 0 && (
+              <Box sx={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1500,
+                background: '#fff', border: '1px solid', borderColor: 'divider',
+                borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                maxHeight: 220, overflowY: 'auto', mt: 0.5,
+              }}>
+                {dropList.map((p, idx) => (
+                  <Box key={p.email || p.name} onMouseDown={() => handleSelect(p)}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 2, p: '8px 12px',
+                      cursor: 'pointer',
+                      background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
+                      '&:hover': { background: '#f3f4f6' },
+                    }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0, overflow: 'hidden' }}>
+                      {p.photo ? <img src={p.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : p.name?.charAt(0).toUpperCase()}
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <Typography variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{p.name}</Typography>
+                      {(p.role || p.email) && <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{p.role || p.email}</Typography>}
+                    </Box>
+                  </Box>
+                ))}
+                {query.length > 0 && filtered.length === 0 && (
+                  <Typography variant="caption" sx={{ p: '8px 12px', display: 'block', color: 'text.secondary' }}>
+                    Press Save to add "{query}" as a new person
+                  </Typography>
+                )}
+              </Box>
+            )}
+          </Box>
+
+          {isNew && (
+            <>
+              <TextField label="Email (optional)" size="small" fullWidth type="email"
+                value={email} onChange={e => setEmail(e.target.value)} />
+              <FormControl size="small" fullWidth>
+                <InputLabel>Role</InputLabel>
+                <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+                  {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                  <MenuItem value="__custom__">+ New role…</MenuItem>
+                </Select>
+              </FormControl>
+              {role === '__custom__' && (
+                <TextField label="Role name" size="small" fullWidth
+                  value={customRole} onChange={e => setCustomRole(e.target.value)} />
+              )}
+            </>
+          )}
+
+          {selected && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>Role</InputLabel>
+              <Select label="Role" value={role} onChange={e => setRole(e.target.value)}>
+                {(roles || ['Designer', 'PM', 'Dev']).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+              </Select>
+            </FormControl>
+          )}
+        </Stack>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving || !query.trim()}>
+          {saving ? 'Saving…' : selected ? 'Add to board' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ── Date range input (click-anywhere-to-open, auto-advance, min-date) ─────────
 export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
   const startRef = useRef(null)
@@ -132,6 +326,12 @@ export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
       display: 'flex',
       border: '1px solid', borderColor: 'divider', borderRadius: 2,
       overflow: 'hidden',
+      // Same border-driven hover/focus language as a standard MUI text field
+      // (darken on hover, ring in the primary color while focused) instead of
+      // a background-fill treatment that reads as a different control.
+      transition: 'border-color 0.15s, box-shadow 0.15s',
+      '&:hover': { borderColor: 'rgba(0, 0, 0, 0.87)' },
+      '&:focus-within': { borderColor: 'primary.main', boxShadow: (t) => `0 0 0 1px ${t.palette.primary.main}` },
     }}>
       <Box sx={{ ...fieldBox, borderRight: '1px solid', borderColor: 'divider' }}
         onClick={() => openPicker(startRef)}>
@@ -164,20 +364,27 @@ export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
 }
 
 // ── Combobox ──────────────────────────────────────────────────────────────────
-function PersonCombobox({ value, onChange, options, label, placeholder, defaultRole, onCreatePerson, onAddRole, roles }) {
-  const [open,        setOpen]        = useState(false)
-  const [inputValue,  setInputValue]  = useState('')
-  const [showCreate,  setShowCreate]  = useState(false)
-  const [newName,     setNewName]     = useState('')
-  const [newEmail,    setNewEmail]    = useState('')
-  const [newRole,     setNewRole]     = useState(defaultRole || 'Designer')
-  const [creating,    setCreating]    = useState(false)
-  const [customRole,  setCustomRole]  = useState('')
-  const [focusedIdx,  setFocusedIdx]  = useState(-1)
+// Comparable "recency" value from a Firestore createdAt field (Timestamp, plain
+// {seconds}, or Date) — null when unknown, so unknown-recency items fall back
+// to sorting by name instead of clumping at an arbitrary end of the list.
+const recencyMs = (o) => {
+  const c = o?.createdAt
+  if (!c) return null
+  if (typeof c.toMillis === 'function') return c.toMillis()
+  if (typeof c.seconds === 'number') return c.seconds * 1000
+  if (c instanceof Date) return c.getTime()
+  return null
+}
+
+function PersonCombobox({ value, onChange, options, orgOptions, label, placeholder, defaultRole, onCreatePerson, onCreatePersonWithId, onAddRole, roles }) {
+  const [open,               setOpen]               = useState(false)
+  const [inputValue,         setInputValue]         = useState('')
+  const [focusedIdx,         setFocusedIdx]         = useState(-1)
+  const [addPersonDialogOpen, setAddPersonDialogOpen] = useState(false)
   const wrapRef = useRef()
+  const itemRefs = useRef([])
 
   const selected = options.find((o) => o.id === value)
-  const allRoles = [...(roles || ['Designer', 'PM', 'Dev'])]
 
   // Sync input with selection (only when value changes from outside)
   useEffect(() => { setInputValue(selected?.name || '') }, [value]) // eslint-disable-line
@@ -185,8 +392,15 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
   // Close on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false); setShowCreate(false)
+      // Use composedPath (captured at dispatch time) instead of contains(e.target):
+      // a click that swaps out the clicked row can detach it from the DOM before
+      // this document-level listener runs, so by the time we get here e.target
+      // may already be gone and .contains() would wrongly report "outside",
+      // closing the dropdown we just interacted with.
+      const path = e.composedPath ? e.composedPath() : []
+      const isOutside = wrapRef.current && !path.includes(wrapRef.current)
+      if (isOutside) {
+        setOpen(false)
         // Reset input to selected name if user clicked away without picking
         setInputValue(selected?.name || '')
       }
@@ -195,22 +409,50 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
     return () => document.removeEventListener('mousedown', handler)
   }, [selected])
 
+  // Keep the keyboard-focused row in view once it scrolls past the fold.
+  useEffect(() => {
+    if (focusedIdx >= 0) itemRefs.current[focusedIdx]?.scrollIntoView({ block: 'nearest' })
+  }, [focusedIdx])
+
   // Filter options based on what's typed (only filter when input differs from selected name)
   const isTyping = !selected || inputValue !== selected.name
   const filtered = isTyping && inputValue
     ? options.filter(o => o.name?.toLowerCase().includes(inputValue.toLowerCase()))
     : options
 
-  const handleCreate = async () => {
-    if (!newName.trim()) return
-    setCreating(true)
-    const roleToUse = newRole === '__custom__' ? customRole.trim() : newRole
-    if (roleToUse && !allRoles.includes(roleToUse)) await onAddRole?.(roleToUse)
-    const id = await onCreatePerson({ name: newName.trim(), email: newEmail.trim() || null, photo: null, role: roleToUse || 'Designer' })
-    onChange(id)
-    setInputValue(newName.trim())
-    setOpen(false); setShowCreate(false)
-    setNewName(''); setNewEmail(''); setCustomRole(''); setCreating(false)
+  // Org-directory members (same company email domain, from other boards) not
+  // already an option here — offered as one-click adds instead of re-entering them.
+  const optionEmails = new Set(options.map(o => o.email?.toLowerCase()).filter(Boolean))
+  const orgSuggestions = (orgOptions || []).filter(m => !optionEmails.has(m.email?.toLowerCase()))
+  const filteredOrgSuggestions = isTyping && inputValue
+    ? orgSuggestions.filter(m => m.name?.toLowerCase().includes(inputValue.toLowerCase()))
+    : orgSuggestions
+
+  // One flat, keyboard-navigable list: board people and org suggestions merged
+  // (no group label) — most recently added to this board first, then anyone
+  // without a recency signal (e.g. org suggestions not yet on this board)
+  // alphabetically by name.
+  const combinedList = [
+    ...filtered.map(o => ({ ...o, __kind: 'person' })),
+    ...filteredOrgSuggestions.map(m => ({ ...m, __kind: 'org' })),
+  ].sort((a, b) => {
+    const ra = recencyMs(a), rb = recencyMs(b)
+    if (ra !== rb) return (rb ?? -Infinity) - (ra ?? -Infinity)
+    return (a.name || '').localeCompare(b.name || '')
+  })
+
+  const selectItem = (item) => {
+    if (item.__kind === 'org') {
+      // Instant: generate the id client-side and select right away — the
+      // Firestore write happens in the background instead of blocking the UI.
+      const id = `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      onChange(id)
+      setInputValue(item.name || '')
+      setOpen(false)
+      onCreatePersonWithId?.(id, { name: item.name, email: item.email, photo: item.photo || null, role: defaultRole || 'Designer' })
+      return
+    }
+    onChange(item.id); setInputValue(item.name || ''); setOpen(false); setFocusedIdx(-1)
   }
 
   return (
@@ -232,18 +474,16 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          const list = filtered
           if (e.key === 'ArrowDown') {
             e.preventDefault()
-            setFocusedIdx(i => Math.min(i + 1, list.length - 1))
+            setFocusedIdx(i => Math.min(i + 1, combinedList.length - 1))
           } else if (e.key === 'ArrowUp') {
             e.preventDefault()
             setFocusedIdx(i => Math.max(i - 1, 0))
           } else if (e.key === 'Enter') {
-            if (focusedIdx >= 0 && list[focusedIdx]) {
+            if (focusedIdx >= 0 && combinedList[focusedIdx]) {
               e.preventDefault()
-              const opt = list[focusedIdx]
-              onChange(opt.id); setInputValue(opt.name || ''); setOpen(false); setFocusedIdx(-1)
+              selectItem(combinedList[focusedIdx])
             }
           } else if (e.key === 'Escape') {
             setOpen(false); setFocusedIdx(-1)
@@ -252,7 +492,7 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
         slotProps={{
           input: {
             startAdornment: selected && (
-              <InputAdornment position="start" sx={{ mr: 0 }}>
+              <InputAdornment position="start" sx={{ mr: '4px' }}>
                 <Box sx={{
                   width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
                   background: getAvatarColor(selected.name),
@@ -282,77 +522,63 @@ function PersonCombobox({ value, onChange, options, label, placeholder, defaultR
       />
 
       {/* Dropdown */}
-      {open && !showCreate && (
+      {open && (
         <Box sx={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
           background: '#fff', border: '1px solid', borderColor: 'divider',
           borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           maxHeight: 240, overflowY: 'auto', mt: 0.5,
         }}>
-          {filtered.map((opt, idx) => (
-            <Box key={opt.id} sx={{
-              display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
-              cursor: 'pointer',
-              background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
-              '&:hover': { background: '#f3f4f6' },
-            }} onMouseDown={e => { e.preventDefault(); onChange(opt.id); setInputValue(opt.name || ''); setOpen(false); setFocusedIdx(-1) }}>
+          {combinedList.map((item, idx) => (
+            <Box key={item.__kind === 'org' ? `org_${item.id}` : item.id}
+              ref={el => { itemRefs.current[idx] = el }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 2, p: '8px 12px',
+                cursor: 'pointer',
+                background: focusedIdx === idx ? '#f3f4f6' : 'transparent',
+                '&:hover': { background: '#f3f4f6' },
+              }} onMouseDown={e => { e.preventDefault(); selectItem(item) }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                background: getAvatarColor(opt.name),
+                background: getAvatarColor(item.name),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden',
               }}>
-                {opt.photo ? <img src={opt.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : opt.name?.charAt(0)}
+                {item.photo ? <img src={item.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : item.name?.charAt(0)}
               </Box>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                <Typography component="div" variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{opt.name}</Typography>
-                {opt.role && <Typography component="div" variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{opt.role}</Typography>}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <Typography component="div" variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>{item.name}</Typography>
+                {(item.role || item.email) && <Typography component="div" variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>{item.role || item.email}</Typography>}
               </Box>
             </Box>
           ))}
           <Box sx={{ p: '8px 12px', cursor: 'pointer', color: 'primary.main', fontSize: 13, '&:hover': { background: '#f3f4f6' } }}
-            onMouseDown={e => { e.preventDefault(); setShowCreate(true) }}>
+            onMouseDown={e => { e.preventDefault(); setOpen(false); setAddPersonDialogOpen(true) }}>
             + Add new person…
           </Box>
         </Box>
       )}
 
-      {/* Create new person panel */}
-      {open && showCreate && (
-        <Box sx={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
-          background: '#fff', border: '1px solid', borderColor: 'divider',
-          borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          p: 1.5, mt: 0.5,
-        }} onMouseDown={e => e.stopPropagation()}>
-          <TextField size="small" fullWidth placeholder="Full name" value={newName}
-            onChange={e => setNewName(e.target.value)} autoFocus sx={{ mb: 1 }} />
-          <TextField size="small" fullWidth placeholder="Email (optional)"
-            value={newEmail} onChange={e => setNewEmail(e.target.value)} sx={{ mb: 1 }} />
-          <FormControl size="small" fullWidth sx={{ mb: 1 }}>
-            <Select value={newRole} onChange={e => setNewRole(e.target.value)}>
-              {allRoles.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-              <MenuItem value="__custom__">+ New role…</MenuItem>
-            </Select>
-          </FormControl>
-          {newRole === '__custom__' && (
-            <TextField size="small" fullWidth placeholder="Role name"
-              value={customRole} onChange={e => setCustomRole(e.target.value)} sx={{ mb: 1 }} />
-          )}
-          <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button size="small" onClick={() => { setShowCreate(false); setNewName(''); setNewEmail('') }}>Cancel</Button>
-            <Button size="small" variant="contained" onClick={handleCreate} disabled={creating || !newName.trim()}>
-              {creating ? 'Adding…' : 'Add'}
-            </Button>
-          </Stack>
-        </Box>
-      )}
+      <AddPersonDialog
+        open={addPersonDialogOpen}
+        onClose={() => setAddPersonDialogOpen(false)}
+        roles={roles}
+        onAddRole={onAddRole}
+        orgOptions={orgSuggestions}
+        initialName={inputValue}
+        defaultRole={defaultRole || 'Designer'}
+        onSave={async (data) => {
+          const id = await onCreatePerson(data)
+          onChange(id)
+          setInputValue(data.name)
+        }}
+      />
     </Box>
   )
 }
 
 // ── Task fields ───────────────────────────────────────────────────────────────
-function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases }) {
+function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWithId, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases, orgOptions }) {
   const pmPeople = people.filter(p => p.role === 'PM')
 
   return (
@@ -371,9 +597,11 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
         value={form.assigneeId}
         onChange={(v) => set('assigneeId', v)}
         options={people}
+        orgOptions={orgOptions}
         placeholder="Search or add…"
         defaultRole="Designer"
         onCreatePerson={onCreatePerson}
+        onCreatePersonWithId={onCreatePersonWithId}
         onAddRole={onAddRole}
         roles={roles}
       />
@@ -383,9 +611,11 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
         value={form.pmId}
         onChange={(v) => set('pmId', v)}
         options={pmPeople}
+        orgOptions={orgOptions}
         placeholder="Search or add PM…"
         defaultRole="PM"
         onCreatePerson={onCreatePerson}
+        onCreatePersonWithId={onCreatePersonWithId}
         onAddRole={onAddRole}
         roles={roles}
       />
@@ -470,11 +700,11 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onAddRole, onSta
 }
 
 // ── Add Task Modal ────────────────────────────────────────────────────────────
-export function TaskModal({ onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onAddRole }) {
+export function TaskModal({ open = true, onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreatePersonWithId, onAddRole, orgOptions }) {
   const today     = new Date()
   const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
-  const endDate   = addMonths(startDate, 1)
+  const endDate   = addDays(startDate, 14)
 
   const totalDays = getTaskDays(toDateString(startDate), toDateString(endDate))
   const defaultPhases = smartDefaultPhases(boardPhases || [], totalDays)
@@ -489,7 +719,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
 
   const handleStartDateChange = (v) => {
     set('startDate', v)
-    if (!endDateTouched) set('endDate', toDateString(addMonths(parseLocalDate(v), 1)))
+    if (!endDateTouched) set('endDate', toDateString(addDays(parseLocalDate(v), 14)))
   }
 
   const handleSave = () => {
@@ -499,8 +729,11 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
   }
 
   return (
-    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { overflow: 'visible' } }}>
+    <Dialog open={open} onClose={onClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+      slotProps={{ paper: { sx: { overflow: 'visible' } } }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Add Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -508,7 +741,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
       <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
-          onCreatePerson={onCreatePerson} onAddRole={onAddRole}
+          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} orgOptions={orgOptions}
           onStartDateChange={handleStartDateChange}
           onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
@@ -523,7 +756,7 @@ export function TaskModal({ onClose, onSave, people, roles, boardPhases, default
 }
 
 // ── Edit Task Modal ───────────────────────────────────────────────────────────
-export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onAddRole }) {
+export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onCreatePersonWithId, onAddRole, orgOptions }) {
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
@@ -542,8 +775,11 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
   }
 
   return (
-    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}
-      PaperProps={{ sx: { overflow: 'visible' } }}>
+    <Dialog open={open} onClose={onClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+      slotProps={{ paper: { sx: { overflow: 'visible' } } }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Edit Task
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -551,7 +787,7 @@ export function EditTaskModal({ task, onClose, onSave, onDelete, people, roles, 
       <DialogContent sx={{ overflow: 'visible' }}>
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
-          onCreatePerson={onCreatePerson} onAddRole={onAddRole}
+          onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} orgOptions={orgOptions}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
         />
       </DialogContent>
@@ -574,7 +810,7 @@ const ACCESS_OPTIONS = [
   { value: 'edit', icon: '✏️', label: 'Edit',       desc: 'Anyone with the link can view and edit — no account needed.' },
 ]
 
-export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
+export function ShareModal({ open = true, onClose, shareUrl, board, onSetPublicAccess }) {
   const currentAccess = board?.publicAccess || (board?.isPublic ? 'view' : 'off')
   const [access,      setAccess]      = useState(currentAccess)
   const [copied,      setCopied]      = useState(false)
@@ -587,7 +823,10 @@ export function ShareModal({ onClose, shareUrl, board, onSetPublicAccess }) {
   const isPublic = access !== 'off'
 
   return (
-    <Dialog open onClose={onClose} TransitionComponent={SlideUp} TransitionProps={{ timeout: { enter: 300, exit: 220 } }}>
+    <Dialog open={open} onClose={onClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Share Board
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
