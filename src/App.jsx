@@ -998,7 +998,10 @@ function AuthenticatedApp({ user }) {
     const ids = activePhases.map(p => p.id)
     const hasSmart = ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')
     tasks.forEach(task => {
-      if (task.phases && task.phases.length > 0) {
+      // `phases` already defined (even as an empty array — the user may have
+      // deliberately unchecked every phase) means this task already went
+      // through the app's own save path and needs no migration.
+      if (task.phases !== undefined) {
         // Migrate old handoff default of 7 → 3
         const handoffPhase = task.phases.find(p => p.id === 'handoff')
         if (handoffPhase && handoffPhase.days === 7) {

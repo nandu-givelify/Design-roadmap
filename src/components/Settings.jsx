@@ -2,6 +2,7 @@ import { useState, forwardRef } from 'react'
 import TextField from '@mui/material/TextField'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
+import Switch from '@mui/material/Switch'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Slide from '@mui/material/Slide'
@@ -208,6 +209,15 @@ export default function Settings({
     onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phaseId))
   }
 
+  // Disabling a phase just hides it from the picker on new/edited tasks —
+  // it stays defined (and still renders on any task that already has it)
+  // so turning it back on doesn't lose anything.
+  const handleTogglePhaseEnabled = (phaseId) => {
+    onUpdateBoardPhases((boardPhases || []).map(p =>
+      p.id === phaseId ? { ...p, enabled: p.enabled === false ? true : false } : p
+    ))
+  }
+
   return (
     <>
       {/* ── Main settings dialog ── */}
@@ -302,6 +312,14 @@ export default function Settings({
                     }}>
                       optional
                     </Typography>
+                  )}
+                  {isOwner && (
+                    <Switch
+                      size="small"
+                      checked={phase.enabled !== false}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => handleTogglePhaseEnabled(phase.id)}
+                    />
                   )}
                   {isOwner && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
                 </Box>

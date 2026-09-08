@@ -72,9 +72,23 @@ export default function TaskBar({
     }))
   }
 
-  const rawPhases  = visualPhases || (task.phases && task.phases.length > 0 ? task.phases : computeDefaultPhases())
-  const taskPhases = rawPhases.filter(p => (boardPhases || []).some(bp => bp.id === p.id))
+  // An explicit empty array means the user deliberately cleared every phase —
+  // only fall back to computed defaults when phases were never set at all
+  // (legacy tasks saved before the phases field existed).
+  const rawPhases  = visualPhases || (task.phases !== undefined ? task.phases : computeDefaultPhases())
+  // Disabling a phase in Board Settings hides it everywhere, including on
+  // tasks that already have it — it's a soft hide, not a delete, so the
+  // task's own `phases` data is untouched and re-enabling brings it right back.
+  const taskPhases = rawPhases.filter(p => {
+    const bp = (boardPhases || []).find(b => b.id === p.id)
+    return bp && bp.enabled !== false
+  })
   const hasPhases  = taskPhases.length > 0
+
+  // No phase strip to reserve room for — shrink the bar and re-center it in
+  // its lane instead of leaving the space the strip would have used empty.
+  const barH = hasPhases ? BAR_H : BAR_H - PHASE_STRIP_H
+  const barY = y + (BAR_H - barH) / 2
 
   useLayoutEffect(() => {
     if (!hiddenTitleRef.current) return
@@ -214,7 +228,7 @@ export default function TaskBar({
     <div
       ref={barRef}
       className={['task-bar', resizing ? 'task-bar--dragging' : '', isGhost ? 'task-bar--ghost' : '', isSelected ? 'task-bar--selected' : ''].filter(Boolean).join(' ')}
-      style={{ left: x, top: y, width: w, height: BAR_H, background: barBg }}
+      style={{ left: x, top: barY, width: w, height: barH, background: barBg }}
     >
       <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
 
@@ -281,7 +295,7 @@ export default function TaskBar({
 
       {showMenu && (
         <div className="task-bar__menu-overlay" onClick={() => setShowMenu(false)}>
-          <div className="task-bar__menu" style={{ top: BAR_H + 4, left: 0 }} onClick={(e) => e.stopPropagation()}>
+          <div className="task-bar__menu" style={{ top: barH + 4, left: 0 }} onClick={(e) => e.stopPropagation()}>
             <div className="task-bar__menu-info">
               <div className="task-bar__menu-task-title">{task.title}</div>
               <div className="task-bar__menu-dates">

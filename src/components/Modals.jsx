@@ -53,8 +53,9 @@ function normalizePhases(phases, totalDays) {
 
 function smartDefaultPhases(boardPhases, totalDays) {
   if (!boardPhases || boardPhases.length === 0) return []
-  // Optional phases are off by default — new tasks only get non-optional phases
-  const active = boardPhases.filter(bp => !bp.optional)
+  // Optional/disabled phases are off by default — new tasks only get
+  // non-optional, enabled phases
+  const active = boardPhases.filter(bp => !bp.optional && bp.enabled !== false)
   if (active.length === 0) return []
   const n   = active.length
   const ids = active.map(p => p.id)
@@ -718,46 +719,54 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
         }}
       />
 
-      {boardPhases && boardPhases.length > 0 && (
-        <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Phases</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {boardPhases.map(bp => {
-              const isActive = (form.phases || []).some(p => p.id === bp.id)
-              return (
-                <Box
-                  key={bp.id}
-                  component="label"
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.75,
-                    px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
-                    border: '1.5px solid',
-                    borderColor: isActive ? bp.color : 'divider',
-                    background: isActive ? `${bp.color}18` : 'transparent',
-                    transition: 'all 0.12s',
-                  }}
-                >
-                  <input type="checkbox" checked={isActive} style={{ display: 'none' }} onChange={() => {
-                    const cur = form.phases || []
-                    let newPhases
-                    if (isActive) {
-                      if (cur.length <= 1) return
-                      newPhases = cur.filter(p => p.id !== bp.id)
-                    } else {
-                      const added = [...cur, { id: bp.id, days: 1 }]
-                      const ordered = boardPhases.filter(b => added.some(p => p.id === b.id)).map(b => ({ id: b.id, days: 1 }))
-                      newPhases = normalizePhases(ordered, getTaskDays(form.startDate, form.endDate))
-                    }
-                    set('phases', newPhases)
-                  }} />
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
-                  <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
-                </Box>
-              )
-            })}
+      {boardPhases && boardPhases.length > 0 && (() => {
+        // A disabled phase is hidden from the picker for tasks that don't
+        // already use it — but if this task already has it, keep showing it
+        // so it stays visible and can still be unchecked.
+        const pickerPhases = boardPhases.filter(bp =>
+          bp.enabled !== false || (form.phases || []).some(p => p.id === bp.id)
+        )
+        if (pickerPhases.length === 0) return null
+        return (
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Phases</Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+              {pickerPhases.map(bp => {
+                const isActive = (form.phases || []).some(p => p.id === bp.id)
+                return (
+                  <Box
+                    key={bp.id}
+                    component="label"
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 0.75,
+                      px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
+                      border: '1.5px solid',
+                      borderColor: isActive ? bp.color : 'divider',
+                      background: isActive ? `${bp.color}18` : 'transparent',
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    <input type="checkbox" checked={isActive} style={{ display: 'none' }} onChange={() => {
+                      const cur = form.phases || []
+                      let newPhases
+                      if (isActive) {
+                        newPhases = cur.filter(p => p.id !== bp.id)
+                      } else {
+                        const added = [...cur, { id: bp.id, days: 1 }]
+                        const ordered = boardPhases.filter(b => added.some(p => p.id === b.id)).map(b => ({ id: b.id, days: 1 }))
+                        newPhases = normalizePhases(ordered, getTaskDays(form.startDate, form.endDate))
+                      }
+                      set('phases', newPhases)
+                    }} />
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
+                    <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
+                  </Box>
+                )
+              })}
+            </Box>
           </Box>
-        </Box>
-      )}
+        )
+      })()}
 
       <Box>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Color</Typography>
