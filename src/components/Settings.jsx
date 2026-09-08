@@ -1,4 +1,4 @@
-import { useState, forwardRef } from 'react'
+import { useState, useEffect, forwardRef } from 'react'
 import TextField from '@mui/material/TextField'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
@@ -40,14 +40,17 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
   const [color,    setColor]    = useState(phase?.color  || defaultColor)
   const [optional, setOptional] = useState(phase?.optional || false)
 
-  // reset when dialog opens for a different phase
-  const [lastId, setLastId] = useState(phase?.id)
-  if (phase?.id !== lastId) {
-    setLastId(phase?.id)
+  // Reset whenever the dialog (re)opens — it's kept mounted across opens
+  // (there's no unmount-while-closed gating here), and for "Add phase" both
+  // openings have `phase === null`, so resetting only on an id change would
+  // never fire between two separate add-phase sessions, silently carrying
+  // over whatever was typed into the previous one.
+  useEffect(() => {
+    if (!open) return
     setName(phase?.name || '')
     setColor(phase?.color || defaultColor)
     setOptional(phase?.optional || false)
-  }
+  }, [open, phase?.id]) // eslint-disable-line
 
   const handleClose = () => { onClose() }
 
@@ -205,7 +208,6 @@ export default function Settings({
   }
 
   const handleDeletePhase = (phaseId) => {
-    if ((boardPhases || []).length <= 1) return
     onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phaseId))
   }
 
