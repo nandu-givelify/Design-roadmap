@@ -403,7 +403,7 @@ export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
           type="date"
           value={start}
           onChange={e => handleStartChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer' }}
         />
       </Box>
       <Box sx={fieldBox} onClick={() => openPicker(endRef)}>
@@ -416,7 +416,7 @@ export function DateRangeInput({ start, end, onStartChange, onEndChange }) {
           value={end}
           min={start || undefined}
           onChange={e => onEndChange(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer', pointerEvents: 'none' }}
+          style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13, fontFamily: 'inherit', background: 'transparent', cursor: 'pointer' }}
         />
       </Box>
     </Box>

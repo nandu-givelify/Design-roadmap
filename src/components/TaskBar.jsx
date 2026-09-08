@@ -242,7 +242,7 @@ export default function TaskBar({
             const def = (boardPhases || []).find(bp => bp.id === phase.id)
             return (
               <div key={phase.id} className="task-bar__phase-seg"
-                style={{ flex: phase.days, background: def?.color || '#9ca3af' }}
+                style={{ flex: phase.days }}
                 title={def?.name || phase.id}>
                 {i < taskPhases.length - 1 && !readOnly && (
                   <div className="task-bar__phase-divider" onMouseDown={(e) => startPhaseDrag(e, i)} />

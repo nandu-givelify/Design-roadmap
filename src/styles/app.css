@@ -275,11 +275,9 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .task-bar {
   position: absolute; user-select: none; z-index: 2;
   border-radius: 12px; border: 1px solid #ddd;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   /* background set inline per task color; overflow stays visible so outside-title renders */
-  transition: box-shadow 0.15s;
 }
-.task-bar--dragging { z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+.task-bar--dragging { z-index: 100; }
 .task-bar--ghost { opacity: 0.22; pointer-events: none; }
 
 /* Resize handles — hidden by default, visible on hover */
@@ -962,6 +960,8 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 .task-bar__phase-seg {
   position: relative; height: 100%;
   /* flex set inline via style={{ flex: phase.days }} */
+  background: rgba(0,0,0,0.2);
+  border-radius: 2px;
 }
 /* Drag handle: centered on the 2px gap between segments */
 .task-bar__phase-divider {
