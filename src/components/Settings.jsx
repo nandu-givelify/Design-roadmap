@@ -173,7 +173,7 @@ export default function Settings({
   open = true, onClose, boardId, people, roles,
   boardPhases, onUpdateBoardPhases,
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
-  isOwner, recentPeople = [],
+  isOwner, canEdit, recentPeople = [],
   board, onRenameBoard, onDeleteBoard, onShare,
   onPersonClick,
 }) {
@@ -292,17 +292,17 @@ export default function Settings({
             <Box sx={{ px: 2.5, py: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="subtitle2" color="text.secondary">Phases</Typography>
-                {isOwner && (
+                {canEdit && (
                   <Button size="small" startIcon={<AddIcon />} onClick={openAddPhase}>Add phase</Button>
                 )}
               </Box>
 
               {(boardPhases || []).map(phase => (
-                <Box key={phase.id} onClick={isOwner ? () => openEditPhase(phase) : undefined} sx={{
+                <Box key={phase.id} onClick={canEdit ? () => openEditPhase(phase) : undefined} sx={{
                   display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px',
                   borderRadius: 2,
-                  cursor: isOwner ? 'pointer' : 'default',
-                  '&:hover': isOwner ? { background: '#f3f4f6' } : {},
+                  cursor: canEdit ? 'pointer' : 'default',
+                  '&:hover': canEdit ? { background: '#f3f4f6' } : {},
                 }}>
                   <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
                   <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
@@ -315,7 +315,7 @@ export default function Settings({
                       optional
                     </Typography>
                   )}
-                  {isOwner && (
+                  {canEdit && (
                     <Switch
                       size="small"
                       checked={phase.enabled !== false}
@@ -323,7 +323,7 @@ export default function Settings({
                       onChange={() => handleTogglePhaseEnabled(phase.id)}
                     />
                   )}
-                  {isOwner && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
+                  {canEdit && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
                 </Box>
               ))}
             </Box>

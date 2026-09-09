@@ -673,6 +673,10 @@ function AuthenticatedApp({ user }) {
 
   // ── Board person → profile sync handler ──────────────────────────────────
   const handleUpdatePerson = useCallback(async (id, data) => {
+    // Compress before writing — Firestore documents cap out at 1MB, and an
+    // uncompressed photo (any person, not just your own profile) can exceed
+    // that and silently fail to save.
+    if (data.photo) data = { ...data, photo: await compressImage(data.photo) }
     updatePerson(activeBoardId, id, data)
     const person = people.find(p => p.id === id)
 
@@ -698,13 +702,8 @@ function AuthenticatedApp({ user }) {
     const isOwnProfile = (email && userEmail && email === userEmail) || (id === myBoardPersonId)
 
     if (isOwnProfile) {
-      // Compress photo before writing to Firestore (1MB document limit)
-      if (patch.photo) {
-        patch.photo = await compressImage(patch.photo)
-      } else if ('photo' in patch) {
-        // Don't wipe an existing photo with null — only save real photos
-        delete patch.photo
-      }
+      // photo is already compressed above; don't wipe an existing one with null
+      if (!patch.photo && 'photo' in patch) delete patch.photo
       // Update local state immediately — persists across board switches even if Firestore rules block writes
       setUserProfile_(prev => ({ ...(prev || {}), email: user.email, ...patch }))
       // Best-effort Firestore write to userProfile collection
@@ -1243,6 +1242,7 @@ function AuthenticatedApp({ user }) {
             onAddRole={handleAddRole}
             onUpdateBoardPhases={handleUpdateBoardPhases}
             isOwner={isOwner}
+            canEdit={canEdit}
             recentPeople={recentPeople}
             onRenameBoard={handleRenameBoard}
             onDeleteBoard={handleDeleteBoard}

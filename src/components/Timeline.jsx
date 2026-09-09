@@ -574,7 +574,7 @@ const Timeline = forwardRef(function Timeline({
           >
             {person?.photo
               ? <img src={person.photo} alt="" />
-              : <span>{isUnassigned ? '?' : personName.charAt(0).toUpperCase()}</span>
+              : <span>{isUnassigned ? '?' : (personName?.charAt(0).toUpperCase() || '?')}</span>
             }
           </div>
           <div className="timeline__person-info">

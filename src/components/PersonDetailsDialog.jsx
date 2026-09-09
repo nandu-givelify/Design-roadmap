@@ -99,6 +99,7 @@ export default function PersonDetailsDialog({
       const roleToUse = editRole.trim()
       if (roleToUse && !allRoles.includes(roleToUse)) await onAddRole?.(roleToUse)
       await onUpdatePerson?.({ name: editName.trim(), email: editEmail.trim() || null, role: roleToUse, photo: editPhoto })
+      onClose()
     } finally {
       setSavingProfile(false)
     }
