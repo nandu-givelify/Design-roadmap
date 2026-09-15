@@ -555,6 +555,7 @@ function AuthenticatedApp({ user }) {
   const activeBoard = ownBoard || (fetchedBoard || null)
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
   const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
+  const personOrder = activeBoard?.personOrder || []
 
   // ── Enrich people: overlay logged-in user's photo/name from userProfile ──────
   // Ensures the timeline shows the current photo even when the per-board person
@@ -986,6 +987,12 @@ function AuthenticatedApp({ user }) {
     await updateBoard(activeBoardId, { boardPhases: newPhases })
   }, [activeBoardId])
 
+  // ── Person row order (grouped timeline view) — shared per board, like phases ──
+  const handleReorderPeople = useCallback(async (newOrderIds) => {
+    if (!activeBoardId) return
+    await updateBoard(activeBoardId, { personOrder: newOrderIds })
+  }, [activeBoardId])
+
   // ── Migrate existing tasks: write smart default phases to tasks that have none ──
   const migratedBoardsRef = useRef(new Set())
   useEffect(() => {
@@ -1177,6 +1184,8 @@ function AuthenticatedApp({ user }) {
           loading={!tasksLoaded}
           personColWidth={isMobile && groupBy !== 'none' ? 52 : undefined}
           onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
+          personOrder={personOrder}
+          onReorderPeople={canEdit ? handleReorderPeople : undefined}
         />
 
         {/* Add Task modal */}

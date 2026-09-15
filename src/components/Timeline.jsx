@@ -36,6 +36,8 @@ const Timeline = forwardRef(function Timeline({
   loading,
   personColWidth,    // optional override for person column width (e.g. 52 on mobile)
   onPersonClick,     // optional: (person) => void — called when avatar is clicked
+  personOrder,       // optional: string[] of person ids — custom row order for grouped view
+  onReorderPeople,   // optional: (newOrderIds) => void — called after a person row is dragged
 }, ref) {
   const PERSON_COL_W = personColWidth ?? PERSON_COL_W_DEFAULT
   const scrollRef    = useRef(null)
@@ -56,6 +58,11 @@ const Timeline = forwardRef(function Timeline({
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
   const [selectionBox,    setSelectionBox]    = useState(null)
   const [bulkAssignOpen,  setBulkAssignOpen]  = useState(null)
+
+  // Person-row reorder (grouped view)
+  const [draggedPersonId,  setDraggedPersonId]  = useState(null)
+  const [dragOverPersonId, setDragOverPersonId] = useState(null)
+  const [personDragPos,    setPersonDragPos]    = useState(null)  // 'before' | 'after'
 
   // ── Effective person-column width (0 when no grouping) ───────────────────
   const personColW    = groupBy === 'none' ? 0 : PERSON_COL_W
@@ -438,9 +445,20 @@ const Timeline = forwardRef(function Timeline({
     visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   }
 
-  // When grouping by a role, only show people of that role
+  // When grouping by a role, only show people of that role — ordered by the
+  // board's saved personOrder when present, with anyone not yet in it
+  // (e.g. just added) kept in their natural order at the end.
   const groupedPeople = groupBy !== 'none'
-    ? visiblePeople.filter((p) => p.role === groupBy)
+    ? (() => {
+        const filtered = visiblePeople.filter((p) => p.role === groupBy)
+        if (!personOrder || personOrder.length === 0) return filtered
+        const rank = new Map(personOrder.map((id, i) => [id, i]))
+        return [...filtered].sort((a, b) => {
+          const ra = rank.has(a.id) ? rank.get(a.id) : Infinity
+          const rb = rank.has(b.id) ? rank.get(b.id) : Infinity
+          return ra - rb
+        })
+      })()
     : []
 
   // All tasks (for no-grouping mode), filtered if needed
@@ -521,6 +539,46 @@ const Timeline = forwardRef(function Timeline({
     )
   }
 
+  // ── Person-row reorder (grouped view, drag anywhere on the row) ──────────
+  const handlePersonDragStart = (e, personId) => {
+    setDraggedPersonId(personId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handlePersonDragOver = (e, personId) => {
+    if (!draggedPersonId || personId === draggedPersonId) return
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    setDragOverPersonId(personId)
+    setPersonDragPos(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after')
+  }
+
+  const resetPersonDrag = () => { setDraggedPersonId(null); setDragOverPersonId(null); setPersonDragPos(null) }
+
+  const handlePersonDrop = (e, targetId) => {
+    e.preventDefault()
+    if (!draggedPersonId || draggedPersonId === targetId || !onReorderPeople) { resetPersonDrag(); return }
+    // Reorder just within the currently-visible (same-role) group first...
+    const groupIds = groupedPeople.map(p => p.id)
+    const newGroupIds = groupIds.filter(id => id !== draggedPersonId)
+    const targetIdx = newGroupIds.indexOf(targetId)
+    newGroupIds.splice(personDragPos === 'after' ? targetIdx + 1 : targetIdx, 0, draggedPersonId)
+    // ...then merge that back into the board-wide order, preserving every
+    // other person's existing relative position (personOrder spans every
+    // role, not just the one currently grouped by).
+    const fullOrder = personOrder && personOrder.length > 0 ? personOrder : people.map(p => p.id)
+    const groupIdSet = new Set(groupIds)
+    const result = []
+    let cursor = 0
+    fullOrder.forEach((id) => {
+      if (groupIdSet.has(id)) { result.push(newGroupIds[cursor]); cursor++ }
+      else result.push(id)
+    })
+    people.forEach((p) => { if (!result.includes(p.id)) result.push(p.id) })
+    onReorderPeople(result)
+    resetPersonDrag()
+  }
+
   // ── Render a grouped person row ───────────────────────────────────────────
   const renderPersonRow = (person, rowTasks, isUnassigned = false) => {
     const personId    = person ? person.id : '__unassigned__'
@@ -552,18 +610,30 @@ const Timeline = forwardRef(function Timeline({
       : MIN_ROW_H
 
     const isDropTgt = activeDrag?.targetAssigneeId === personId
+    const canReorder = !readOnly && !isUnassigned && !!onReorderPeople
 
     return (
       <div
         key={personId}
         className={['timeline__person-row', isUnassigned ? 'timeline__person-row--unassigned' : '',
-          isDropTgt ? 'timeline__person-row--drop-target' : ''].filter(Boolean).join(' ')}
+          isDropTgt ? 'timeline__person-row--drop-target' : '',
+          dragOverPersonId === personId && personDragPos === 'before' ? 'timeline__person-row--drag-before' : '',
+          dragOverPersonId === personId && personDragPos === 'after'  ? 'timeline__person-row--drag-after'  : '',
+          draggedPersonId === personId ? 'timeline__person-row--dragging' : ''].filter(Boolean).join(' ')}
         ref={(el) => { rowRefsMap.current[personId] = el }}
         data-person-id={personId}
         style={{ minHeight: rowH }}
+        onDragOver={canReorder ? (e) => handlePersonDragOver(e, personId) : undefined}
+        onDrop={canReorder ? (e) => handlePersonDrop(e, personId) : undefined}
+        onDragEnd={canReorder ? resetPersonDrag : undefined}
       >
         {/* Left column — sticky */}
-        <div className="timeline__person-col" style={{ minHeight: rowH, width: PERSON_COL_W }}>
+        <div
+          className="timeline__person-col"
+          style={{ minHeight: rowH, width: PERSON_COL_W, cursor: canReorder ? 'grab' : undefined }}
+          draggable={canReorder}
+          onDragStart={canReorder ? (e) => handlePersonDragStart(e, personId) : undefined}
+        >
           <div
             className="timeline__avatar"
             style={{

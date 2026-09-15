@@ -20,7 +20,6 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import ShareIcon from '@mui/icons-material/IosShare'
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { getAvatarColor } from '../utils/dateUtils'
 import { AddPersonDialog, ConfirmDialog } from './Modals'
 import { useMountWhileOpen } from '../hooks/useMountWhileOpen'
@@ -356,12 +355,6 @@ export default function Settings({
                     cursor: canEdit ? 'pointer' : 'default',
                     '&:hover': canEdit ? { background: '#f3f4f6' } : {},
                   }}>
-                    {canEdit && (
-                      <DragIndicatorIcon
-                        className="settings-phase-drag-handle"
-                        sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0, cursor: 'grab' }}
-                      />
-                    )}
                     <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
                     {phase.optional && (
