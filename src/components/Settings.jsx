@@ -20,6 +20,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import ShareIcon from '@mui/icons-material/IosShare'
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { getAvatarColor } from '../utils/dateUtils'
 import { AddPersonDialog, ConfirmDialog } from './Modals'
 import { useMountWhileOpen } from '../hooks/useMountWhileOpen'
@@ -29,6 +30,9 @@ const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...p
 
 // ── Phase colors palette ──────────────────────────────────────────────────────
 const PHASE_COLORS = ['#60A5FA','#FBBF24','#FB923C','#34D399','#A78BFA','#F87171','#4ADE80','#38BDF8']
+
+// Transparent 1×1 GIF — used as invisible drag image for phase reordering
+const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
 // ── Add / Edit phase dialog (stacked) ─────────────────────────────────────────
 function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete }) {
@@ -182,6 +186,9 @@ export default function Settings({
   const [editingPhase,     setEditingPhase]     = useState(null)  // phase object | null
   const [showRename,       setShowRename]       = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [draggedPhaseId,  setDraggedPhaseId]  = useState(null)
+  const [dragOverPhaseId, setDragOverPhaseId] = useState(null)
+  const [dragPosition,    setDragPosition]    = useState(null)  // 'before' | 'after'
   const renameMounted = useMountWhileOpen(showRename)
 
   const openAddPhase  = () => { setEditingPhase(null); setPhaseDialogOpen(true) }
@@ -218,6 +225,37 @@ export default function Settings({
     onUpdateBoardPhases((boardPhases || []).map(p =>
       p.id === phaseId ? { ...p, enabled: p.enabled === false ? true : false } : p
     ))
+  }
+
+  // ── Phase reorder (drag and drop) ─────────────────────────────────────────
+  const handlePhaseDragStart = (e, phaseId) => {
+    setDraggedPhaseId(phaseId)
+    e.dataTransfer.effectAllowed = 'move'
+    const img = new Image()
+    img.src = TRANSPARENT_GIF
+    e.dataTransfer.setDragImage(img, 0, 0)
+  }
+
+  const handlePhaseDragOver = (e, phaseId) => {
+    e.preventDefault()
+    if (phaseId === draggedPhaseId) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    setDragOverPhaseId(phaseId)
+    setDragPosition(e.clientY < rect.top + rect.height / 2 ? 'before' : 'after')
+  }
+
+  const resetPhaseDrag = () => { setDraggedPhaseId(null); setDragOverPhaseId(null); setDragPosition(null) }
+
+  const handlePhaseDrop = (e, targetId) => {
+    e.preventDefault()
+    if (!draggedPhaseId || draggedPhaseId === targetId) { resetPhaseDrag(); return }
+    const ids = (boardPhases || []).map(p => p.id)
+    const newIds = ids.filter(id => id !== draggedPhaseId)
+    const targetIdx = newIds.indexOf(targetId)
+    newIds.splice(dragPosition === 'after' ? targetIdx + 1 : targetIdx, 0, draggedPhaseId)
+    const byId = Object.fromEntries((boardPhases || []).map(p => [p.id, p]))
+    onUpdateBoardPhases(newIds.map(id => byId[id]))
+    resetPhaseDrag()
   }
 
   return (
@@ -298,32 +336,53 @@ export default function Settings({
               </Box>
 
               {(boardPhases || []).map(phase => (
-                <Box key={phase.id} onClick={canEdit ? () => openEditPhase(phase) : undefined} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px',
-                  borderRadius: 2,
-                  cursor: canEdit ? 'pointer' : 'default',
-                  '&:hover': canEdit ? { background: '#f3f4f6' } : {},
-                }}>
-                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
-                  <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
-                  {phase.optional && (
-                    <Typography variant="caption" sx={{
-                      px: 0.75, py: 0.25, borderRadius: 1,
-                      background: `${phase.color}22`, color: phase.color,
-                      fontWeight: 600, fontSize: 10, letterSpacing: 0.3, flexShrink: 0,
-                    }}>
-                      optional
-                    </Typography>
-                  )}
-                  {canEdit && (
-                    <Switch
-                      size="small"
-                      checked={phase.enabled !== false}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => handleTogglePhaseEnabled(phase.id)}
-                    />
-                  )}
-                  {canEdit && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
+                <Box
+                  key={phase.id}
+                  className={[
+                    'settings-phase-wrap',
+                    dragOverPhaseId === phase.id && dragPosition === 'before' ? 'settings-phase-wrap--before' : '',
+                    dragOverPhaseId === phase.id && dragPosition === 'after'  ? 'settings-phase-wrap--after'  : '',
+                  ].filter(Boolean).join(' ')}
+                  draggable={canEdit}
+                  onDragStart={canEdit ? (e) => handlePhaseDragStart(e, phase.id) : undefined}
+                  onDragOver={canEdit ? (e) => handlePhaseDragOver(e, phase.id) : undefined}
+                  onDrop={canEdit ? (e) => handlePhaseDrop(e, phase.id) : undefined}
+                  onDragEnd={canEdit ? resetPhaseDrag : undefined}
+                  sx={{ opacity: draggedPhaseId === phase.id ? 0.35 : 1 }}
+                >
+                  <Box onClick={canEdit ? () => openEditPhase(phase) : undefined} sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px',
+                    borderRadius: 2,
+                    cursor: canEdit ? 'pointer' : 'default',
+                    '&:hover': canEdit ? { background: '#f3f4f6' } : {},
+                  }}>
+                    {canEdit && (
+                      <DragIndicatorIcon
+                        className="settings-phase-drag-handle"
+                        sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0, cursor: 'grab' }}
+                      />
+                    )}
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
+                    {phase.optional && (
+                      <Typography variant="caption" sx={{
+                        px: 0.75, py: 0.25, borderRadius: 1,
+                        background: `${phase.color}22`, color: phase.color,
+                        fontWeight: 600, fontSize: 10, letterSpacing: 0.3, flexShrink: 0,
+                      }}>
+                        optional
+                      </Typography>
+                    )}
+                    {canEdit && (
+                      <Switch
+                        size="small"
+                        checked={phase.enabled !== false}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => handleTogglePhaseEnabled(phase.id)}
+                      />
+                    )}
+                    {canEdit && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
+                  </Box>
                 </Box>
               ))}
             </Box>

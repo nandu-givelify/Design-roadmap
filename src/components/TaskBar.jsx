@@ -42,40 +42,13 @@ export default function TaskBar({
   const w = Math.max(dayWidth, (diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1) * dayWidth)
   const y = rowPaddingTop + laneIndex * (laneHeight + laneGap)
 
-  const totalDays  = Math.max(1, diffDays(startOfDay(dispStart), startOfDay(dispEnd)) + 1)
-
-  // Default phases: Discovery & Handoff get 1 week (or proportional); UX+UI split remaining
-  const computeDefaultPhases = () => {
-    if (!boardPhases || boardPhases.length === 0) return []
-    const n = boardPhases.length
-    const ids = boardPhases.map(p => p.id)
-    if (ids.includes('discovery') && ids.includes('handoff') && ids.includes('ux') && ids.includes('ui')) {
-      const discovery = Math.max(1, Math.min(7, Math.round(totalDays * 0.25)))
-      const handoff   = Math.max(1, Math.min(3, Math.round(totalDays * 0.1)))
-      const remaining = Math.max(2, totalDays - discovery - handoff)
-      const ux = Math.max(1, Math.floor(remaining / 2))
-      const ui = Math.max(1, remaining - ux)
-      return boardPhases.map(bp => ({
-        id: bp.id,
-        days: bp.id === 'discovery' ? discovery
-            : bp.id === 'handoff'   ? handoff
-            : bp.id === 'ux'        ? ux
-            : bp.id === 'ui'        ? ui
-            : Math.max(1, Math.floor(totalDays / n)),
-      }))
-    }
-    // General: equal distribution
-    const eq = Math.max(1, Math.floor(totalDays / n))
-    return boardPhases.map((bp, i) => ({
-      id: bp.id,
-      days: i === n - 1 ? Math.max(1, totalDays - eq * (n - 1)) : eq,
-    }))
-  }
-
-  // An explicit empty array means the user deliberately cleared every phase —
-  // only fall back to computed defaults when phases were never set at all
-  // (legacy tasks saved before the phases field existed).
-  const rawPhases  = visualPhases || (task.phases !== undefined ? task.phases : computeDefaultPhases())
+  // A task's phase display is driven entirely by its own saved `phases` field
+  // — never recomputed from the board's *current* phase list on the fly. A
+  // legacy task saved before the phases field existed (phases === undefined)
+  // has none until App.jsx's one-time migration writes real data to it; it
+  // must not, in the meantime, reactively show/hide phases just because
+  // someone added, removed, or renamed a phase in Board Settings.
+  const rawPhases  = visualPhases || task.phases || []
   // Disabling a phase in Board Settings hides it everywhere, including on
   // tasks that already have it — it's a soft hide, not a delete, so the
   // task's own `phases` data is untouched and re-enabling brings it right back.
