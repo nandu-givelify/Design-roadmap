@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './components/LoginPage'
 import LeftNav from './components/LeftNav'
@@ -32,12 +32,31 @@ const getQuarterForDate = (d) => Math.floor(d.getMonth() / 3) + 1
 const isConfigured = import.meta.env.VITE_FIREBASE_API_KEY &&
   import.meta.env.VITE_FIREBASE_API_KEY !== 'your_api_key_here'
 
+// Lazy so the admin panel ships as its own chunk — everyone who opens the
+// roadmap would otherwise download code only a handful of people can use.
+// Being a separate chunk is a bundle-size decision, not a security one: the
+// panel holds no secrets, and access is decided by /api/admin/* on the server.
+const AdminApp = lazy(() => import('./admin/AdminApp'))
+
+const isAdminRoute = () =>
+  window.location.pathname.replace(/\/+$/, '').toLowerCase() === '/admin'
+
 export default function App() {
   const { user } = useAuth()
 
   const publicBoardId = new URLSearchParams(window.location.search).get('board')
 
   if (!isConfigured) return <SetupScreen />
+
+  // Checked before the auth branches below: the panel does its own sign-in
+  // handling and shouldn't be short-circuited into a board view.
+  if (isAdminRoute()) {
+    return (
+      <Suspense fallback={<SplashScreen />}>
+        <AdminApp />
+      </Suspense>
+    )
+  }
   if (user === undefined) return <SplashScreen />  // still loading auth
   if (user === null) {
     if (publicBoardId) return <PublicBoardView boardId={publicBoardId} />
@@ -47,44 +66,15 @@ export default function App() {
   return <AuthenticatedApp user={user} />
 }
 
-// Shared constant — also used in ShareModal
-export const PUBLIC_FIRESTORE_RULES = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    match /boards/{boardId} {
-      // Board doc: readable if signed in, or board is publicly accessible
-      allow read: if request.auth != null
-                  || resource.data.publicAccess in ['view', 'edit']
-                  || resource.data.isPublic == true;
-      // Only signed-in users can change board settings
-      allow write: if request.auth != null;
-
-      // Subcollections (tasks, people):
-      match /{subcol}/{docId} {
-        allow read: if request.auth != null
-                    || get(/databases/$(database)/documents/boards/$(boardId))
-                         .data.publicAccess in ['view', 'edit']
-                    || get(/databases/$(database)/documents/boards/$(boardId))
-                         .data.isPublic == true;
-        // Write allowed if signed in, or board has public edit access
-        allow write: if request.auth != null
-                     || get(/databases/$(database)/documents/boards/$(boardId))
-                          .data.publicAccess == 'edit';
-      }
-    }
-
-    match /userPrefs/{uid} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == uid;
-    }
-
-    match /userProfiles/{uid} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == uid;
-    }
-  }
-}`
+// Shared constant — also used in ShareModal's "Firestore rules update required"
+// panel, which offers to copy them into the Firebase console.
+//
+// Imported from the real firestore.rules at the repo root rather than being a
+// second copy kept in sync by hand. It previously held an older, permissive
+// version; someone following the Share dialog's copy button would have pasted
+// that over the hardened rules and quietly reopened every board to every
+// signed-in user. One source of truth makes that impossible.
+export { default as PUBLIC_FIRESTORE_RULES } from '../firestore.rules?raw'
 
 function PublicBoardView({ boardId }) {
   const [board,  setBoard]  = useState(undefined)

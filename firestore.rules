@@ -1,0 +1,138 @@
+rules_version = '2';
+
+// Design Roadmap — Firestore security rules
+//
+// These replace the "allow read, write: if true" test-mode rules. Without them
+// any signed-in user can read and write every board in the project, and the
+// admin panel's restraint is decoration: someone can just call Firestore from
+// the browser console and skip the UI entirely.
+//
+// The admin panel does NOT get an exception here. It talks only to
+// /api/admin/*, which uses the Firebase Admin SDK — and the Admin SDK bypasses
+// these rules by design, because it runs on a server with a service-account
+// credential that never reaches a browser. So these rules describe what an
+// ordinary user may do, and nothing in them can be used to gain admin access.
+//
+// Deploy:  firebase deploy --only firestore:rules
+// Or paste into Firebase console → Firestore Database → Rules → Publish.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myEmail() {
+      return request.auth.token.email;
+    }
+
+    function boardData(boardId) {
+      return get(/databases/$(database)/documents/boards/$(boardId)).data;
+    }
+
+    // Board membership is by email (memberEmails) or ownership (ownerId).
+    // Mirrors subscribeBoards() in src/firebase.js — a rule that disagreed with
+    // the query would make boards silently vanish from people's sidebars.
+    // get() with a default rather than direct field access: reading a key that
+    // isn't on the document raises an error in rules, which denies the request.
+    // A board created before either field existed would otherwise be unreachable
+    // by its own owner.
+    function isMemberOf(b) {
+      return signedIn() && (
+        b.get('ownerId', '') == request.auth.uid ||
+        myEmail() in b.get('memberEmails', [])
+      );
+    }
+
+    // publicAccess is the current field; isPublic is the legacy one still
+    // present on older boards, and PublicBoardView accepts either.
+    function publicCanView(b) {
+      return b.get('publicAccess', '') in ['view', 'edit'] || b.get('isPublic', false) == true;
+    }
+
+    function publicCanEdit(b) {
+      return b.get('publicAccess', '') == 'edit';
+    }
+
+    // ── Boards ───────────────────────────────────────────────────────────────
+    match /boards/{boardId} {
+      allow read: if isMemberOf(resource.data) || publicCanView(resource.data);
+
+      // A new board must name its creator as owner, so nobody can create a
+      // board already assigned to someone else.
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      // Members can change board settings; a public-edit link can't (that link
+      // is for editing tasks, not for changing who has access or making the
+      // board more public than its owner intended).
+      allow update: if isMemberOf(resource.data);
+
+      allow delete: if signedIn() && resource.data.get('ownerId', '') == request.auth.uid;
+
+      // People and tasks live under the board and inherit its access. The
+      // get() costs one read per rule evaluation, which is why the parent
+      // board doc — not each task — is the thing being checked.
+      match /{subcollection}/{docId} {
+        allow read:  if isMemberOf(boardData(boardId)) || publicCanView(boardData(boardId));
+        allow write: if isMemberOf(boardData(boardId)) || publicCanEdit(boardData(boardId));
+      }
+    }
+
+    // ── Per-user documents ───────────────────────────────────────────────────
+    // Board ordering and other personal settings: strictly your own.
+    match /userPrefs/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Profiles are readable by any signed-in user because findProfileByEmail()
+    // looks people up by address when adding them to a board. Only you can
+    // change yours.
+    match /userProfiles/{uid} {
+      allow read:  if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ── Org directory ────────────────────────────────────────────────────────
+    // Shared, company-domain people records used for "someone you already
+    // know" suggestions. Any signed-in user may read them and register one —
+    // that's what upsertOrgMember() does when a colleague is added to a board.
+    // Deletion is admin-only (via the Admin SDK, which ignores these rules),
+    // so a stray client can't wipe the directory.
+    match /orgMembers/{email} {
+      allow read:   if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    // ── Admin audit log ──────────────────────────────────────────────────────
+    // Written only by the server through the Admin SDK. Denying every client
+    // operation means nobody can read the trail of admin actions, and — more
+    // importantly — nobody can forge or erase entries in it.
+    match /_adminAudit/{entry} {
+      allow read, write: if false;
+    }
+
+    // ── Migration marker ─────────────────────────────────────────────────────
+    match /_meta/{doc} {
+      allow read:  if signedIn();
+      allow write: if signedIn();
+    }
+
+    // ── Legacy root collections ──────────────────────────────────────────────
+    // Pre-boards data, already migrated into boards/{id}/. Reads are denied;
+    // checkAndRunMigration() catches the failure and treats the account as new,
+    // which is correct for anyone signing in today.
+    match /people/{doc} { allow read, write: if false; }
+    match /teams/{doc}  { allow read, write: if false; }
+    match /tasks/{doc}  { allow read, write: if false; }
+
+    // ── Everything else ──────────────────────────────────────────────────────
+    // Default deny. A new collection is inaccessible until a rule is written
+    // for it, rather than world-writable until someone notices.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

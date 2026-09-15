@@ -183,6 +183,11 @@ export const subscribeOrgMembers = (domain, cb, onError) => {
 // One-time (safely re-runnable) backfill: scan every board's people and register
 // anyone on a company email domain into the org directory, so existing colleagues
 // show up as suggestions immediately instead of only people added from now on.
+//
+// Superseded by the admin panel's Directory → Backfill, which does the same work
+// server-side. This client version reads every board unfiltered, which the
+// hardened rules deny (you can only list boards you own or belong to), so it
+// will fail if called. Kept only as reference; nothing in the UI calls it.
 export const backfillOrgDirectory = async () => {
   const boardsSnap = await getDocs(collection(db, 'boards'))
   let scanned = 0, added = 0
@@ -201,6 +206,23 @@ export const backfillOrgDirectory = async () => {
   return { boards: boardsSnap.size, scanned, added, addedEmails: [...new Set(addedEmails)] }
 }
 
+// Keep the board's memberEmails in sync so findBoardsByMemberEmail can discover
+// this board for that person.
+//
+// Best-effort, like upsertOrgMember above. Under the hardened rules only board
+// members may write the board document, so this is denied for a visitor editing
+// through a public "anyone can edit" link — and that denial is correct: someone
+// holding a share link shouldn't be able to grant a third party standing access
+// to the board. The person still gets added; only the membership shortcut is
+// skipped, and a board member adding them later fills it in.
+const syncMemberEmail = async (boardId, email) => {
+  try {
+    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(email) })
+  } catch (err) {
+    console.warn('[memberEmails] sync skipped:', err.message)
+  }
+}
+
 // ── People (board-scoped) ────────────────────────────────────────────────────
 export const subscribePeople = (boardId, cb, onError) =>
   onSnapshot(
@@ -212,7 +234,7 @@ export const subscribePeople = (boardId, cb, onError) =>
 export const addPerson = async (boardId, data) => {
   const ref = await addDoc(collection(db, 'boards', boardId, 'people'), { ...data, createdAt: serverTimestamp() })
   if (data.email) {
-    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await syncMemberEmail(boardId, data.email)
     await upsertOrgMember(data)
   }
   return ref
@@ -221,17 +243,15 @@ export const addPerson = async (boardId, data) => {
 export const addPersonWithId = async (boardId, id, data) => {
   await setDoc(doc(db, 'boards', boardId, 'people', id), { ...data, createdAt: serverTimestamp() })
   if (data.email) {
-    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await syncMemberEmail(boardId, data.email)
     await upsertOrgMember(data)
   }
 }
 
 export const updatePerson = async (boardId, id, data) => {
   await updateDoc(doc(db, 'boards', boardId, 'people', id), data)
-  // If an email is being added/changed, keep board's memberEmails in sync
-  // so findBoardsByMemberEmail can discover this board for that person
   if (data.email) {
-    await updateDoc(doc(db, 'boards', boardId), { memberEmails: arrayUnion(data.email) })
+    await syncMemberEmail(boardId, data.email)
     await upsertOrgMember(data)
   }
 }

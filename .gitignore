@@ -4,3 +4,9 @@ dist
 .env.local
 .DS_Store
 .env.rtf
+
+# Never commit a service-account key — it bypasses all Firestore rules
+*serviceAccount*.json
+service-account*.json
+firebase-adminsdk-*.json
+.vercel
