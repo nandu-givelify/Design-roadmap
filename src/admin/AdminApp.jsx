@@ -188,9 +188,16 @@ export default function AdminApp() {
   )
 }
 
-// ── Denied / not configured ──────────────────────────────────────────────────
+// ── Denied / not configured / actually-something-else ────────────────────────
+// getSession() throws for every non-2xx response (or a network failure), and
+// they are NOT all "you're not on the allowlist" — an expired token, a
+// misbehaving/undeployed function, or a server error all land here too. Only
+// a genuine 403 from requireAdmin() means the allowlist itself is the problem;
+// anything else must show its real cause; a truthful "something else is wrong"
+// beats a wrong but confident diagnosis every time.
 function AccessDenied({ user, error, onRetry }) {
   const notConfigured = error?.code === 'not_configured' || error?.status === 503
+  const notOnAllowlist = error?.status === 403 && error?.code === 'forbidden'
 
   return (
     <Stack alignItems="center" justifyContent="center" sx={{ minHeight: '100vh', p: 3, bgcolor: '#fafafa' }}>
@@ -212,7 +219,7 @@ function AccessDenied({ user, error, onRetry }) {
               <strong>ADMIN.md</strong> in the repo.
             </Typography>
           </>
-        ) : (
+        ) : notOnAllowlist ? (
           <>
             <Typography variant="h6" sx={{ mb: 1 }}>No admin access</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -221,6 +228,26 @@ function AccessDenied({ user, error, onRetry }) {
             <Typography variant="body2" color="text.secondary">
               Admins are set server-side via the <code>ADMIN_EMAILS</code> environment variable in
               Vercel — it can't be changed from the browser.
+            </Typography>
+          </>
+        ) : (
+          <>
+            <Typography variant="h6" sx={{ mb: 1 }}>Couldn't verify admin access</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              This isn't the allowlist — the request to check your access failed a different way,
+              signed in as <strong>{user.email}</strong>:
+            </Typography>
+            <Typography variant="body2" sx={{
+              mb: 2, p: 1.5, borderRadius: 2, bgcolor: '#fafafa', border: '1px solid', borderColor: 'divider',
+              fontFamily: 'monospace', fontSize: '0.8125rem', wordBreak: 'break-word',
+            }}>
+              {error?.status ? `${error.status} ` : ''}{error?.code ? `${error.code}: ` : ''}
+              {error?.message || 'Unknown error — see the browser console/network tab for details.'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Common causes: an expired sign-in (try signing out and back in), the{' '}
+              <code>/api/admin/*</code> functions not deployed correctly, or a server error —
+              check the Vercel deployment's Function logs.
             </Typography>
           </>
         )}
