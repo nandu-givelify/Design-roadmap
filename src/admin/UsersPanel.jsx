@@ -9,6 +9,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
 import Chip from '@mui/material/Chip'
+import Checkbox from '@mui/material/Checkbox'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Divider from '@mui/material/Divider'
@@ -18,15 +19,21 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Alert from '@mui/material/Alert'
 import Tooltip from '@mui/material/Tooltip'
+import ToggleButton from '@mui/material/ToggleButton'
 import SearchIcon from '@mui/icons-material/Search'
 import MoreVertIcon from '@mui/icons-material/MoreHoriz'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import GoogleIcon from '@mui/icons-material/Google'
 import EmailIcon from '@mui/icons-material/AlternateEmail'
+import CorporateFareIcon from '@mui/icons-material/CorporateFare'
 
 import { listUsers, userAction } from './api'
-import { SectionHeader, Loading, ErrorNote, EmptyState, ConfirmDialog, relativeTime, formatDate, wideDialog } from './ui'
+import { SectionHeader, Loading, ErrorNote, EmptyState, ConfirmDialog, BulkBar, BulkConfirmDialog, relativeTime, formatDate, wideDialog } from './ui'
+
+// Users have no stored "organization" — the domain half of their email is the
+// closest proxy and needs no extra data or server change.
+const orgOf = (email) => (email || '').split('@')[1]?.toLowerCase() || 'unknown'
 
 export default function UsersPanel() {
   const [users, setUsers] = useState([])
@@ -41,6 +48,10 @@ export default function UsersPanel() {
   const [pwFor, setPwFor] = useState(null)       // user we're setting a password for
   const [renameFor, setRenameFor] = useState(null)
   const [resetLink, setResetLink] = useState(null)
+
+  const [selected, setSelected] = useState(() => new Set())
+  const [groupByOrg, setGroupByOrg] = useState(false)
+  const [bulk, setBulk] = useState(null)         // { ...BulkConfirmDialog props }
 
   const load = useCallback(async (search) => {
     setLoading(true); setError(null)
@@ -60,6 +71,16 @@ export default function UsersPanel() {
     const t = setTimeout(() => load(q), 300)
     return () => clearTimeout(t)
   }, [q, load])
+
+  // Drop any selected uid that no longer appears in the loaded list (a search,
+  // a refresh, or a completed bulk action can all change the set).
+  useEffect(() => {
+    setSelected(prev => {
+      const ids = new Set(users.map(u => u.uid))
+      const next = new Set([...prev].filter(uid => ids.has(uid)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [users])
 
   const run = async (body, successMessage) => {
     const result = await userAction(body)
@@ -109,15 +130,138 @@ export default function UsersPanel() {
     }),
   })
 
+  const toggleOne = (uid) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(uid)) next.delete(uid); else next.add(uid)
+    return next
+  })
+  const toggleAll = (list) => setSelected(prev => {
+    const allIn = list.every(u => prev.has(u.uid))
+    if (allIn) return new Set([...prev].filter(uid => !list.some(u => u.uid === uid)))
+    return new Set([...prev, ...list.map(u => u.uid)])
+  })
+
+  const selectedUsers = users.filter(u => selected.has(u.uid))
+
+  const bulkActions = [
+    { label: 'Disable', onClick: () => setBulk({
+        title: `Disable ${selectedUsers.length} account${selectedUsers.length === 1 ? '' : 's'}?`,
+        message: 'Each account will be signed out immediately and unable to sign in until re-enabled. Admin accounts and your own account are skipped automatically.',
+        confirmLabel: 'Disable', danger: true,
+        items: selectedUsers, itemLabel: (u) => u.email,
+        onConfirmEach: (u) => userAction({ action: 'disable', uid: u.uid }),
+      }) },
+    { label: 'Enable', onClick: () => setBulk({
+        title: `Re-enable ${selectedUsers.length} account${selectedUsers.length === 1 ? '' : 's'}?`,
+        message: 'Each account will be able to sign in again.',
+        confirmLabel: 'Enable',
+        items: selectedUsers, itemLabel: (u) => u.email,
+        onConfirmEach: (u) => userAction({ action: 'enable', uid: u.uid }),
+      }) },
+    { label: 'Sign out everywhere', onClick: () => setBulk({
+        title: `Sign out ${selectedUsers.length} account${selectedUsers.length === 1 ? '' : 's'} everywhere?`,
+        message: 'Each account will be signed out of every device and asked to sign in again. Passwords are unchanged.',
+        confirmLabel: 'Sign out everywhere',
+        items: selectedUsers, itemLabel: (u) => u.email,
+        onConfirmEach: (u) => userAction({ action: 'revokeSessions', uid: u.uid }),
+      }) },
+    { label: 'Delete', danger: true, onClick: () => setBulk({
+        title: `Delete ${selectedUsers.length} account${selectedUsers.length === 1 ? '' : 's'}?`,
+        message: 'This permanently deletes each account, profile and preferences. Boards they own are kept but become unowned. Admin accounts and your own account are skipped automatically. This cannot be undone.',
+        confirmLabel: 'Delete accounts', danger: true,
+        items: selectedUsers, itemLabel: (u) => u.email,
+        onConfirmEach: (u) => userAction({ action: 'delete', uid: u.uid }),
+      }) },
+  ]
+
+  const groups = groupByOrg
+    ? Object.entries(
+        users.reduce((acc, u) => {
+          const key = orgOf(u.email)
+          ;(acc[key] ||= []).push(u)
+          return acc
+        }, {})
+      ).sort((a, b) => b[1].length - a[1].length)
+    : [['all', users]]
+
+  const renderRow = (u, i, list) => (
+    <Box key={u.uid} sx={{ borderTop: i ? '1px solid' : 'none', borderColor: 'divider' }}>
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ px: 2.5, py: 1.75 }}>
+        <Checkbox
+          size="small"
+          checked={selected.has(u.uid)}
+          onChange={() => toggleOne(u.uid)}
+          sx={{ p: 0 }}
+        />
+        <Avatar src={u.photoURL || undefined} sx={{ width: 34, height: 34, opacity: u.disabled ? 0.4 : 1 }}>
+          {(u.displayName || u.email || '?')[0].toUpperCase()}
+        </Avatar>
+
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, textDecoration: u.disabled ? 'line-through' : 'none' }}>
+              {u.displayName || '—'}
+            </Typography>
+            {u.isAdmin && <Chip label="Admin" size="small" sx={{ height: 17, fontSize: '0.625rem' }} />}
+            {u.disabled && <Chip label="Disabled" size="small" color="error" variant="outlined" sx={{ height: 17, fontSize: '0.625rem' }} />}
+            {!u.emailVerified && <Chip label="Unverified" size="small" variant="outlined" sx={{ height: 17, fontSize: '0.625rem' }} />}
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {u.email || 'no email'}
+          </Typography>
+        </Box>
+
+        <Stack direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' } }}>
+          {u.providers.includes('google.com') && (
+            <Tooltip title="Google sign-in"><GoogleIcon sx={{ fontSize: 15, color: 'text.secondary' }} /></Tooltip>
+          )}
+          {u.providers.includes('password') && (
+            <Tooltip title="Email + password"><EmailIcon sx={{ fontSize: 15, color: 'text.secondary' }} /></Tooltip>
+          )}
+        </Stack>
+
+        <Box sx={{ width: 96, display: { xs: 'none', sm: 'block' } }}>
+          <Typography variant="caption" color="text.secondary">
+            {u.ownedBoards + u.memberBoards} board{u.ownedBoards + u.memberBoards === 1 ? '' : 's'}
+          </Typography>
+        </Box>
+
+        <Tooltip title={`Joined ${formatDate(u.createdAt)}`}>
+          <Box sx={{ width: 96, display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="caption" color="text.secondary">
+              {relativeTime(u.lastSignInAt)}
+            </Typography>
+          </Box>
+        </Tooltip>
+
+        <IconButton size="small" onClick={(e) => setMenu({ anchorEl: e.currentTarget, user: u })}>
+          <MoreVertIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+    </Box>
+  )
+
   return (
     <Box>
       <SectionHeader
         title="Users"
         subtitle={`${total} account${total === 1 ? '' : 's'} in Firebase Auth.`}
         action={
-          <Button size="small" startIcon={<RefreshIcon />} onClick={() => load(q)} disabled={loading} sx={{ color: 'text.secondary' }}>
-            Refresh
-          </Button>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <ToggleButton
+              size="small"
+              value="groupByOrg"
+              selected={groupByOrg}
+              onChange={() => setGroupByOrg(g => !g)}
+              sx={{ textTransform: 'none', px: 1.25, py: 0.5, gap: 0.75 }}
+            >
+              <CorporateFareIcon sx={{ fontSize: 16 }} />
+              Group by organization
+            </ToggleButton>
+            <Button size="small" startIcon={<RefreshIcon />} onClick={() => load(q)} disabled={loading} sx={{ color: 'text.secondary' }}>
+              Refresh
+            </Button>
+          </Stack>
         }
       />
 
@@ -136,61 +280,33 @@ export default function UsersPanel() {
         }}
       />
 
+      <BulkBar count={selected.size} onClear={() => setSelected(new Set())} actions={bulkActions} />
+
       {loading && users.length === 0 ? <Loading /> : users.length === 0 ? (
         <EmptyState>{q ? `No accounts match “${q}”.` : 'No accounts yet.'}</EmptyState>
       ) : (
-        <Box sx={{ bgcolor: '#fff', border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
-          {users.map((u, i) => (
-            <Box key={u.uid} sx={{ borderTop: i ? '1px solid' : 'none', borderColor: 'divider' }}>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ px: 2.5, py: 1.75 }}>
-                <Avatar src={u.photoURL || undefined} sx={{ width: 34, height: 34, opacity: u.disabled ? 0.4 : 1 }}>
-                  {(u.displayName || u.email || '?')[0].toUpperCase()}
-                </Avatar>
-
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, textDecoration: u.disabled ? 'line-through' : 'none' }}>
-                      {u.displayName || '—'}
-                    </Typography>
-                    {u.isAdmin && <Chip label="Admin" size="small" sx={{ height: 17, fontSize: '0.625rem' }} />}
-                    {u.disabled && <Chip label="Disabled" size="small" color="error" variant="outlined" sx={{ height: 17, fontSize: '0.625rem' }} />}
-                    {!u.emailVerified && <Chip label="Unverified" size="small" variant="outlined" sx={{ height: 17, fontSize: '0.625rem' }} />}
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {u.email || 'no email'}
-                  </Typography>
-                </Box>
-
-                <Stack direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' } }}>
-                  {u.providers.includes('google.com') && (
-                    <Tooltip title="Google sign-in"><GoogleIcon sx={{ fontSize: 15, color: 'text.secondary' }} /></Tooltip>
-                  )}
-                  {u.providers.includes('password') && (
-                    <Tooltip title="Email + password"><EmailIcon sx={{ fontSize: 15, color: 'text.secondary' }} /></Tooltip>
-                  )}
-                </Stack>
-
-                <Box sx={{ width: 96, display: { xs: 'none', sm: 'block' } }}>
+        <Stack spacing={groupByOrg ? 2 : 0}>
+          {groups.map(([org, list]) => (
+            <Box key={org} sx={{ bgcolor: '#fff', border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
+              {groupByOrg && (
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2.5, py: 1.25, bgcolor: '#fafafa', borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <Checkbox
+                    size="small"
+                    checked={list.every(u => selected.has(u.uid))}
+                    indeterminate={list.some(u => selected.has(u.uid)) && !list.every(u => selected.has(u.uid))}
+                    onChange={() => toggleAll(list)}
+                    sx={{ p: 0 }}
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{org}</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {u.ownedBoards + u.memberBoards} board{u.ownedBoards + u.memberBoards === 1 ? '' : 's'}
+                    {list.length} account{list.length === 1 ? '' : 's'}
                   </Typography>
-                </Box>
-
-                <Tooltip title={`Joined ${formatDate(u.createdAt)}`}>
-                  <Box sx={{ width: 96, display: { xs: 'none', sm: 'block' } }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {relativeTime(u.lastSignInAt)}
-                    </Typography>
-                  </Box>
-                </Tooltip>
-
-                <IconButton size="small" onClick={(e) => setMenu({ anchorEl: e.currentTarget, user: u })}>
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              </Stack>
+                </Stack>
+              )}
+              {list.map((u, i) => renderRow(u, i, list))}
             </Box>
           ))}
-        </Box>
+        </Stack>
       )}
 
       {/* Row menu */}
@@ -256,6 +372,12 @@ export default function UsersPanel() {
       />
 
       <ResetLinkDialog data={resetLink} onClose={() => setResetLink(null)} />
+
+      <BulkConfirmDialog
+        open={!!bulk}
+        onClose={() => { setBulk(null); setSelected(new Set()); load(q) }}
+        {...(bulk || { title: '', message: '', items: [], itemLabel: () => '', onConfirmEach: async () => {} })}
+      />
     </Box>
   )
 }

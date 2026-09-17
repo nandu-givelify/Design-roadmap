@@ -7,6 +7,7 @@ import TextField from '@mui/material/TextField'
 import InputAdornment from '@mui/material/InputAdornment'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
@@ -25,7 +26,7 @@ import PublicIcon from '@mui/icons-material/Public'
 import CloseIcon from '@mui/icons-material/Close'
 
 import { listBoards, boardDetail, boardAction } from './api'
-import { SectionHeader, Loading, ErrorNote, EmptyState, ConfirmDialog, formatDate, wideDialog } from './ui'
+import { SectionHeader, Loading, ErrorNote, EmptyState, ConfirmDialog, BulkBar, BulkConfirmDialog, formatDate, wideDialog } from './ui'
 
 export default function BoardsPanel() {
   const [boards, setBoards] = useState([])
@@ -39,6 +40,9 @@ export default function BoardsPanel() {
   const [detailId, setDetailId] = useState(null)
   const [prompt, setPrompt] = useState(null) // { kind, board }
 
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulk, setBulk] = useState(null)
+
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try { setBoards((await listBoards()).boards) }
@@ -47,6 +51,14 @@ export default function BoardsPanel() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setSelected(prev => {
+      const ids = new Set(boards.map(b => b.id))
+      const next = new Set([...prev].filter(id => ids.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [boards])
 
   const run = async (body, message) => {
     await boardAction(body)
@@ -61,6 +73,19 @@ export default function BoardsPanel() {
         (b.ownerEmail || '').toLowerCase().includes(needle) ||
         b.memberEmails.some(e => (e || '').toLowerCase().includes(needle)))
     : boards
+
+  const toggleOne = (id) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const allSelected = shown.length > 0 && shown.every(b => selected.has(b.id))
+  const someSelected = shown.some(b => selected.has(b.id))
+  const toggleAll = () => setSelected(prev => {
+    if (allSelected) return new Set([...prev].filter(id => !shown.some(b => b.id === id)))
+    return new Set([...prev, ...shown.map(b => b.id)])
+  })
+  const selectedBoards = boards.filter(b => selected.has(b.id))
 
   return (
     <Box>
@@ -86,10 +111,34 @@ export default function BoardsPanel() {
         }}
       />
 
+      <BulkBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+        actions={[
+          { label: 'Delete', danger: true, onClick: () => setBulk({
+              title: `Delete ${selectedBoards.length} board${selectedBoards.length === 1 ? '' : 's'}?`,
+              message: 'This permanently deletes each board along with its tasks and people. It cannot be undone.',
+              confirmLabel: 'Delete boards', danger: true,
+              items: selectedBoards, itemLabel: (b) => b.name,
+              onConfirmEach: (b) => boardAction({ action: 'delete', boardId: b.id }),
+            }) },
+        ]}
+      />
+
       {loading && boards.length === 0 ? <Loading /> : shown.length === 0 ? (
         <EmptyState>{q ? `No boards match “${q}”.` : 'No boards yet.'}</EmptyState>
       ) : (
         <Box sx={{ bgcolor: '#fff', border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
+          <Stack direction="row" alignItems="center" sx={{ px: 2.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#fafafa' }}>
+            <Checkbox
+              size="small"
+              checked={allSelected}
+              indeterminate={someSelected && !allSelected}
+              onChange={toggleAll}
+              sx={{ p: 0 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>Select all</Typography>
+          </Stack>
           {shown.map((b, i) => (
             <Stack
               key={b.id} direction="row" alignItems="center" spacing={2}
@@ -100,6 +149,13 @@ export default function BoardsPanel() {
               }}
               onClick={() => setDetailId(b.id)}
             >
+              <Checkbox
+                size="small"
+                checked={selected.has(b.id)}
+                onChange={() => toggleOne(b.id)}
+                onClick={(e) => e.stopPropagation()}
+                sx={{ p: 0 }}
+              />
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Stack direction="row" alignItems="center" spacing={0.75}>
                   <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -202,6 +258,12 @@ export default function BoardsPanel() {
         boardId={detailId}
         onClose={() => setDetailId(null)}
         onChanged={async (message) => { setNotice(message); await load() }}
+      />
+
+      <BulkConfirmDialog
+        open={!!bulk}
+        onClose={() => { setBulk(null); setSelected(new Set()); load() }}
+        {...(bulk || { title: '', message: '', items: [], itemLabel: () => '', onConfirmEach: async () => {} })}
       />
     </Box>
   )

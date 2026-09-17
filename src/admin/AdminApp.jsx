@@ -97,7 +97,12 @@ export default function AdminApp() {
   const Panel = active.Component
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#fafafa' }}>
+    // The main Planner app's global CSS pins html/body/#root to a fixed
+    // height with overflow:hidden (it manages its own internal scroll
+    // regions), and that stylesheet loads on every route including /admin
+    // — so the page itself can never scroll here. Fill the viewport and let
+    // the content pane scroll internally instead of relying on page scroll.
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#fafafa' }}>
       {/* Sidebar */}
       <Box
         component="nav"
@@ -105,7 +110,7 @@ export default function AdminApp() {
           width: 232, flexShrink: 0, bgcolor: '#fff',
           borderRight: '1px solid', borderColor: 'divider',
           display: 'flex', flexDirection: 'column',
-          position: 'sticky', top: 0, height: '100vh',
+          height: '100vh', overflowY: 'auto',
         }}
       >
         <Box sx={{ p: 2.5, pb: 2 }}>
@@ -181,8 +186,10 @@ export default function AdminApp() {
       </Box>
 
       {/* Content */}
-      <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 4 }, maxWidth: 1200 }}>
-        <Panel />
+      <Box component="main" sx={{ flex: 1, minWidth: 0, height: '100vh', overflowY: 'auto', p: { xs: 2, md: 4 } }}>
+        <Box sx={{ maxWidth: 1200 }}>
+          <Panel />
+        </Box>
       </Box>
     </Box>
   )

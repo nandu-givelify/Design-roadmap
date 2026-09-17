@@ -126,6 +126,116 @@ export function ConfirmDialog({
   )
 }
 
+// Sticky action bar that appears above a list once one or more rows are
+// checked. `actions` is [{ label, onClick, danger }]. Stays out of the way
+// (renders nothing) when nothing is selected.
+export function BulkBar({ count, onClear, actions }) {
+  if (!count) return null
+  return (
+    <Stack direction="row" alignItems="center" spacing={1.5} sx={{
+      mb: 2, px: 2, py: 1, borderRadius: 2.5,
+      bgcolor: '#111827', color: '#fff',
+    }}>
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+        {count} selected
+      </Typography>
+      <Box sx={{ flex: 1 }} />
+      {actions.map((a) => (
+        <Button
+          key={a.label}
+          size="small"
+          onClick={a.onClick}
+          sx={{ color: a.danger ? '#fca5a5' : '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
+        >
+          {a.label}
+        </Button>
+      ))}
+      <Button size="small" onClick={onClear} sx={{ color: 'rgba(255,255,255,0.6)', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+        Clear
+      </Button>
+    </Stack>
+  )
+}
+
+// Confirm dialog for a bulk action across many rows at once — lists what it
+// will affect instead of requiring an exact-phrase type-in per item (that
+// doesn't scale past one), and reports which rows failed rather than letting
+// one failure hide the rest silently.
+export function BulkConfirmDialog({
+  open, onClose, onConfirmEach, items, itemLabel,
+  title, message, confirmLabel = 'Confirm', danger = false,
+}) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null) // { ok, failed: [{label, error}] }
+
+  const handleClose = () => { if (!busy) { setResult(null); onClose() } }
+
+  const handleConfirm = async () => {
+    setBusy(true)
+    const failed = []
+    let ok = 0
+    for (const item of items) {
+      try { await onConfirmEach(item); ok++ }
+      catch (e) { failed.push({ label: itemLabel(item), error: e.message }) }
+    }
+    setBusy(false)
+    setResult({ ok, failed })
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose}>
+      <DialogTitle>{result ? 'Done' : title}</DialogTitle>
+      <DialogContent>
+        {result ? (
+          <Stack spacing={1.5}>
+            <Typography variant="body2">
+              {result.ok} of {items.length} succeeded.
+            </Typography>
+            {result.failed.length > 0 && (
+              <Alert severity="error" sx={{ borderRadius: 2 }}>
+                <Stack spacing={0.5}>
+                  {result.failed.map((f, i) => (
+                    <Typography key={i} variant="body2">{f.label}: {f.error}</Typography>
+                  ))}
+                </Stack>
+              </Alert>
+            )}
+          </Stack>
+        ) : (
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">{message}</Typography>
+            <Box sx={{
+              maxHeight: 160, overflowY: 'auto', p: 1, borderRadius: 2,
+              bgcolor: '#fafafa', border: '1px solid', borderColor: 'divider',
+            }}>
+              {items.map((item, i) => (
+                <Typography key={i} variant="body2" sx={{ py: 0.25 }}>{itemLabel(item)}</Typography>
+              ))}
+            </Box>
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        {result ? (
+          <Button variant="contained" onClick={handleClose}>Close</Button>
+        ) : (
+          <>
+            <Button onClick={handleClose} disabled={busy} sx={{ color: 'text.secondary' }}>Cancel</Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={busy}
+              variant="contained"
+              sx={danger ? { bgcolor: 'error.main', '&:hover': { bgcolor: '#b91c1c' } } : undefined}
+            >
+              {busy ? 'Working…' : confirmLabel}
+            </Button>
+          </>
+        )}
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ── Formatting ───────────────────────────────────────────────────────────────
 export function relativeTime(iso) {
   if (!iso) return 'never'
