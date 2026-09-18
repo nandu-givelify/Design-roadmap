@@ -478,20 +478,30 @@ function AuthenticatedApp({ user }) {
             setActiveBoardId(migratedId)
           } else {
             // Brand-new user with no boards — auto-create their first one
-            // and greet them with the welcome dialog on top of it.
-            const ref = await createBoard({ name: 'Your New Board', ownerId: user.uid, ownerEmail: user.email })
-            const currentProfile = await getUserProfile(user.uid)
-            await addPerson(ref.id, {
-              name:  currentProfile?.name  || user.displayName || user.email.split('@')[0],
-              email: user.email,
-              photo: currentProfile?.photo || user.photoURL || null,
-              role:  null,
-            })
-            setBoardIdInUrl(ref.id)
-            setActiveBoardId(ref.id)
-            if (showWelcomeAsNewUser) {
-              setWelcomeIsNewUser(true)
-              setWelcomeOpen(true)
+            // and greet them with the welcome dialog on top of it. Any
+            // failure here (bad email, transient network/permission error)
+            // must not strand the user boardless forever, so it's caught
+            // below and the setup flag is released to allow a retry.
+            try {
+              const ref = await createBoard({ name: 'Your New Board', ownerId: user.uid, ownerEmail: user.email })
+              const currentProfile = await getUserProfile(user.uid)
+              await addPerson(ref.id, {
+                name:  currentProfile?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'You'),
+                email: user.email || null,
+                photo: currentProfile?.photo || user.photoURL || null,
+                role:  null,
+              })
+              setBoardIdInUrl(ref.id)
+              setActiveBoardId(ref.id)
+              if (showWelcomeAsNewUser) {
+                setWelcomeIsNewUser(true)
+                setWelcomeOpen(true)
+              }
+            } catch (err) {
+              console.error('[board setup] failed to create default board:', err)
+              boardSetupStarted.current = false
+              if (showWelcomeAsNewUser) welcomeShownRef.current = false
+              setDbError(err.code === 'permission-denied' ? 'permission-denied' : err.message)
             }
           }
         } finally {
