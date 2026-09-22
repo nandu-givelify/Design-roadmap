@@ -21,14 +21,12 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import AddIcon from '@mui/icons-material/Add'
 import ShareIcon from '@mui/icons-material/IosShare'
 import { getAvatarColor } from '../utils/dateUtils'
-import { AddPersonDialog, ConfirmDialog } from './Modals'
+import { PROJECT_COLORS } from '../utils/colors'
+import { AddPersonDialog, ConfirmDialog, ColorSwatchPicker } from './Modals'
 import { useMountWhileOpen } from '../hooks/useMountWhileOpen'
 
 // ── Shared slide-up transition ────────────────────────────────────────────────
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
-
-// ── Phase colors palette ──────────────────────────────────────────────────────
-const PHASE_COLORS = ['#60A5FA','#FBBF24','#FB923C','#34D399','#A78BFA','#F87171','#4ADE80','#38BDF8']
 
 // Transparent 1×1 GIF — used as invisible drag image for phase reordering
 const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
@@ -36,11 +34,8 @@ const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAA
 // ── Add / Edit phase dialog (stacked) ─────────────────────────────────────────
 function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete }) {
   const isEditing = Boolean(phase)
-  const usedColors = (existingPhases || []).filter(p => p.id !== phase?.id).map(p => p.color)
-  const defaultColor = PHASE_COLORS.find(c => !usedColors.includes(c)) || PHASE_COLORS[0]
 
   const [name,     setName]     = useState(phase?.name  || '')
-  const [color,    setColor]    = useState(phase?.color  || defaultColor)
   const [optional, setOptional] = useState(phase?.optional || false)
 
   // Reset whenever the dialog (re)opens — it's kept mounted across opens
@@ -51,7 +46,6 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
   useEffect(() => {
     if (!open) return
     setName(phase?.name || '')
-    setColor(phase?.color || defaultColor)
     setOptional(phase?.optional || false)
   }, [open, phase?.id]) // eslint-disable-line
 
@@ -62,7 +56,7 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
     const id = isEditing
       ? phase.id
       : name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    onSave({ id, name: name.trim(), color, optional })
+    onSave({ id, name: name.trim(), optional })
     handleClose()
   }
 
@@ -85,20 +79,6 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
             value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
           />
-
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Color</Typography>
-            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-              {PHASE_COLORS.map(c => (
-                <Box key={c} onClick={() => setColor(c)} sx={{
-                  width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer',
-                  border: color === c ? '3px solid #111827' : '2px solid transparent',
-                  transition: 'border 0.12s, transform 0.1s',
-                  '&:hover': { transform: 'scale(1.15)' },
-                }} />
-              ))}
-            </Box>
-          </Box>
 
           <FormControlLabel
             control={
@@ -130,6 +110,75 @@ function PhaseDialog({ open, onClose, existingPhases, phase, onSave, onDelete })
         <Button onClick={handleClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={!name.trim()}>
           {isEditing ? 'Save' : 'Add phase'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ── Add / Edit project dialog (stacked) ───────────────────────────────────────
+function ProjectDialog({ open, onClose, existingProjects, project, onSave, onDelete }) {
+  const isEditing = Boolean(project)
+  const usedColors = (existingProjects || []).filter(p => p.id !== project?.id).map(p => p.color)
+  const defaultColor = PROJECT_COLORS.find(c => !usedColors.includes(c)) || PROJECT_COLORS[0]
+
+  const [name,  setName]  = useState(project?.name  || '')
+  const [color, setColor] = useState(project?.color || defaultColor)
+
+  // See PhaseDialog above for why this resets on every open rather than only
+  // on an id change — "Add project" always has `project === null`.
+  useEffect(() => {
+    if (!open) return
+    setName(project?.name || '')
+    setColor(project?.color || defaultColor)
+  }, [open, project?.id]) // eslint-disable-line
+
+  const handleClose = () => { onClose() }
+
+  const handleSave = () => {
+    if (!name.trim()) return
+    const id = isEditing
+      ? project.id
+      : name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `p${Date.now()}`
+    onSave({ id, name: name.trim(), color })
+    handleClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+    >
+      <DialogTitle sx={{ pr: 5 }}>
+        {isEditing ? 'Edit project' : 'Add project'}
+        <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Stack spacing={2}>
+          <TextField
+            label="Project name" size="small" fullWidth autoFocus
+            value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
+          />
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Color</Typography>
+            <ColorSwatchPicker colors={PROJECT_COLORS} value={color} onChange={setColor} />
+          </Box>
+        </Stack>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        {isEditing && onDelete && (
+          <Button color="error" onClick={() => { onDelete(project.id); handleClose() }}>Delete</Button>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!name.trim()}>
+          {isEditing ? 'Save' : 'Add project'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -175,6 +224,7 @@ function RenameBoardDialog({ open, board, onSave, onClose }) {
 export default function Settings({
   open = true, onClose, boardId, people, roles,
   boardPhases, onUpdateBoardPhases,
+  boardProjects, onUpdateBoardProjects,
   onUpdatePerson, onDeletePerson, onAddPerson, onAddRole,
   isOwner, canEdit, recentPeople = [],
   board, onRenameBoard, onDeleteBoard, onShare,
@@ -183,6 +233,8 @@ export default function Settings({
   const [personDialogOpen, setPersonDialogOpen] = useState(false)
   const [phaseDialogOpen,  setPhaseDialogOpen]  = useState(false)
   const [editingPhase,     setEditingPhase]     = useState(null)  // phase object | null
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const [editingProject,    setEditingProject]    = useState(null)  // project object | null
   const [showRename,       setShowRename]       = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [draggedPhaseId,  setDraggedPhaseId]  = useState(null)
@@ -215,6 +267,24 @@ export default function Settings({
 
   const handleDeletePhase = (phaseId) => {
     onUpdateBoardPhases((boardPhases || []).filter(p => p.id !== phaseId))
+  }
+
+  const openAddProject  = () => { setEditingProject(null); setProjectDialogOpen(true) }
+  const openEditProject = (project) => { setEditingProject(project); setProjectDialogOpen(true) }
+
+  const handleProjectSave = (newProject) => {
+    const current = boardProjects || []
+    if (editingProject) {
+      onUpdateBoardProjects(current.map(p => p.id === newProject.id ? newProject : p))
+    } else {
+      onUpdateBoardProjects([...current, newProject])
+    }
+    setProjectDialogOpen(false)
+    setEditingProject(null)
+  }
+
+  const handleDeleteProject = (projectId) => {
+    onUpdateBoardProjects((boardProjects || []).filter(p => p.id !== projectId))
   }
 
   // Disabling a phase just hides it from the picker on new/edited tasks —
@@ -325,6 +395,38 @@ export default function Settings({
 
             <Divider sx={{ mx: 2 }} />
 
+            {/* ── Projects ── */}
+            <Box sx={{ px: 2.5, py: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">Projects</Typography>
+                {canEdit && (
+                  <Button size="small" startIcon={<AddIcon />} onClick={openAddProject}>Add project</Button>
+                )}
+              </Box>
+
+              {(boardProjects || []).map(project => (
+                <Box
+                  key={project.id}
+                  onClick={canEdit ? () => openEditProject(project) : undefined}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 12px',
+                    borderRadius: 2, cursor: canEdit ? 'pointer' : 'default',
+                    '&:hover': canEdit ? { background: '#f3f4f6' } : {},
+                  }}
+                >
+                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
+                  <Typography variant="body2" sx={{ flex: 1 }}>{project.name}</Typography>
+                  {canEdit && <ChevronRightIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />}
+                </Box>
+              ))}
+
+              {(boardProjects || []).length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>No projects yet.</Typography>
+              )}
+            </Box>
+
+            <Divider sx={{ mx: 2 }} />
+
             {/* ── Phases ── */}
             <Box sx={{ px: 2.5, py: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -355,12 +457,11 @@ export default function Settings({
                     cursor: canEdit ? 'pointer' : 'default',
                     '&:hover': canEdit ? { background: '#f3f4f6' } : {},
                   }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: phase.color, flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ flex: 1 }}>{phase.name}</Typography>
                     {phase.optional && (
                       <Typography variant="caption" sx={{
                         px: 0.75, py: 0.25, borderRadius: 1,
-                        background: `${phase.color}22`, color: phase.color,
+                        background: '#f3f4f6', color: 'text.secondary',
                         fontWeight: 600, fontSize: 10, letterSpacing: 0.3, flexShrink: 0,
                       }}>
                         optional
@@ -441,6 +542,16 @@ export default function Settings({
         phase={editingPhase}
         onSave={handlePhaseSave}
         onDelete={handleDeletePhase}
+      />
+
+      {/* ── Stacked: add / edit project ── */}
+      <ProjectDialog
+        open={projectDialogOpen}
+        onClose={() => { setProjectDialogOpen(false); setEditingProject(null) }}
+        existingProjects={boardProjects || []}
+        project={editingProject}
+        onSave={handleProjectSave}
+        onDelete={handleDeleteProject}
       />
 
       {/* ── Stacked: rename board ── */}

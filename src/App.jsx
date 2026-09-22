@@ -131,10 +131,14 @@ function PublicBoardView({ boardId }) {
 
   const canEdit   = board.publicAccess === 'edit'
   const boardPhases = board.boardPhases || DEFAULT_BOARD_PHASES
+  const boardProjects = board.boardProjects || []
 
   const handleUpdateTask = canEdit ? (id, data) => updateTask(boardId, id, data) : () => {}
   const handleDeleteTask = canEdit ? (id)       => deleteTask(boardId, id)        : () => {}
   const handleAddTask    = canEdit ? async (data) => { await addTask(boardId, data) } : () => {}
+  const handleDuplicateTask = canEdit
+    ? (task) => { const { id, ...rest } = task; return handleAddTask({ ...rest, title: `${rest.title} (copy)` }) }
+    : () => {}
   const handleCreatePerson = canEdit
     ? async (data) => { const ref = await addPerson(boardId, data); return ref.id }
     : () => {}
@@ -146,6 +150,13 @@ function PublicBoardView({ boardId }) {
         const roles = board.roles || ['Designer', 'PM', 'Dev']
         if (roles.includes(role)) return
         await updateBoard(boardId, { roles: [...roles, role] })
+      }
+    : () => {}
+  const handleCreateProject = canEdit
+    ? async (data) => {
+        const id = `${data.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}-${Date.now().toString(36)}`
+        await updateBoard(boardId, { boardProjects: [...boardProjects, { id, name: data.name, color: data.color }] })
+        return id
       }
     : () => {}
 
@@ -179,7 +190,9 @@ function PublicBoardView({ boardId }) {
           onDeleteTask={handleDeleteTask}
           onAddTaskForPerson={canEdit ? (assigneeId, startDate) => setModal({ type: 'task', assigneeId, startDate }) : () => {}}
           onEditTask={canEdit ? (task) => setEditingTask(task) : () => {}}
+          onDuplicateTask={handleDuplicateTask}
           boardPhases={boardPhases}
+          projects={boardProjects}
           readOnly={!canEdit}
         />
 
@@ -191,6 +204,8 @@ function PublicBoardView({ boardId }) {
             people={people}
             roles={board.roles || ['Designer', 'PM', 'Dev']}
             boardPhases={boardPhases}
+            projects={boardProjects}
+            onCreateProject={handleCreateProject}
             defaultAssigneeId={modal?.assigneeId}
             defaultStartDate={modal?.startDate}
             onCreatePerson={handleCreatePerson}
@@ -208,6 +223,8 @@ function PublicBoardView({ boardId }) {
             people={people}
             roles={board.roles || ['Designer', 'PM', 'Dev']}
             boardPhases={boardPhases}
+            projects={boardProjects}
+            onCreateProject={handleCreateProject}
             onCreatePerson={handleCreatePerson}
             onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
@@ -555,6 +572,7 @@ function AuthenticatedApp({ user }) {
   const activeBoard = ownBoard || (fetchedBoard || null)
   const boardRoles  = activeBoard?.roles || ['Designer', 'PM', 'Dev']
   const boardPhases = activeBoard?.boardPhases || DEFAULT_BOARD_PHASES
+  const boardProjects = activeBoard?.boardProjects || []
   const personOrder = activeBoard?.personOrder || []
 
   // ── Enrich people: overlay logged-in user's photo/name from userProfile ──────
@@ -930,6 +948,11 @@ function AuthenticatedApp({ user }) {
     return ref
   }, [activeBoardId, pushHistory])
 
+  const handleDuplicateTask = useCallback((task) => {
+    const { id, ...rest } = task
+    return handleAddTask({ ...rest, title: `${rest.title} (copy)` })
+  }, [handleAddTask])
+
   const handleUpdateTask = useCallback(async (id, data) => {
     if (!activeBoardId) return
     const prevTask = tasks.find(t => t.id === id)
@@ -986,6 +1009,23 @@ function AuthenticatedApp({ user }) {
     if (!activeBoardId) return
     await updateBoard(activeBoardId, { boardPhases: newPhases })
   }, [activeBoardId])
+
+  // ── Board projects management ────────────────────────────────────────────
+  const handleUpdateBoardProjects = useCallback(async (newProjects) => {
+    if (!activeBoardId) return
+    await updateBoard(activeBoardId, { boardProjects: newProjects })
+  }, [activeBoardId])
+
+  // Inline "+ Add new project…" from the task dialog — appends to the
+  // board's project list and hands back the new id so it can be selected
+  // into the task being edited without closing that dialog.
+  const handleCreateProject = useCallback(async (data) => {
+    if (!activeBoardId) return null
+    const id = `${data.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}-${Date.now().toString(36)}`
+    const current = activeBoard?.boardProjects || []
+    await updateBoard(activeBoardId, { boardProjects: [...current, { id, name: data.name, color: data.color }] })
+    return id
+  }, [activeBoardId, activeBoard])
 
   // ── Person row order (grouped timeline view) — shared per board, like phases ──
   const handleReorderPeople = useCallback(async (newOrderIds) => {
@@ -1061,7 +1101,7 @@ function AuthenticatedApp({ user }) {
       const handoffIdx = phases.findIndex(p => p.id === 'handoff')
       const newPhases = [
         ...phases.slice(0, handoffIdx),
-        { id: 'usertesting', name: 'User testing', color: '#A78BFA', optional: true },
+        { id: 'usertesting', name: 'User testing', optional: true },
         ...phases.slice(handoffIdx),
       ]
       updateBoard(board.id, { boardPhases: newPhases })
@@ -1179,7 +1219,9 @@ function AuthenticatedApp({ user }) {
             setModal('task')
           }}
           onEditTask={(task) => setEditingTask(task)}
+          onDuplicateTask={handleDuplicateTask}
           boardPhases={boardPhases}
+          projects={boardProjects}
           readOnly={readOnly}
           loading={!tasksLoaded}
           personColWidth={isMobile && groupBy !== 'none' ? 52 : undefined}
@@ -1197,6 +1239,8 @@ function AuthenticatedApp({ user }) {
             people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
+            projects={boardProjects}
+            onCreateProject={handleCreateProject}
             defaultAssigneeId={defaultAssigneeId}
             defaultStartDate={defaultStartDate}
             onCreatePerson={handleCreatePerson}
@@ -1217,6 +1261,8 @@ function AuthenticatedApp({ user }) {
             people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
+            projects={boardProjects}
+            onCreateProject={handleCreateProject}
             onCreatePerson={handleCreatePerson}
             onCreatePersonWithId={handleCreatePersonWithId}
             onAddRole={handleAddRole}
@@ -1245,11 +1291,13 @@ function AuthenticatedApp({ user }) {
             people={enrichedPeople}
             roles={boardRoles}
             boardPhases={boardPhases}
+            boardProjects={boardProjects}
             onUpdatePerson={handleUpdatePerson}
             onDeletePerson={(id) => deletePerson(activeBoardId, id)}
             onAddPerson={(data) => addPerson(activeBoardId, data)}
             onAddRole={handleAddRole}
             onUpdateBoardPhases={handleUpdateBoardPhases}
+            onUpdateBoardProjects={handleUpdateBoardProjects}
             isOwner={isOwner}
             canEdit={canEdit}
             recentPeople={recentPeople}

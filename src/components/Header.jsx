@@ -76,8 +76,7 @@ export default function Header({
   const activeFilters = filterPersonIds.length
   const navLabel = viewMode === 'year' ? `${year}` : `Q${quarter} ${year}`
 
-  const uniqueRoles = [...new Set(people.map(p => p.role).filter(Boolean))]
-  const groupOptions = ['none', ...uniqueRoles]
+  const groupOptions = ['none', 'assignee']
 
   return (
     <header className="header">
@@ -196,14 +195,14 @@ export default function Header({
                 {groupOptions.map(opt => (
                   <label key={opt} className="filter-row" style={{ cursor: 'pointer' }}>
                     <input type="radio" name="groupby" checked={groupBy === opt} onChange={() => setGroupBy(opt)} style={{ accentColor: '#111827' }} />
-                    <span className="filter-row__label">{opt === 'none' ? 'None' : opt}</span>
+                    <span className="filter-row__label">{opt === 'none' ? 'None' : 'By assignee'}</span>
                   </label>
                 ))}
 
                 <Box className="header__filter-divider" />
 
-                {/* People */}
-                <Typography variant="subtitle2" className="header__filter-section-title">People</Typography>
+                {/* Assignee */}
+                <Typography variant="subtitle2" className="header__filter-section-title">Assignee</Typography>
                 {(() => {
                   const roleOrder = []
                   const byRole = {}

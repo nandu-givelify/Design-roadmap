@@ -322,6 +322,27 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
 }
 .task-bar__avatar img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Project name badge — solid project color reads well against the bar's
+   own pastel tint of that same color. Text color is set inline per-badge
+   (readableTextColor in utils/colors.js), since a fixed color can't stay
+   legible across every project color a board might use. */
+.task-bar__project-badges {
+  display: flex; align-items: center; gap: 3px; flex-shrink: 0;
+  margin-right: 6px; pointer-events: none;
+}
+.task-bar__project-badge {
+  font-size: 11px; font-weight: 700; line-height: 1.5;
+  padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+  max-width: 90px; overflow: hidden; text-overflow: ellipsis;
+  display: inline-block;
+}
+/* Hidden twin of the badge above, used only to measure its rendered width
+   (see task-bar__title-measure) — same classes/text/font so offsetWidth
+   matches exactly, including the max-width/ellipsis clamp. */
+.task-bar__project-badge-measure {
+  position: absolute; top: 0; left: -9999px; visibility: hidden; pointer-events: none;
+}
+
 /* Title inside bar — single line with ellipsis */
 .task-bar__title {
   font-size: 12px; font-weight: 500; color: #111827;

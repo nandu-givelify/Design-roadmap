@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography'
 import InputAdornment from '@mui/material/InputAdornment'
 import CloseIcon from '@mui/icons-material/Close'
 import { toDateString, nextWorkday, isWeekend, addDays, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
+import { PROJECT_COLORS } from '../utils/colors'
 
 const SlideUp = forwardRef((props, ref) => <Slide direction="up" ref={ref} {...props} />)
 
@@ -140,6 +141,113 @@ export function RoleField({ label = 'Role', value, onChange, roles, size = 'smal
       onInputChange={(e, newValue) => onChange(newValue)}
       renderInput={(params) => <TextField {...params} label={label} autoFocus={autoFocus} />}
     />
+  )
+}
+
+// ── Color swatch picker — shared by the Settings "edit project" dialog and    ─
+// the inline "add new project" dialog reachable from the task modal. Presets
+// plus one trailing "custom" swatch backed by a native <input type="color">
+// (hidden, triggered via .click()) so any hex is reachable without a library.
+export function ColorSwatchPicker({ colors, value, onChange }) {
+  const customInputRef = useRef()
+  const isCustom = !!value && !colors.includes(value)
+
+  return (
+    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+      {colors.map(c => (
+        <Box key={c} onClick={() => onChange(c)} sx={{
+          width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer',
+          border: value === c ? '3px solid #111827' : '2px solid transparent',
+          transition: 'border 0.12s, transform 0.1s',
+          '&:hover': { transform: 'scale(1.15)' },
+        }} />
+      ))}
+
+      <Box
+        onClick={() => customInputRef.current?.click()}
+        title="Custom color"
+        sx={{
+          width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: isCustom ? value : '#fff',
+          border: isCustom ? '3px solid #111827' : '2px dashed #9ca3af',
+          transition: 'border 0.12s, transform 0.1s',
+          fontSize: 15, fontWeight: 700, lineHeight: 1, color: '#6b7280',
+          '&:hover': { transform: 'scale(1.15)' },
+        }}
+      >
+        {!isCustom && '+'}
+      </Box>
+      <input
+        ref={customInputRef}
+        type="color"
+        value={isCustom ? value : '#000000'}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+      />
+    </Box>
+  )
+}
+
+// Next unused color from the preset palette, so each new project defaults to
+// something visually distinct from the ones already on the board.
+function nextProjectColor(existingProjects) {
+  const used = (existingProjects || []).map(p => p.color)
+  return PROJECT_COLORS.find(c => !used.includes(c)) || PROJECT_COLORS[(existingProjects || []).length % PROJECT_COLORS.length]
+}
+
+// ── Add project dialog (shared by Board settings and the inline "+ Add new    ─
+// project…" row in the task modal's project combobox) ────────────────────────
+export function AddProjectDialog({ open, onClose, existingProjects, initialName = '', onSave }) {
+  const [name,   setName]   = useState(initialName)
+  const [color,  setColor]  = useState(() => nextProjectColor(existingProjects))
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) { setName(initialName || ''); setColor(nextProjectColor(existingProjects)) }
+  }, [open]) // eslint-disable-line
+
+  const handleClose = () => { setName(''); onClose() }
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    await onSave({ name: name.trim(), color })
+    setSaving(false)
+    handleClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose}
+      slots={{ transition: SlideUp }}
+      transitionDuration={{ enter: 300, exit: 220 }}
+    >
+      <DialogTitle sx={{ pr: 5 }}>
+        Add project
+        <IconButton size="small" onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Stack spacing={2}>
+          <TextField
+            label="Project name" size="small" fullWidth autoFocus={!initialName}
+            value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
+          />
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Color</Typography>
+            <ColorSwatchPicker colors={PROJECT_COLORS} value={color} onChange={setColor} />
+          </Box>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving || !name.trim()}>
+          {saving ? 'Saving…' : 'Add project'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -447,8 +555,13 @@ function PersonCombobox({ value, onChange, options, recentPeople, label, placeho
 
   const selected = options.find((o) => o.id === value)
 
-  // Sync input with selection (only when value changes from outside)
-  useEffect(() => { setInputValue(selected?.name || '') }, [value]) // eslint-disable-line
+  // Sync input with selection (only when value changes from outside, or when
+  // the matching person's data — e.g. their name — finishes loading; without
+  // the second dependency, opening this dialog before `options` has loaded
+  // leaves the input text stuck empty forever even once the person arrives,
+  // since `value` itself never changes. The avatar doesn't have this problem
+  // because it's read fresh from `selected` on every render, not cached.
+  useEffect(() => { setInputValue(selected?.name || '') }, [value, selected?.name]) // eslint-disable-line
 
   // Close on outside click
   useEffect(() => {
@@ -663,8 +776,165 @@ function PersonCombobox({ value, onChange, options, recentPeople, label, placeho
   )
 }
 
+// ── Project combobox — same search/select/"add new" pattern as PersonCombobox,
+// simplified: projects are board-scoped only, so there's no cross-board
+// "known suggestions" list and only one creation path — a task has exactly
+// one project, same as it has one assignee and one PM, so this mirrors
+// PersonCombobox's single-select shape (dot in the field, closes on pick).
+function ProjectCombobox({ value, onChange, options, label = 'Project', placeholder, onCreateProject }) {
+  const [open,                setOpen]                = useState(false)
+  const [inputValue,          setInputValue]          = useState('')
+  const [focusedIdx,          setFocusedIdx]          = useState(-1)
+  const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false)
+  const wrapRef = useRef()
+  const itemRefs = useRef([])
+
+  const selected = options.find((o) => o.id === value)
+
+  // See the identical comment in PersonCombobox above — resyncing on
+  // `selected?.name` too (not just `value`) avoids a stuck-empty input when
+  // this opens before the project list has finished loading.
+  useEffect(() => { setInputValue(selected?.name || '') }, [value, selected?.name]) // eslint-disable-line
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (addProjectDialogOpen) return
+      const path = e.composedPath ? e.composedPath() : []
+      const isOutside = wrapRef.current && !path.includes(wrapRef.current)
+      if (isOutside) {
+        setOpen(false)
+        setInputValue(selected?.name || '')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [selected, addProjectDialogOpen])
+
+  useEffect(() => {
+    if (focusedIdx >= 0) itemRefs.current[focusedIdx]?.scrollIntoView({ block: 'nearest' })
+  }, [focusedIdx]) // eslint-disable-line
+
+  const isTyping = !selected || inputValue !== selected.name
+  const filtered = isTyping && inputValue
+    ? options.filter(o => o.name?.toLowerCase().includes(inputValue.toLowerCase()))
+    : options
+
+  const addNewIdx = filtered.length
+  const effectiveFocusedIdx = focusedIdx === -1 && filtered.length === 0 ? addNewIdx : focusedIdx
+
+  const selectItem = (item) => {
+    onChange(item.id); setInputValue(item.name || ''); setOpen(false); setFocusedIdx(-1)
+  }
+
+  return (
+    <Box ref={wrapRef} sx={{ position: 'relative' }}>
+      <TextField
+        label={label}
+        size="small"
+        fullWidth
+        value={inputValue}
+        placeholder={!selected ? placeholder : undefined}
+        onChange={(e) => {
+          const v = e.target.value
+          setInputValue(v)
+          setOpen(true)
+          setFocusedIdx(-1)
+          if (value) onChange(null)
+        }}
+        onFocus={() => { if (!selected) setOpen(true) }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setOpen(true)
+            setFocusedIdx(i => Math.min((i === -1 ? -1 : i) + 1, addNewIdx))
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setFocusedIdx(i => Math.max(i - 1, 0))
+          } else if (e.key === 'Enter') {
+            if (effectiveFocusedIdx === addNewIdx) {
+              e.preventDefault()
+              setOpen(false); setAddProjectDialogOpen(true)
+            } else if (effectiveFocusedIdx >= 0 && filtered[effectiveFocusedIdx]) {
+              e.preventDefault()
+              selectItem(filtered[effectiveFocusedIdx])
+            }
+          } else if (e.key === 'Escape') {
+            setOpen(false); setFocusedIdx(-1)
+          }
+        }}
+        slotProps={{
+          input: {
+            startAdornment: selected && (
+              <InputAdornment position="start" sx={{ mr: '4px' }}>
+                <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: selected.color, flexShrink: 0 }} />
+              </InputAdornment>
+            ),
+            endAdornment: selected && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  sx={{ width: 22, height: 22, '& .MuiSvgIcon-root': { fontSize: '14px !important' } }}
+                  onMouseDown={e => { e.preventDefault(); onChange(null); setInputValue(''); setOpen(false) }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }
+        }}
+      />
+
+      {open && (
+        <Box sx={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1300,
+          background: '#fff', border: '1px solid', borderColor: 'divider',
+          borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          maxHeight: 240, overflowY: 'auto', mt: 0.5,
+        }}>
+          {filtered.map((item, idx) => (
+            <Box key={item.id}
+              ref={el => { itemRefs.current[idx] = el }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.5, p: '8px 12px',
+                cursor: 'pointer',
+                background: effectiveFocusedIdx === idx ? '#f3f4f6' : 'transparent',
+                '&:hover': { background: '#f3f4f6' },
+              }} onMouseDown={e => { e.preventDefault(); selectItem(item) }}>
+              <Box sx={{ width: 12, height: 12, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+              <Typography component="div" variant="body2" sx={{ lineHeight: 1.2 }}>{item.name}</Typography>
+            </Box>
+          ))}
+          <Box
+            ref={el => { itemRefs.current[addNewIdx] = el }}
+            sx={{
+              p: '8px 12px', cursor: 'pointer', color: 'primary.main', fontSize: 13,
+              background: effectiveFocusedIdx === addNewIdx ? '#f3f4f6' : 'transparent',
+              '&:hover': { background: '#f3f4f6' },
+            }}
+            onMouseDown={e => { e.preventDefault(); setOpen(false); setAddProjectDialogOpen(true) }}>
+            + Add new project…
+          </Box>
+        </Box>
+      )}
+
+      <AddProjectDialog
+        open={addProjectDialogOpen}
+        onClose={() => setAddProjectDialogOpen(false)}
+        existingProjects={options}
+        initialName={inputValue}
+        onSave={async (data) => {
+          const id = await onCreateProject(data)
+          onChange(id)
+          setInputValue(data.name)
+          setOpen(false)
+        }}
+      />
+    </Box>
+  )
+}
+
 // ── Task fields ───────────────────────────────────────────────────────────────
-function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWithId, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases, recentPeople }) {
+function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWithId, onAddRole, onStartDateChange, onEndDateChange, onTitleEnter, boardPhases, recentPeople, projects, onCreateProject }) {
   const pmPeople = people.filter(p => p.role === 'PM')
 
   return (
@@ -706,6 +976,14 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
         roles={roles}
       />
 
+      <ProjectCombobox
+        value={form.projectId}
+        onChange={(v) => set('projectId', v)}
+        options={projects || []}
+        placeholder="Search or add…"
+        onCreateProject={onCreateProject}
+      />
+
       <DateRangeInput
         start={form.startDate}
         end={form.endDate}
@@ -741,8 +1019,8 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
                       display: 'flex', alignItems: 'center', gap: 0.75,
                       px: 1.25, py: 0.5, borderRadius: 1.5, cursor: 'pointer',
                       border: '1.5px solid',
-                      borderColor: isActive ? bp.color : 'divider',
-                      background: isActive ? `${bp.color}18` : 'transparent',
+                      borderColor: isActive ? '#111827' : 'divider',
+                      background: isActive ? '#11182714' : 'transparent',
                       transition: 'all 0.12s',
                     }}
                   >
@@ -758,7 +1036,6 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
                       }
                       set('phases', newPhases)
                     }} />
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: bp.color, flexShrink: 0 }} />
                     <Typography variant="caption" sx={{ fontWeight: isActive ? 600 : 400 }}>{bp.name}</Typography>
                   </Box>
                 )
@@ -767,34 +1044,12 @@ function TaskFields({ form, set, people, roles, onCreatePerson, onCreatePersonWi
           </Box>
         )
       })()}
-
-      <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Color</Typography>
-        <Stack direction="row" spacing={1}>
-          {[
-            { value: 'white', label: 'White', hex: '#ffffff' },
-            { value: 'gray',  label: 'Gray',  hex: '#eeeeee' },
-          ].map(c => (
-            <Box
-              key={c.value}
-              onClick={() => set('taskColor', c.value)}
-              sx={{
-                width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
-                background: c.hex,
-                border: (form.taskColor || 'white') === c.value ? '3px solid #111827' : '2px solid #d1d5db',
-                transition: 'border 0.12s',
-              }}
-              title={c.label}
-            />
-          ))}
-        </Stack>
-      </Box>
     </Stack>
   )
 }
 
 // ── Add Task Modal ────────────────────────────────────────────────────────────
-export function TaskModal({ open = true, onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople }) {
+export function TaskModal({ open = true, onClose, onSave, people, roles, boardPhases, defaultAssigneeId, defaultStartDate, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople, projects, onCreateProject }) {
   const today     = new Date()
   const baseStart = defaultStartDate ? parseLocalDate(defaultStartDate) : today
   const startDate = isWeekend(baseStart) ? nextWorkday(baseStart) : baseStart
@@ -804,7 +1059,7 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
   const defaultPhases = smartDefaultPhases(boardPhases || [], totalDays)
 
   const [form, setForm] = useState({
-    title: '', assigneeId: defaultAssigneeId || '', pmId: '',
+    title: '', assigneeId: defaultAssigneeId || '', pmId: '', projectId: '',
     startDate: toDateString(startDate), endDate: toDateString(endDate),
     taskColor: 'white', phases: defaultPhases,
   })
@@ -818,7 +1073,7 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
   useEffect(() => {
     if (!open) return
     setForm({
-      title: '', assigneeId: defaultAssigneeId || '', pmId: '',
+      title: '', assigneeId: defaultAssigneeId || '', pmId: '', projectId: '',
       startDate: toDateString(startDate), endDate: toDateString(endDate),
       taskColor: 'white', phases: defaultPhases,
     })
@@ -832,7 +1087,7 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, projectId: form.projectId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
     onClose()
   }
 
@@ -850,6 +1105,7 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
           onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} recentPeople={recentPeople}
+          projects={projects} onCreateProject={onCreateProject}
           onStartDateChange={handleStartDateChange}
           onEndDateChange={(v) => { setEndDateTouched(true); set('endDate', v) }}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
@@ -864,12 +1120,13 @@ export function TaskModal({ open = true, onClose, onSave, people, roles, boardPh
 }
 
 // ── Edit Task Modal ───────────────────────────────────────────────────────────
-export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople }) {
+export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, people, roles, boardPhases, onCreatePerson, onCreatePersonWithId, onAddRole, recentPeople, projects, onCreateProject }) {
   task = task || {}
   const [form, setForm] = useState({
     title:      task.title      || '',
     assigneeId: task.assigneeId || '',
     pmId:       task.pmId       || task.teamId || '',
+    projectId:  task.projectId  || '',
     startDate:  task.startDate  || '',
     endDate:    task.endDate    || '',
     taskColor:  task.taskColor  || 'white',
@@ -888,6 +1145,7 @@ export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, pe
       title:      task.title      || '',
       assigneeId: task.assigneeId || '',
       pmId:       task.pmId       || task.teamId || '',
+      projectId:  task.projectId  || '',
       startDate:  task.startDate  || '',
       endDate:    task.endDate    || '',
       taskColor:  task.taskColor  || 'white',
@@ -897,7 +1155,7 @@ export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, pe
 
   const handleSave = () => {
     if (!form.title.trim()) return
-    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
+    onSave({ ...form, assigneeId: form.assigneeId || null, pmId: form.pmId || null, projectId: form.projectId || null, taskColor: form.taskColor || 'white', phases: form.phases || [] })
     onClose()
   }
 
@@ -915,6 +1173,7 @@ export function EditTaskModal({ open = true, task, onClose, onSave, onDelete, pe
         <TaskFields
           form={form} set={set} people={people} roles={roles} boardPhases={boardPhases}
           onCreatePerson={onCreatePerson} onCreatePersonWithId={onCreatePersonWithId} onAddRole={onAddRole} recentPeople={recentPeople}
+          projects={projects} onCreateProject={onCreateProject}
           onTitleEnter={() => { if (form.title.trim()) handleSave() }}
         />
       </DialogContent>

@@ -12,11 +12,11 @@ import {
 } from 'firebase/auth'
 
 export const DEFAULT_BOARD_PHASES = [
-  { id: 'discovery',   name: 'Discovery',    color: '#60A5FA' },
-  { id: 'ux',          name: 'UX',           color: '#FBBF24' },
-  { id: 'ui',          name: 'UI',           color: '#FB923C' },
-  { id: 'usertesting', name: 'User testing', color: '#A78BFA', optional: true },
-  { id: 'handoff',     name: 'Handoff',      color: '#34D399' },
+  { id: 'discovery',   name: 'Discovery' },
+  { id: 'ux',          name: 'UX' },
+  { id: 'ui',          name: 'UI' },
+  { id: 'usertesting', name: 'User testing', optional: true },
+  { id: 'handoff',     name: 'Handoff' },
 ]
 
 const firebaseConfig = {

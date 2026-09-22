@@ -1,5 +1,6 @@
 import { useRef, useState, useLayoutEffect, useEffect } from 'react'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
+import { pastelize, readableTextColor } from '../utils/colors'
 
 const BAR_H         = 42
 const PHASE_STRIP_H = 7    // 3px strip + 4px bottom gap = 7. Inner constrained to 42-7=35px, centering 24px avatar → 5.5px equal gaps.
@@ -9,7 +10,8 @@ export default function TaskBar({
   rowPaddingTop, laneHeight, laneGap,
   people,
   boardPhases,
-  onDelete, onResizeDone, onMoveDragStart, onEdit, onPhaseDragDone,
+  projects,
+  onDelete, onResizeDone, onMoveDragStart, onEdit, onPhaseDragDone, onDuplicate,
   isGhost, isSelected,
   readOnly,
 }) {
@@ -24,6 +26,7 @@ export default function TaskBar({
   const dragRef      = useRef(null)
   const phaseDragRef = useRef(null)
   const hiddenTitleRef = useRef(null)
+  const hiddenBadgeRef = useRef(null)
 
   const snapWorkday = (date, forward = true) =>
     !isWeekend(date) ? date : forward ? nextWorkday(date) : prevWorkday(date)
@@ -35,6 +38,7 @@ export default function TaskBar({
   const pmPerson     = people.find((p) => p.id === (task.pmId || task.teamId))
   const assigneeColor = assignee ? (getAvatarColor(assignee.name)) : '#9ca3af'
   const pmColor       = pmPerson ? (getAvatarColor(pmPerson.name)) : '#6366f1'
+  const project       = (projects || []).find((p) => p.id === task.projectId)
 
   const dispStart = visual ? visual.startDate : parseLocalDate(task.startDate)
   const dispEnd   = visual ? visual.endDate   : parseLocalDate(task.endDate)
@@ -67,9 +71,14 @@ export default function TaskBar({
     if (!hiddenTitleRef.current) return
     const naturalW = hiddenTitleRef.current.offsetWidth
     const avatarW  = (assignee ? 24 : 0) + (pmPerson ? 16 : 0) + ((assignee || pmPerson) ? 6 : 0)
-    const availW   = w - 8 - avatarW
+    // The project badge is measured the same way as the title (a hidden twin
+    // sharing its real class, so max-width/ellipsis clamp it identically) —
+    // without this, the badge could silently eat into the space the title
+    // math assumes is free, instead of the title correctly ceding to it.
+    const badgeW   = project && hiddenBadgeRef.current ? hiddenBadgeRef.current.offsetWidth + 6 : 0
+    const availW   = w - 8 - avatarW - badgeW
     setIsNarrow(availW < naturalW * 0.6)
-  }, [task.title, w, assignee, pmPerson]) // eslint-disable-line
+  }, [task.title, w, assignee, pmPerson, project]) // eslint-disable-line
 
   // ── Resize drag ──────────────────────────────────────────────────────────
   const startResize = (e, type) => {
@@ -136,7 +145,12 @@ export default function TaskBar({
 
   // ── Move drag ────────────────────────────────────────────────────────────
   const handleMoveDown = (e) => {
-    if (readOnly || isGhost) return
+    // Only the primary (left) button starts a move/click-to-edit — a right-
+    // click's mousedown would otherwise be picked up here too and, since it
+    // releases almost instantly in the same spot, get misread as a quick
+    // click that opens Edit Task before the native contextmenu event (which
+    // shows the right-click menu, including Duplicate) ever gets a chance to.
+    if (readOnly || isGhost || e.button !== 0) return
     e.preventDefault(); e.stopPropagation()
     if (onMoveDragStart && barRef.current) {
       onMoveDragStart(task, e, barRef.current.getBoundingClientRect())
@@ -195,7 +209,24 @@ export default function TaskBar({
     )
   }
 
-  const barBg = task.taskColor === 'gray' ? '#eeeeee' : '#fff'
+  // A task has exactly one project — its color tints the bar's own
+  // background, and its name shows as a small badge.
+  const barBg = project ? pastelize(project.color) : (task.taskColor === 'gray' ? '#eeeeee' : '#fff')
+
+  const renderProjectBadges = () => {
+    if (!project) return null
+    return (
+      <div className="task-bar__project-badges">
+        <span
+          className="task-bar__project-badge"
+          style={{ background: project.color, color: readableTextColor(project.color) }}
+          title={project.name}
+        >
+          {project.name}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -204,6 +235,11 @@ export default function TaskBar({
       style={{ left: x, top: barY, width: w, height: barH, background: barBg }}
     >
       <span ref={hiddenTitleRef} className="task-bar__title-measure">{task.title}</span>
+      {project && (
+        <span ref={hiddenBadgeRef} className="task-bar__project-badge task-bar__project-badge-measure">
+          {project.name}
+        </span>
+      )}
 
       {!readOnly && !isGhost && (
         <div className="task-bar__handle task-bar__handle--left" onMouseDown={(e) => startResize(e, 'left')}>
@@ -220,6 +256,7 @@ export default function TaskBar({
         onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
       >
         {!isNarrow && renderAvatars()}
+        {!isNarrow && renderProjectBadges()}
         {!isNarrow && <span className="task-bar__title">{task.title}</span>}
       </div>
 
@@ -243,6 +280,7 @@ export default function TaskBar({
       {isNarrow && (
         <div className="task-bar__outside-content" style={{ left: w + 5 }}>
           {renderAvatars()}
+          {renderProjectBadges()}
           <span className="task-bar__outside-title">{task.title}</span>
         </div>
       )}
@@ -277,6 +315,9 @@ export default function TaskBar({
             </div>
             {!readOnly && onEdit && (
               <button className="task-bar__menu-item" onClick={() => { setShowMenu(false); onEdit() }}>Edit task</button>
+            )}
+            {!readOnly && onDuplicate && (
+              <button className="task-bar__menu-item" onClick={() => { setShowMenu(false); onDuplicate() }}>Duplicate task</button>
             )}
             {!readOnly && (
               <button className="task-bar__menu-item task-bar__menu-item--delete"

@@ -28,10 +28,11 @@ const snapWeekday = (date, forward = true) => {
 const Timeline = forwardRef(function Timeline({
   viewMode, year, quarter,
   people, tasks,
-  groupBy,           // 'none' | role string like 'Designer' | 'PM' | 'Dev'
+  groupBy,           // 'none' | 'assignee' — grouped mode shows one row per person
   filterPersonIds,
-  onUpdateTask, onDeleteTask, onAddTaskForPerson, onEditTask,
+  onUpdateTask, onDeleteTask, onAddTaskForPerson, onEditTask, onDuplicateTask,
   boardPhases,
+  projects,
   readOnly,
   loading,
   personColWidth,    // optional override for person column width (e.g. 52 on mobile)
@@ -434,8 +435,8 @@ const Timeline = forwardRef(function Timeline({
     setBulkAssignOpen(null)
   }
 
-  const handleBulkSetColor = (color) => {
-    selectedTaskIds.forEach((id) => onUpdateTask(id, { taskColor: color }))
+  const handleBulkAssignProject = (projectId) => {
+    selectedTaskIds.forEach((id) => onUpdateTask(id, { projectId }))
     setBulkAssignOpen(null)
   }
 
@@ -445,15 +446,15 @@ const Timeline = forwardRef(function Timeline({
     visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   }
 
-  // When grouping by a role, only show people of that role — ordered by the
-  // board's saved personOrder when present, with anyone not yet in it
-  // (e.g. just added) kept in their natural order at the end.
+  // When grouping by assignee, every visible person gets their own row
+  // (not restricted to a single role) — ordered by the board's saved
+  // personOrder when present, with anyone not yet in it (e.g. just added)
+  // kept in their natural order at the end.
   const groupedPeople = groupBy !== 'none'
     ? (() => {
-        const filtered = visiblePeople.filter((p) => p.role === groupBy)
-        if (!personOrder || personOrder.length === 0) return filtered
+        if (!personOrder || personOrder.length === 0) return visiblePeople
         const rank = new Map(personOrder.map((id, i) => [id, i]))
-        return [...filtered].sort((a, b) => {
+        return [...visiblePeople].sort((a, b) => {
           const ra = rank.has(a.id) ? rank.get(a.id) : Infinity
           const rb = rank.has(b.id) ? rank.get(b.id) : Infinity
           return ra - rb
@@ -466,14 +467,15 @@ const Timeline = forwardRef(function Timeline({
     ? tasks.filter((t) => filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId))
     : tasks
 
-  // Unassigned tasks (for grouped mode) — depends on what field we're grouping by
+  // A task belongs to a person's row if they're either the assignee or the
+  // PM on it — a person can appear on both a designer/dev's row and a PM's
+  // row for the same task. "Unassigned" means neither field matches anyone
+  // currently shown.
+  const taskMatchesPerson = (t, personId) =>
+    t.assigneeId === personId || (t.pmId || t.teamId) === personId
+
   const unassignedTasks = groupBy !== 'none'
-    ? groupBy === 'PM'
-      ? filteredTasks.filter((t) => {
-          const pmId = t.pmId || t.teamId
-          return !pmId || !groupedPeople.find((p) => p.id === pmId)
-        })
-      : filteredTasks.filter((t) => !t.assigneeId || !groupedPeople.find((p) => p.id === t.assigneeId))
+    ? filteredTasks.filter((t) => !groupedPeople.some((p) => taskMatchesPerson(t, p.id)))
     : []
 
   const monthGroups = groupDaysByMonth(allDays)
@@ -524,10 +526,12 @@ const Timeline = forwardRef(function Timeline({
               laneGap={LANE_GAP}
               people={people}
               boardPhases={boardPhases}
+              projects={projects}
               onDelete={() => onDeleteTask(task.id)}
               onResizeDone={(updates) => onUpdateTask(task.id, updates)}
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
+              onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
@@ -558,14 +562,14 @@ const Timeline = forwardRef(function Timeline({
   const handlePersonDrop = (e, targetId) => {
     e.preventDefault()
     if (!draggedPersonId || draggedPersonId === targetId || !onReorderPeople) { resetPersonDrag(); return }
-    // Reorder just within the currently-visible (same-role) group first...
+    // Reorder just within the currently-visible group first...
     const groupIds = groupedPeople.map(p => p.id)
     const newGroupIds = groupIds.filter(id => id !== draggedPersonId)
     const targetIdx = newGroupIds.indexOf(targetId)
     newGroupIds.splice(personDragPos === 'after' ? targetIdx + 1 : targetIdx, 0, draggedPersonId)
     // ...then merge that back into the board-wide order, preserving every
-    // other person's existing relative position (personOrder spans every
-    // role, not just the one currently grouped by).
+    // other person's existing relative position (personOrder spans everyone,
+    // not just whoever the People filter currently narrows to).
     const fullOrder = personOrder && personOrder.length > 0 ? personOrder : people.map(p => p.id)
     const groupIdSet = new Set(groupIds)
     const result = []
@@ -685,10 +689,12 @@ const Timeline = forwardRef(function Timeline({
               laneGap={LANE_GAP}
               people={people}
               boardPhases={boardPhases}
+              projects={projects}
               onDelete={() => onDeleteTask(task.id)}
               onResizeDone={(updates) => onUpdateTask(task.id, updates)}
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
+              onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
@@ -822,7 +828,6 @@ const Timeline = forwardRef(function Timeline({
                   })
                   return (
                     <div key={bp.id} className="timeline__bulk-dropdown-item" onClick={() => handleBulkTogglePhase(bp.id)}>
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: bp.color, display: 'inline-block', flexShrink: 0, marginRight: 6 }} />
                       {bp.name}
                       <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af', paddingLeft: 8 }}>
                         {allHave ? '✓ all' : noneHave ? '' : 'partial'}
@@ -835,23 +840,25 @@ const Timeline = forwardRef(function Timeline({
           </div>
         )}
 
-        {/* Color */}
-        <div className="timeline__bulk-action-wrap">
-          <button className="timeline__bulk-btn" onClick={() => setBulkAssignOpen(bulkAssignOpen === 'color' ? null : 'color')}>
-            Color
-          </button>
-          {bulkAssignOpen === 'color' && (
-            <div className="timeline__bulk-dropdown" style={{ padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: '#6b7280', marginRight: 4 }}>Pick color:</span>
-              {[{ value: 'white', hex: '#ffffff', label: 'White' }, { value: 'gray', hex: '#eeeeee', label: 'Gray' }].map(c => (
-                <button key={c.value} type="button" title={c.label}
-                  style={{ width: 26, height: 26, borderRadius: '50%', background: c.hex, border: '2px solid #ddd', cursor: 'pointer', padding: 0, flexShrink: 0 }}
-                  onClick={() => handleBulkSetColor(c.value)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Project — a task has exactly one, so this directly assigns rather
+            than toggling like the Phases dropdown does */}
+        {projects && projects.length > 0 && (
+          <div className="timeline__bulk-action-wrap">
+            <button className="timeline__bulk-btn" onClick={() => setBulkAssignOpen(bulkAssignOpen === 'projects' ? null : 'projects')}>
+              Project
+            </button>
+            {bulkAssignOpen === 'projects' && (
+              <div className="timeline__bulk-dropdown">
+                {projects.map(pr => (
+                  <div key={pr.id} className="timeline__bulk-dropdown-item" onClick={() => handleBulkAssignProject(pr.id)}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: pr.color, display: 'inline-block', flexShrink: 0, marginRight: 6 }} />
+                    {pr.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <button className="timeline__bulk-btn timeline__bulk-btn--delete" onClick={handleBulkDelete}>Delete</button>
         <button className="timeline__bulk-close" onClick={() => { setSelectedTaskIds(new Set()); setBulkAssignOpen(null) }}>
@@ -952,10 +959,7 @@ const Timeline = forwardRef(function Timeline({
                   <div className="timeline__person-col-fill" style={{ width: PERSON_COL_W }} />
 
                   {groupedPeople.map((person) => {
-                    // PM grouping: match by pmId; all others: match by assigneeId
-                    const rowTasks = groupBy === 'PM'
-                      ? filteredTasks.filter((t) => (t.pmId || t.teamId) === person.id)
-                      : filteredTasks.filter((t) => t.assigneeId === person.id)
+                    const rowTasks = filteredTasks.filter((t) => taskMatchesPerson(t, person.id))
                     return renderPersonRow(person, rowTasks)
                   })}
 
@@ -963,7 +967,7 @@ const Timeline = forwardRef(function Timeline({
 
                   {groupedPeople.length === 0 && unassignedTasks.length === 0 && (
                     <div className="timeline__empty">
-                      No {groupBy}s added yet. Go to Settings to add people.
+                      No people added yet. Go to Settings to add people.
                     </div>
                   )}
 
