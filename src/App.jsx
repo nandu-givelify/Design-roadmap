@@ -186,6 +186,7 @@ function PublicBoardView({ boardId }) {
           viewMode={viewMode} year={year} quarter={quarter}
           people={people} tasks={tasks} groupBy={board.defaultGroupBy || 'none'}
           filterPersonIds={[]}
+          filterProjectIds={[]}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
           onAddTaskForPerson={canEdit ? (assigneeId, startDate) => setModal({ type: 'task', assigneeId, startDate }) : () => {}}
@@ -325,6 +326,7 @@ function AuthenticatedApp({ user }) {
 
   // Filters
   const [filterPersonIds, setFilterPersonIds] = useState([])
+  const [filterProjectIds, setFilterProjectIds] = useState([])
 
   // Board ordering + favourites
   const [boardOrder,      setBoardOrder]      = useState([])
@@ -1195,6 +1197,9 @@ function AuthenticatedApp({ user }) {
           people={enrichedPeople}
           filterPersonIds={filterPersonIds}
           setFilterPersonIds={setFilterPersonIds}
+          projects={boardProjects}
+          filterProjectIds={filterProjectIds}
+          setFilterProjectIds={setFilterProjectIds}
           groupBy={groupBy}
           setGroupBy={handleGroupByChange}
           roles={boardRoles}
@@ -1211,6 +1216,7 @@ function AuthenticatedApp({ user }) {
           tasks={tasks}
           groupBy={groupBy}
           filterPersonIds={filterPersonIds}
+          filterProjectIds={filterProjectIds}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
           onAddTaskForPerson={(assigneeId, startDate) => {

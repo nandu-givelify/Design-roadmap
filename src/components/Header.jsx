@@ -24,6 +24,8 @@ export default function Header({
   onDeleteBoard,
   people,
   filterPersonIds, setFilterPersonIds,
+  projects,
+  filterProjectIds, setFilterProjectIds,
   groupBy, setGroupBy,
   roles,
   readOnly,
@@ -72,11 +74,14 @@ export default function Header({
 
   const togglePerson = (id) =>
     setFilterPersonIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleProject = (id) =>
+    setFilterProjectIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
 
-  const activeFilters = filterPersonIds.length
+  const activeFilters = filterPersonIds.length + filterProjectIds.length
   const navLabel = viewMode === 'year' ? `${year}` : `Q${quarter} ${year}`
 
-  const groupOptions = ['none', 'assignee']
+  const groupOptions = ['none', 'assignee', 'project']
+  const groupLabels = { none: 'None', assignee: 'By assignee', project: 'By project' }
 
   return (
     <header className="header">
@@ -195,7 +200,7 @@ export default function Header({
                 {groupOptions.map(opt => (
                   <label key={opt} className="filter-row" style={{ cursor: 'pointer' }}>
                     <input type="radio" name="groupby" checked={groupBy === opt} onChange={() => setGroupBy(opt)} style={{ accentColor: '#111827' }} />
-                    <span className="filter-row__label">{opt === 'none' ? 'None' : 'By assignee'}</span>
+                    <span className="filter-row__label">{groupLabels[opt]}</span>
                   </label>
                 ))}
 
@@ -232,9 +237,23 @@ export default function Header({
                   ))
                 })()}
                 {people.length === 0 && <Typography variant="caption" color="text.secondary">No people yet.</Typography>}
+
+                <Box className="header__filter-divider" />
+
+                {/* Project */}
+                <Typography variant="subtitle2" className="header__filter-section-title">Project</Typography>
+                {(projects || []).map(pr => (
+                  <label key={pr.id} className="filter-row">
+                    <input type="checkbox" checked={filterProjectIds.includes(pr.id)} onChange={() => toggleProject(pr.id)} />
+                    <Box className="filter-row__avatar" style={{ background: pr.color }} />
+                    <span className="filter-row__label">{pr.name}</span>
+                  </label>
+                ))}
+                {(!projects || projects.length === 0) && <Typography variant="caption" color="text.secondary">No projects yet.</Typography>}
+
                 {activeFilters > 0 && (
                   <Button
-                    size="small" color="primary" onClick={() => setFilterPersonIds([])}
+                    size="small" color="primary" onClick={() => { setFilterPersonIds([]); setFilterProjectIds([]) }}
                     sx={{ mt: 1, width: '100%', fontSize: 12 }}
                   >
                     Clear filters

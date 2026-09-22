@@ -28,8 +28,9 @@ const snapWeekday = (date, forward = true) => {
 const Timeline = forwardRef(function Timeline({
   viewMode, year, quarter,
   people, tasks,
-  groupBy,           // 'none' | 'assignee' — grouped mode shows one row per person
+  groupBy,           // 'none' | 'assignee' | 'project' — grouped mode shows one row per person/project
   filterPersonIds,
+  filterProjectIds,
   onUpdateTask, onDeleteTask, onAddTaskForPerson, onEditTask, onDuplicateTask,
   boardPhases,
   projects,
@@ -59,6 +60,16 @@ const Timeline = forwardRef(function Timeline({
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set())
   const [selectionBox,    setSelectionBox]    = useState(null)
   const [bulkAssignOpen,  setBulkAssignOpen]  = useState(null)
+
+  // Shift+click a task bar to add/remove it from the current selection
+  // without disturbing the rest — mirrors shift+rubber-band below.
+  const toggleTaskSelected = useCallback((id) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
 
   // Person-row reorder (grouped view)
   const [draggedPersonId,  setDraggedPersonId]  = useState(null)
@@ -251,7 +262,11 @@ const Timeline = forwardRef(function Timeline({
     setActiveDrag(drag)
 
     const onMove = (me) => {
-      const target = groupBy !== 'none' ? resolveAssigneeFromY(me.clientY) : null
+      // Row-target resolution only makes sense in assignee-grouped mode —
+      // rowRefsMap holds project ids while grouped by project, and dropping
+      // a task onto one of those rows must not silently overwrite its
+      // assigneeId with a project id.
+      const target = groupBy === 'assignee' ? resolveAssigneeFromY(me.clientY) : null
       const updated = { ...dragRef.current, cursorX: me.clientX, cursorY: me.clientY,
         targetAssigneeId: target || dragRef.current.origAssigneeId }
       dragRef.current = updated
@@ -323,6 +338,12 @@ const Timeline = forwardRef(function Timeline({
     const startX = clamp(e.clientX, gridMinX, gridMaxX)
     const startY = clamp(e.clientY, gridMinY, gridMaxY)
 
+    // Shift held: this drag adds to whatever was already selected instead of
+    // replacing it — snapshotted once at drag-start (not read live off state
+    // during the drag) so it stays fixed as the base to union new hits onto.
+    const additive = e.shiftKey
+    const baseIds = additive ? new Set(selectedTaskIds) : new Set()
+
     const hitTest = (curX, curY) => {
       const selLeft = Math.min(startX, curX), selTop = Math.min(startY, curY)
       const selRight = Math.max(startX, curX), selBottom = Math.max(startY, curY)
@@ -340,20 +361,23 @@ const Timeline = forwardRef(function Timeline({
       const curY = clamp(me.clientY, gridMinY, gridMaxY)
       if (Math.abs(curX - startX) > 5 || Math.abs(curY - startY) > 5) {
         setSelectionBox({ startX, startY, curX, curY })
-        setSelectedTaskIds(hitTest(curX, curY))
+        setSelectedTaskIds(new Set([...baseIds, ...hitTest(curX, curY)]))
       }
     }
     const onUp = (ue) => {
       const curX = clamp(ue.clientX, gridMinX, gridMaxX)
       const curY = clamp(ue.clientY, gridMinY, gridMaxY)
-      if (Math.abs(curX - startX) <= 5 && Math.abs(curY - startY) <= 5) setSelectedTaskIds(new Set())
+      // A plain (non-shift) click on empty grid clears the selection; with
+      // shift held, a click that never became a real drag shouldn't wipe out
+      // what was already selected.
+      if (!additive && Math.abs(curX - startX) <= 5 && Math.abs(curY - startY) <= 5) setSelectedTaskIds(new Set())
       setSelectionBox(null)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [readOnly])
+  }, [readOnly, selectedTaskIds])
 
   // ── Bulk actions ──────────────────────────────────────────────────────────
   // No confirm dialog — task deletion is undoable (see pushHistory in App.jsx).
@@ -445,12 +469,16 @@ const Timeline = forwardRef(function Timeline({
   if (filterPersonIds.length > 0) {
     visiblePeople = people.filter((p) => filterPersonIds.includes(p.id))
   }
+  let visibleProjects = projects || []
+  if (filterProjectIds.length > 0) {
+    visibleProjects = visibleProjects.filter((p) => filterProjectIds.includes(p.id))
+  }
 
   // When grouping by assignee, every visible person gets their own row
   // (not restricted to a single role) — ordered by the board's saved
   // personOrder when present, with anyone not yet in it (e.g. just added)
   // kept in their natural order at the end.
-  const groupedPeople = groupBy !== 'none'
+  const groupedPeople = groupBy === 'assignee'
     ? (() => {
         if (!personOrder || personOrder.length === 0) return visiblePeople
         const rank = new Map(personOrder.map((id, i) => [id, i]))
@@ -462,10 +490,20 @@ const Timeline = forwardRef(function Timeline({
       })()
     : []
 
-  // All tasks (for no-grouping mode), filtered if needed
-  const filteredTasks = filterPersonIds.length > 0
-    ? tasks.filter((t) => filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId))
-    : tasks
+  // When grouping by project, every visible project gets its own row.
+  const groupedProjects = groupBy === 'project' ? visibleProjects : []
+
+  // All tasks, filtered by whichever facets are active. A person filter and
+  // a project filter both narrowing at once means a task must satisfy both
+  // (not either) — consistent, unsurprising "AND across facets" filtering.
+  // A task with no project (or no assignee/PM) simply can't match an active
+  // filter on that facet, so it drops out — same as it already did for the
+  // person filter before projects existed.
+  const filteredTasks = tasks.filter((t) => {
+    const personOk  = filterPersonIds.length === 0 || filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId)
+    const projectOk = filterProjectIds.length === 0 || filterProjectIds.includes(t.projectId)
+    return personOk && projectOk
+  })
 
   // A task belongs to a person's row if they're either the assignee or the
   // PM on it — a person can appear on both a designer/dev's row and a PM's
@@ -474,8 +512,12 @@ const Timeline = forwardRef(function Timeline({
   const taskMatchesPerson = (t, personId) =>
     t.assigneeId === personId || (t.pmId || t.teamId) === personId
 
-  const unassignedTasks = groupBy !== 'none'
+  const unassignedTasks = groupBy === 'assignee'
     ? filteredTasks.filter((t) => !groupedPeople.some((p) => taskMatchesPerson(t, p.id)))
+    : []
+
+  const unassignedProjectTasks = groupBy === 'project'
+    ? filteredTasks.filter((t) => !groupedProjects.some((p) => t.projectId === p.id))
     : []
 
   const monthGroups = groupDaysByMonth(allDays)
@@ -532,6 +574,7 @@ const Timeline = forwardRef(function Timeline({
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
               onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
+              onToggleSelect={() => toggleTaskSelected(task.id)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
@@ -583,11 +626,16 @@ const Timeline = forwardRef(function Timeline({
     resetPersonDrag()
   }
 
-  // ── Render a grouped person row ───────────────────────────────────────────
-  const renderPersonRow = (person, rowTasks, isUnassigned = false) => {
-    const personId    = person ? person.id : '__unassigned__'
-    const personName  = person ? person.name : 'Unassigned'
-    const personColor = person ? (getAvatarColor(person.name)) : '#9ca3af'
+  // ── Render a grouped row — one row per person (assignee mode) or per      ─
+  // project (project mode). The two share all the layout math (lane packing,
+  // row height, the task-bar list); only the left column's content, and a
+  // couple of person-only affordances (photo/role/time-off/drag-reorder/
+  // click-to-open-details/drop-target-to-reassign), differ by `kind`.
+  const renderGroupRow = (kind, entity, rowTasks, isUnassigned = false) => {
+    const rowId    = entity ? entity.id : '__unassigned__'
+    const rowLabel = entity ? entity.name : 'Unassigned'
+    const isPerson = kind === 'person'
+    const avatarBg = isUnassigned ? '#e5e7eb' : (isPerson ? getAvatarColor(entity.name) : entity.color)
 
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
@@ -605,30 +653,33 @@ const Timeline = forwardRef(function Timeline({
       })
       .map((t, i) => ({ ...t, _lane: i }))
 
-    const isIncomingDrag = activeDrag &&
-      activeDrag.targetAssigneeId === personId &&
-      activeDrag.origAssigneeId   !== personId
+    // Drag-to-reassign-by-dropping-on-a-row only exists for assignee mode
+    // (see the comment in startMoveDrag's onMove) — project rows never
+    // become a drop target or show the "incoming" extra lane.
+    const isIncomingDrag = isPerson && activeDrag &&
+      activeDrag.targetAssigneeId === rowId &&
+      activeDrag.origAssigneeId   !== rowId
     const numVisible = lanedTasks.length + (isIncomingDrag ? 1 : 0)
     const rowH = numVisible > 0
       ? ROW_PAD_TOP + numVisible * LANE_H + (numVisible - 1) * LANE_GAP + ROW_PAD_BOT
       : MIN_ROW_H
 
-    const isDropTgt = activeDrag?.targetAssigneeId === personId
-    const canReorder = !readOnly && !isUnassigned && !!onReorderPeople
+    const isDropTgt = isPerson && activeDrag?.targetAssigneeId === rowId
+    const canReorder = isPerson && !readOnly && !isUnassigned && !!onReorderPeople
 
     return (
       <div
-        key={personId}
+        key={rowId}
         className={['timeline__person-row', isUnassigned ? 'timeline__person-row--unassigned' : '',
           isDropTgt ? 'timeline__person-row--drop-target' : '',
-          dragOverPersonId === personId && personDragPos === 'before' ? 'timeline__person-row--drag-before' : '',
-          dragOverPersonId === personId && personDragPos === 'after'  ? 'timeline__person-row--drag-after'  : '',
-          draggedPersonId === personId ? 'timeline__person-row--dragging' : ''].filter(Boolean).join(' ')}
-        ref={(el) => { rowRefsMap.current[personId] = el }}
-        data-person-id={personId}
+          dragOverPersonId === rowId && personDragPos === 'before' ? 'timeline__person-row--drag-before' : '',
+          dragOverPersonId === rowId && personDragPos === 'after'  ? 'timeline__person-row--drag-after'  : '',
+          draggedPersonId === rowId ? 'timeline__person-row--dragging' : ''].filter(Boolean).join(' ')}
+        ref={(el) => { rowRefsMap.current[rowId] = el }}
+        data-person-id={rowId}
         style={{ minHeight: rowH }}
-        onDragOver={canReorder ? (e) => handlePersonDragOver(e, personId) : undefined}
-        onDrop={canReorder ? (e) => handlePersonDrop(e, personId) : undefined}
+        onDragOver={canReorder ? (e) => handlePersonDragOver(e, rowId) : undefined}
+        onDrop={canReorder ? (e) => handlePersonDrop(e, rowId) : undefined}
         onDragEnd={canReorder ? resetPersonDrag : undefined}
       >
         {/* Left column — sticky */}
@@ -636,24 +687,24 @@ const Timeline = forwardRef(function Timeline({
           className="timeline__person-col"
           style={{ minHeight: rowH, width: PERSON_COL_W, cursor: canReorder ? 'grab' : undefined }}
           draggable={canReorder}
-          onDragStart={canReorder ? (e) => handlePersonDragStart(e, personId) : undefined}
+          onDragStart={canReorder ? (e) => handlePersonDragStart(e, rowId) : undefined}
         >
           <div
             className="timeline__avatar"
             style={{
-              background: isUnassigned ? '#e5e7eb' : personColor,
-              cursor: onPersonClick && person ? 'pointer' : 'default',
+              background: avatarBg,
+              cursor: isPerson && onPersonClick && entity ? 'pointer' : 'default',
             }}
-            onClick={() => onPersonClick && person && onPersonClick(person)}
+            onClick={() => isPerson && onPersonClick && entity && onPersonClick(entity)}
           >
-            {person?.photo
-              ? <img src={person.photo} alt="" />
-              : <span>{isUnassigned ? '?' : (personName?.charAt(0).toUpperCase() || '?')}</span>
+            {isPerson && entity?.photo
+              ? <img src={entity.photo} alt="" />
+              : <span>{isUnassigned ? '?' : (rowLabel?.charAt(0).toUpperCase() || '?')}</span>
             }
           </div>
           <div className="timeline__person-info">
-            <div className="timeline__person-name">{personName}</div>
-            {person?.role && <div className="timeline__person-team">{person.role}</div>}
+            <div className="timeline__person-name">{rowLabel}</div>
+            {isPerson && entity?.role && <div className="timeline__person-team">{entity.role}</div>}
           </div>
         </div>
 
@@ -661,10 +712,10 @@ const Timeline = forwardRef(function Timeline({
         <div
           className="timeline__grid-area"
           style={{ minHeight: rowH }}
-          onDoubleClick={(e) => { e.stopPropagation(); handleGridDoubleClick(personId, e) }}
+          onDoubleClick={(e) => { e.stopPropagation(); handleGridDoubleClick(isPerson ? rowId : null, e) }}
         >
-          {/* Time off background blocks (behind task bars) */}
-          {(person?.timeOff || []).map(to => {
+          {/* Time off background blocks (behind task bars) — person rows only */}
+          {isPerson && (entity?.timeOff || []).map(to => {
             const s = parseLocalDate(to.start)
             const e = parseLocalDate(to.end)
             const sIdx = diffDays(startOfDay(totalStart), startOfDay(s))
@@ -695,6 +746,7 @@ const Timeline = forwardRef(function Timeline({
               onMoveDragStart={startMoveDrag}
               onEdit={() => onEditTask && onEditTask(task)}
               onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
+              onToggleSelect={() => toggleTaskSelected(task.id)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
               isGhost={activeDrag?.task?.id === task.id}
               isSelected={selectedTaskIds.has(task.id)}
@@ -952,24 +1004,50 @@ const Timeline = forwardRef(function Timeline({
                 </>
               )}
 
-              {/* ── Grouped: person rows ────────────────────── */}
+              {/* ── Grouped: person or project rows ─────────── */}
               {groupBy !== 'none' && (
                 <>
                   {/* Full-height person column backdrop */}
                   <div className="timeline__person-col-fill" style={{ width: PERSON_COL_W }} />
 
-                  {groupedPeople.map((person) => {
-                    const rowTasks = filteredTasks.filter((t) => taskMatchesPerson(t, person.id))
-                    return renderPersonRow(person, rowTasks)
-                  })}
+                  {groupBy === 'assignee' && (() => {
+                    // A person with nothing assigned to them doesn't get a
+                    // row — only people who actually have at least one task
+                    // (as assignee or PM) show up.
+                    const rows = groupedPeople
+                      .map((person) => ({ person, rowTasks: filteredTasks.filter((t) => taskMatchesPerson(t, person.id)) }))
+                      .filter((r) => r.rowTasks.length > 0)
+                    return (
+                      <>
+                        {rows.map((r) => renderGroupRow('person', r.person, r.rowTasks))}
+                        {unassignedTasks.length > 0 && renderGroupRow('person', null, unassignedTasks, true)}
+                        {rows.length === 0 && unassignedTasks.length === 0 && (
+                          <div className="timeline__empty">
+                            No people added yet. Go to Settings to add people.
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
 
-                  {unassignedTasks.length > 0 && renderPersonRow(null, unassignedTasks, true)}
-
-                  {groupedPeople.length === 0 && unassignedTasks.length === 0 && (
-                    <div className="timeline__empty">
-                      No people added yet. Go to Settings to add people.
-                    </div>
-                  )}
+                  {groupBy === 'project' && (() => {
+                    // Same rule as assignee mode — a project with no tasks
+                    // on it doesn't get a row.
+                    const rows = groupedProjects
+                      .map((project) => ({ project, rowTasks: filteredTasks.filter((t) => t.projectId === project.id) }))
+                      .filter((r) => r.rowTasks.length > 0)
+                    return (
+                      <>
+                        {rows.map((r) => renderGroupRow('project', r.project, r.rowTasks))}
+                        {unassignedProjectTasks.length > 0 && renderGroupRow('project', null, unassignedProjectTasks, true)}
+                        {rows.length === 0 && unassignedProjectTasks.length === 0 && (
+                          <div className="timeline__empty">
+                            No projects added yet. Go to Settings to add projects.
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
 
                   {/* Fill remaining vertical space so the border extends to the bottom */}
                   <div className="timeline__group-fill-row">

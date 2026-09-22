@@ -1,4 +1,5 @@
 import { useRef, useState, useLayoutEffect, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { startOfDay, addDays, diffDays, formatDateWithDay, isWeekend, nextWorkday, prevWorkday, toDateString, getAvatarColor, parseLocalDate } from '../utils/dateUtils'
 import { pastelize, readableTextColor } from '../utils/colors'
 
@@ -11,7 +12,7 @@ export default function TaskBar({
   people,
   boardPhases,
   projects,
-  onDelete, onResizeDone, onMoveDragStart, onEdit, onPhaseDragDone, onDuplicate,
+  onDelete, onResizeDone, onMoveDragStart, onEdit, onPhaseDragDone, onDuplicate, onToggleSelect,
   isGhost, isSelected,
   readOnly,
 }) {
@@ -19,6 +20,7 @@ export default function TaskBar({
   const [visual,       setVisual]       = useState(null)
   const [visualPhases, setVisualPhases] = useState(null)
   const [showMenu,     setShowMenu]     = useState(false)
+  const [menuPos,      setMenuPos]      = useState(null) // {x, y} in viewport coords
   const [isNarrow,     setIsNarrow]     = useState(false)
   const [showDates,    setShowDates]    = useState(false)
 
@@ -151,6 +153,15 @@ export default function TaskBar({
     // click that opens Edit Task before the native contextmenu event (which
     // shows the right-click menu, including Duplicate) ever gets a chance to.
     if (readOnly || isGhost || e.button !== 0) return
+    // Shift+click toggles this task in/out of the multi-select instead of
+    // moving or editing it — mirrors the rubber-band select's own shift
+    // behavior (see Timeline's handleScrollMouseDown) so both ways of
+    // building up a selection add to it rather than replacing it.
+    if (e.shiftKey) {
+      e.preventDefault(); e.stopPropagation()
+      onToggleSelect?.()
+      return
+    }
     e.preventDefault(); e.stopPropagation()
     if (onMoveDragStart && barRef.current) {
       onMoveDragStart(task, e, barRef.current.getBoundingClientRect())
@@ -253,7 +264,12 @@ export default function TaskBar({
         data-task-id={task.id}
         onMouseDown={handleMoveDown}
         onDoubleClick={(e) => { e.stopPropagation(); if (!readOnly && !isGhost) setShowDates(v => !v) }}
-        onContextMenu={(e) => { e.preventDefault(); !readOnly && !isGhost && setShowMenu(true) }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          if (readOnly || isGhost) return
+          setMenuPos({ x: e.clientX, y: e.clientY })
+          setShowMenu(true)
+        }}
       >
         {!isNarrow && renderAvatars()}
         {!isNarrow && renderProjectBadges()}
@@ -304,9 +320,23 @@ export default function TaskBar({
         )
       )}
 
-      {showMenu && (
+      {showMenu && menuPos && createPortal(
         <div className="task-bar__menu-overlay" onClick={() => setShowMenu(false)}>
-          <div className="task-bar__menu" style={{ top: barH + 4, left: 0 }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="task-bar__menu"
+            style={{
+              // Portaled straight to <body> and positioned from the actual
+              // right-click point in viewport coordinates — this used to be
+              // nested inside the task bar's own absolutely-positioned (and,
+              // via a row-entrance animation, transformed) ancestor, which
+              // silently hijacked "position: fixed" into being relative to
+              // that ancestor instead of the viewport, so the menu rendered
+              // thousands of pixels off-screen instead of near the task bar.
+              top: Math.min(menuPos.y, window.innerHeight - 220),
+              left: Math.min(menuPos.x, window.innerWidth - 240),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="task-bar__menu-info">
               <div className="task-bar__menu-task-title">{task.title}</div>
               <div className="task-bar__menu-dates">
@@ -324,7 +354,8 @@ export default function TaskBar({
                 onClick={() => { onDelete(); setShowMenu(false) }}>Delete task</button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
