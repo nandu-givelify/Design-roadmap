@@ -283,14 +283,28 @@ const Timeline = forwardRef(function Timeline({
           if (onEditTask) onEditTask(d.task)
         } else {
           const daysDelta = Math.round(ddx / dayWidth)
-          const updates = {}
-          const ns = snapWeekday(addDays(parseLocalDate(d.task.startDate), daysDelta), daysDelta >= 0)
-          const ne = snapWeekday(addDays(parseLocalDate(d.task.endDate),   daysDelta), daysDelta >= 0)
-          if (toDateString(ns) !== d.task.startDate) updates.startDate = toDateString(ns)
-          if (toDateString(ne) !== d.task.endDate)   updates.endDate   = toDateString(ne)
-          if (d.targetAssigneeId !== d.origAssigneeId)
-            updates.assigneeId = d.targetAssigneeId === '__unassigned__' ? null : d.targetAssigneeId
-          if (Object.keys(updates).length > 0) onUpdateTask(d.task.id, updates)
+          const forward = daysDelta >= 0
+          const reassigned = d.targetAssigneeId !== d.origAssigneeId
+          const newAssigneeId = reassigned ? (d.targetAssigneeId === '__unassigned__' ? null : d.targetAssigneeId) : null
+
+          // Dragging a task that's part of the current multi-selection moves
+          // the whole selection together (each keeping its own relative
+          // dates, just shifted by the same delta) instead of only the one
+          // bar the mouse happened to grab.
+          const isGroupDrag = selectedTaskIds.has(d.task.id) && selectedTaskIds.size > 1
+          const groupTasks = isGroupDrag
+            ? tasks.filter((t) => selectedTaskIds.has(t.id))
+            : [d.task]
+
+          groupTasks.forEach((t) => {
+            const updates = {}
+            const ns = snapWeekday(addDays(parseLocalDate(t.startDate), daysDelta), forward)
+            const ne = snapWeekday(addDays(parseLocalDate(t.endDate),   daysDelta), forward)
+            if (toDateString(ns) !== t.startDate) updates.startDate = toDateString(ns)
+            if (toDateString(ne) !== t.endDate)   updates.endDate   = toDateString(ne)
+            if (reassigned) updates.assigneeId = newAssigneeId
+            if (Object.keys(updates).length > 0) onUpdateTask(t.id, updates)
+          })
         }
       }
       dragRef.current = null
@@ -301,7 +315,7 @@ const Timeline = forwardRef(function Timeline({
 
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [dayWidth, readOnly, groupBy, onUpdateTask]) // eslint-disable-line
+  }, [dayWidth, readOnly, groupBy, onUpdateTask, selectedTaskIds, tasks]) // eslint-disable-line
 
   // ── Double-click → add task ───────────────────────────────────────────────
   const handleGridDoubleClick = useCallback((personId, e) => {
@@ -520,6 +534,13 @@ const Timeline = forwardRef(function Timeline({
     ? filteredTasks.filter((t) => !groupedProjects.some((p) => t.projectId === p.id))
     : []
 
+  // Ghost every selected task while a group drag is in progress (dragging one
+  // selected task moves the whole selection — see startMoveDrag), not just
+  // the one bar the mouse actually grabbed, so the "in-flight" set reads
+  // clearly as a group instead of looking like only one task is moving.
+  const activeDragIsGroup = !!activeDrag && selectedTaskIds.has(activeDrag.task.id) && selectedTaskIds.size > 1
+  const isTaskGhosted = (taskId) => !!activeDrag && (activeDrag.task.id === taskId || (activeDragIsGroup && selectedTaskIds.has(taskId)))
+
   const monthGroups = groupDaysByMonth(allDays)
 
   // ── Render a single task row (no-grouping mode) ───────────────────────────
@@ -576,7 +597,7 @@ const Timeline = forwardRef(function Timeline({
               onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
               onToggleSelect={() => toggleTaskSelected(task.id)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
-              isGhost={activeDrag?.task?.id === task.id}
+              isGhost={isTaskGhosted(task.id)}
               isSelected={selectedTaskIds.has(task.id)}
               readOnly={readOnly}
             />
@@ -748,7 +769,7 @@ const Timeline = forwardRef(function Timeline({
               onDuplicate={() => onDuplicateTask && onDuplicateTask(task)}
               onToggleSelect={() => toggleTaskSelected(task.id)}
               onPhaseDragDone={(newPhases) => onUpdateTask(task.id, { phases: newPhases })}
-              isGhost={activeDrag?.task?.id === task.id}
+              isGhost={isTaskGhosted(task.id)}
               isSelected={selectedTaskIds.has(task.id)}
               readOnly={readOnly}
             />
@@ -789,6 +810,9 @@ const Timeline = forwardRef(function Timeline({
           </div>
         )}
         <span className="task-drag-overlay__title">{task.title}</span>
+        {activeDragIsGroup && (
+          <span className="task-drag-overlay__count">+{selectedTaskIds.size - 1}</span>
+        )}
         {barRect.width < 260 ? (
           <div className="task-bar__tooltip task-bar__tooltip--center">
             {formatDateWithDay(dragStart)} → {formatDateWithDay(dragEnd)}

@@ -137,7 +137,7 @@ function PublicBoardView({ boardId }) {
   const handleDeleteTask = canEdit ? (id)       => deleteTask(boardId, id)        : () => {}
   const handleAddTask    = canEdit ? async (data) => { await addTask(boardId, data) } : () => {}
   const handleDuplicateTask = canEdit
-    ? (task) => { const { id, ...rest } = task; return handleAddTask({ ...rest, title: `${rest.title} (copy)` }) }
+    ? (task) => { const { id, ...rest } = task; return handleAddTask(rest) }
     : () => {}
   const handleCreatePerson = canEdit
     ? async (data) => { const ref = await addPerson(boardId, data); return ref.id }
@@ -592,6 +592,10 @@ function AuthenticatedApp({ user }) {
         ...p,
         photo:   userProfile.photo   ?? p.photo   ?? null,
         name:    userProfile.name    ?? p.name,
+        // Role, like name/photo, describes the person rather than this one
+        // board — show it consistently everywhere even before the
+        // fire-and-forget cross-board push (handleUpdateProfile) lands.
+        role:    userProfile.role    ?? p.role,
         // Global time off overrides board-level — applies across all boards
         timeOff: userProfile.timeOff ?? p.timeOff ?? [],
       }
@@ -688,6 +692,7 @@ function AuthenticatedApp({ user }) {
       const patch = {}
       if (saveData.name  !== undefined) patch.name  = saveData.name
       if (saveData.photo !== undefined) patch.photo = saveData.photo
+      if (saveData.role  !== undefined) patch.role  = saveData.role
       if (Object.keys(patch).length) await updatePerson(board.id, match.id, patch)
     })).catch((e) => console.warn('Profile push failed:', e))
   }, [user, boards, showToast]) // eslint-disable-line
@@ -704,6 +709,10 @@ function AuthenticatedApp({ user }) {
     const patch = {}
     if (data.name  !== undefined) patch.name  = data.name
     if (data.photo !== undefined) patch.photo = data.photo
+    // Role is meant to describe the person, not the board — keep it in sync
+    // everywhere the same way name/photo already are, so someone edited as
+    // "Dev" on one board doesn't show as "Designer" on another.
+    if (data.role  !== undefined) patch.role  = data.role
     if (!Object.keys(patch).length) return
 
     // Identify if the person being edited is the logged-in user.
@@ -952,7 +961,7 @@ function AuthenticatedApp({ user }) {
 
   const handleDuplicateTask = useCallback((task) => {
     const { id, ...rest } = task
-    return handleAddTask({ ...rest, title: `${rest.title} (copy)` })
+    return handleAddTask(rest)
   }, [handleAddTask])
 
   const handleUpdateTask = useCallback(async (id, data) => {

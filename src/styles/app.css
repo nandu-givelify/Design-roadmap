@@ -419,6 +419,13 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
   pointer-events: none;
 }
+/* Shown only when dragging a task that's part of a multi-selection, so it's
+   clear the whole group is moving together, not just this one bar. */
+.task-drag-overlay__count {
+  font-size: 10px; font-weight: 700; color: #fff; background: #111827;
+  border-radius: 999px; padding: 1px 6px; margin-left: 4px; flex-shrink: 0;
+  pointer-events: none;
+}
 
 /* ── Rubber-band selection box ───────────────────────────────────────────────── */
 .timeline__selection-box {

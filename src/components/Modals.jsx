@@ -637,7 +637,10 @@ function PersonCombobox({ value, onChange, options, recentPeople, label, placeho
       onChange(id)
       setInputValue(item.name || '')
       setOpen(false)
-      onCreatePersonWithId?.(id, { name: item.name, email: item.email, photo: item.photo || null, role: defaultRole || 'Designer' })
+      // Carry over their role from the other board they're known from — a
+      // quick-add here shouldn't silently reset a Dev to this field's default
+      // just because that's the role this particular combobox field expects.
+      onCreatePersonWithId?.(id, { name: item.name, email: item.email, photo: item.photo || null, role: item.role || defaultRole || 'Designer' })
       return
     }
     onChange(item.id); setInputValue(item.name || ''); setOpen(false); setFocusedIdx(-1)
