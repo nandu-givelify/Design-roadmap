@@ -208,6 +208,20 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   font-size: 13px; font-weight: 700; color: #fff; overflow: hidden;
 }
 .timeline__avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Project rows (group by project) use a plain colored dot, not an avatar. */
+.timeline__project-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Screenshot capture ─────────────────────────────────────────────────────
+   An offscreen, full-size, read-only copy of the timeline rendered only while
+   a screenshot is being taken. It has to be laid out (not display:none) for
+   the capture and for the task bars' text-fit measurements to work. */
+.snapshot-stage { position: fixed; left: -100000px; top: 0; pointer-events: none; }
+.snapshot-root { display: inline-block; padding: 16px; background: #f2f3f5; }
+.snapshot-title { display: flex; align-items: baseline; gap: 10px; margin: 0 4px 12px; }
+.snapshot-title__name { font-size: 18px; font-weight: 700; color: #111827; }
+.snapshot-title__meta { font-size: 12px; color: #6b7280; }
+.timeline--snapshot { margin: 0; flex: none; }
+.timeline--snapshot .timeline__person-row { animation: none; transition: none; }
 .timeline__person-info { min-width: 0; }
 .timeline__person-name { font-size: 13px; font-weight: 600; color: #111827; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timeline__person-team { font-size: 11px; color: #666; line-height: 1.2; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -244,9 +258,16 @@ input:focus, select:focus { outline: 2px solid var(--m3-primary); outline-offset
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: #ef4444; z-index: 5; pointer-events: none;
 }
+/* Zero-height strip at the top of the body that sticks right below the
+   sticky month header (28px row + 1px border) when scrolled down. z-index
+   keeps the badge above task bars and the today line, but under the sticky
+   left column (z 10) when scrolled sideways. */
+.timeline__today-sticky {
+  position: sticky; top: 29px; height: 0; z-index: 6; pointer-events: none;
+}
 .timeline__today-label {
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  background: #ef4444; color: #fff;
+  position: absolute; top: 0; transform: translateX(-50%);
+  background: #ef4444; color: #fff; pointer-events: none;
   font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 2px; white-space: nowrap;
 }
 
@@ -1351,9 +1372,13 @@ input:focus, select:focus { outline: none; }
   to   { opacity: 1; transform: scale(1); }
 }
 
-/* Timeline rows slide in when board loads */
+/* Timeline rows slide in when board loads. `backwards`, not `both`: holding
+   the final keyframe forever leaves `transform: translateY(0)` on every row,
+   which makes each row its own stacking context — trapping the sticky left
+   column's z-index inside it, so the today line painted over the column, and
+   breaking `position: fixed` for anything nested in a row. */
 .timeline__person-row {
-  animation: fadeUp 0.18s ease both;
+  animation: fadeUp 0.18s ease backwards;
 }
 /* Stagger row entrances */
 .timeline__person-row:nth-child(1)  { animation-delay: 0.00s; }

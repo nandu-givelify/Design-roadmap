@@ -18,6 +18,7 @@ const MIN_ROW_H    = ROW_PAD_TOP + LANE_H + ROW_PAD_BOT
 
 const VIEW_DAYS_YEAR    = 365 + VIEW_PAD_DAYS * 2
 const VIEW_DAYS_QUARTER = 91  + VIEW_PAD_DAYS * 2
+const SNAPSHOT_GRID_W   = 1800 // target grid width (px) for a screenshot's fitted date range
 
 const snapWeekday = (date, forward = true) => {
   const d = new Date(date)
@@ -40,6 +41,8 @@ const Timeline = forwardRef(function Timeline({
   onPersonClick,     // optional: (person) => void — called when avatar is clicked
   personOrder,       // optional: string[] of person ids — custom row order for grouped view
   onReorderPeople,   // optional: (newOrderIds) => void — called after a person row is dragged
+  onReorderProjects, // optional: (newOrderIds) => void — called after a project row is dragged
+  snapshot,          // optional: render a static, full-size copy for a screenshot (see below)
 }, ref) {
   const PERSON_COL_W = personColWidth ?? PERSON_COL_W_DEFAULT
   const scrollRef    = useRef(null)
@@ -81,7 +84,42 @@ const Timeline = forwardRef(function Timeline({
   const personColWRef = useRef(personColW)
   personColWRef.current = personColW
 
-  const totalRange = getTotalRange(year)
+  // Active assignee/project filters (AND across facets). A task with no
+  // assignee/project can't match an active filter on that facet.
+  const passesFilters = (t) => {
+    const personOk  = filterPersonIds.length === 0 || filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId)
+    const projectOk = filterProjectIds.length === 0 || filterProjectIds.includes(t.projectId)
+    return personOk && projectOk
+  }
+
+  // Snapshot mode: instead of the scrollable year, the date range is fitted
+  // tightly to the tasks being shown — 2 days before the first through 2 days
+  // after the last — at a fixed day width chosen so the whole span lands
+  // around SNAPSHOT_GRID_W. (Titles drawn beside narrow bars past the right
+  // edge are handled at capture time by widening only as much as needed.)
+  const snapshotRange = snapshot ? (() => {
+    // Grouped by assignee, a screenshot leaves out the Unassigned row, so
+    // its tasks mustn't stretch the range either — only count tasks that
+    // land on some shown person's row (same match as taskMatchesPerson).
+    const shownPersonIds = groupBy === 'assignee'
+      ? new Set(people.filter((p) => filterPersonIds.length === 0 || filterPersonIds.includes(p.id)).map((p) => p.id))
+      : null
+    let min = null, max = null
+    tasks.forEach((t) => {
+      if (!t.startDate || !t.endDate || !passesFilters(t)) return
+      if (shownPersonIds && !shownPersonIds.has(t.assigneeId)) return
+      const s = parseLocalDate(t.startDate), e = parseLocalDate(t.endDate)
+      if (!min || s < min) min = s
+      if (!max || e > max) max = e
+    })
+    if (!min) { min = startOfDay(new Date()); max = min }
+    const start = addDays(startOfDay(min), -2)
+    const end   = addDays(startOfDay(max), 2)
+    const snapDayW = Math.max(8, Math.min(28, SNAPSHOT_GRID_W / (diffDays(start, end) + 1)))
+    return { start, end, dayWidth: snapDayW }
+  })() : null
+
+  const totalRange = snapshotRange || getTotalRange(year)
   const totalStart = totalRange.start
   const totalEnd   = totalRange.end
   const allDays    = getDaysInRange(totalStart, totalEnd)
@@ -90,7 +128,9 @@ const Timeline = forwardRef(function Timeline({
   const MIN_VD = 60
   const MAX_VD = 730
   const viewDays = Math.max(MIN_VD, Math.min(MAX_VD, baseViewDays / zoomScale))
-  const dayWidth = containerW > 0 ? (containerW - personColW) / viewDays : 0
+  const dayWidth = snapshotRange
+    ? snapshotRange.dayWidth
+    : (containerW > 0 ? (containerW - personColW) / viewDays : 0)
   dayWidthRef.current = dayWidth
   const viewDaysRef = useRef(viewDays)
   viewDaysRef.current = viewDays
@@ -507,24 +547,12 @@ const Timeline = forwardRef(function Timeline({
   // When grouping by project, every visible project gets its own row.
   const groupedProjects = groupBy === 'project' ? visibleProjects : []
 
-  // All tasks, filtered by whichever facets are active. A person filter and
-  // a project filter both narrowing at once means a task must satisfy both
-  // (not either) — consistent, unsurprising "AND across facets" filtering.
-  // A task with no project (or no assignee/PM) simply can't match an active
-  // filter on that facet, so it drops out — same as it already did for the
-  // person filter before projects existed.
-  const filteredTasks = tasks.filter((t) => {
-    const personOk  = filterPersonIds.length === 0 || filterPersonIds.includes(t.assigneeId) || filterPersonIds.includes(t.pmId)
-    const projectOk = filterProjectIds.length === 0 || filterProjectIds.includes(t.projectId)
-    return personOk && projectOk
-  })
+  const filteredTasks = tasks.filter(passesFilters)
 
-  // A task belongs to a person's row if they're either the assignee or the
-  // PM on it — a person can appear on both a designer/dev's row and a PM's
-  // row for the same task. "Unassigned" means neither field matches anyone
-  // currently shown.
-  const taskMatchesPerson = (t, personId) =>
-    t.assigneeId === personId || (t.pmId || t.teamId) === personId
+  // Grouped by assignee, a task sits only on its assignee's row — PMs don't
+  // get rows for tasks they merely manage. "Unassigned" = no assignee among
+  // the people currently shown.
+  const taskMatchesPerson = (t, personId) => t.assigneeId === personId
 
   const unassignedTasks = groupBy === 'assignee'
     ? filteredTasks.filter((t) => !groupedPeople.some((p) => taskMatchesPerson(t, p.id)))
@@ -623,18 +651,23 @@ const Timeline = forwardRef(function Timeline({
 
   const resetPersonDrag = () => { setDraggedPersonId(null); setDragOverPersonId(null); setPersonDragPos(null) }
 
-  const handlePersonDrop = (e, targetId) => {
+  // Handles both person rows (assignee grouping) and project rows (project
+  // grouping) — only one kind is ever on screen at a time.
+  const handleRowDrop = (e, targetId) => {
     e.preventDefault()
-    if (!draggedPersonId || draggedPersonId === targetId || !onReorderPeople) { resetPersonDrag(); return }
+    const isProjectMode = groupBy === 'project'
+    const onReorder = isProjectMode ? onReorderProjects : onReorderPeople
+    if (!draggedPersonId || draggedPersonId === targetId || !onReorder) { resetPersonDrag(); return }
     // Reorder just within the currently-visible group first...
-    const groupIds = groupedPeople.map(p => p.id)
+    const groupIds = (isProjectMode ? groupedProjects : groupedPeople).map(p => p.id)
     const newGroupIds = groupIds.filter(id => id !== draggedPersonId)
     const targetIdx = newGroupIds.indexOf(targetId)
     newGroupIds.splice(personDragPos === 'after' ? targetIdx + 1 : targetIdx, 0, draggedPersonId)
     // ...then merge that back into the board-wide order, preserving every
-    // other person's existing relative position (personOrder spans everyone,
-    // not just whoever the People filter currently narrows to).
-    const fullOrder = personOrder && personOrder.length > 0 ? personOrder : people.map(p => p.id)
+    // other row's existing relative position (the full order spans everyone,
+    // not just whoever the current filter narrows to).
+    const allIds = (isProjectMode ? (projects || []) : people).map(p => p.id)
+    const fullOrder = !isProjectMode && personOrder && personOrder.length > 0 ? personOrder : allIds
     const groupIdSet = new Set(groupIds)
     const result = []
     let cursor = 0
@@ -642,8 +675,8 @@ const Timeline = forwardRef(function Timeline({
       if (groupIdSet.has(id)) { result.push(newGroupIds[cursor]); cursor++ }
       else result.push(id)
     })
-    people.forEach((p) => { if (!result.includes(p.id)) result.push(p.id) })
-    onReorderPeople(result)
+    allIds.forEach((id) => { if (!result.includes(id)) result.push(id) })
+    onReorder(result)
     resetPersonDrag()
   }
 
@@ -660,10 +693,12 @@ const Timeline = forwardRef(function Timeline({
 
     const sorted = [...rowTasks].sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 
-    const visibleStart = dayWidth > 0
+    // Only tasks overlapping the horizontally-scrolled viewport get a lane —
+    // except in a snapshot, which has no viewport and must show every task.
+    const visibleStart = dayWidth > 0 && !snapshot
       ? addDays(totalStart, Math.max(0, Math.floor(scrollLeft / dayWidth)))
       : totalStart
-    const visibleEnd = dayWidth > 0
+    const visibleEnd = dayWidth > 0 && !snapshot
       ? addDays(totalStart, Math.ceil((scrollLeft + Math.max(containerW, 1) - personColW) / dayWidth))
       : totalEnd
 
@@ -686,7 +721,7 @@ const Timeline = forwardRef(function Timeline({
       : MIN_ROW_H
 
     const isDropTgt = isPerson && activeDrag?.targetAssigneeId === rowId
-    const canReorder = isPerson && !readOnly && !isUnassigned && !!onReorderPeople
+    const canReorder = !readOnly && !isUnassigned && !!(isPerson ? onReorderPeople : onReorderProjects)
 
     return (
       <div
@@ -700,7 +735,7 @@ const Timeline = forwardRef(function Timeline({
         data-person-id={rowId}
         style={{ minHeight: rowH }}
         onDragOver={canReorder ? (e) => handlePersonDragOver(e, rowId) : undefined}
-        onDrop={canReorder ? (e) => handlePersonDrop(e, rowId) : undefined}
+        onDrop={canReorder ? (e) => handleRowDrop(e, rowId) : undefined}
         onDragEnd={canReorder ? resetPersonDrag : undefined}
       >
         {/* Left column — sticky */}
@@ -710,19 +745,23 @@ const Timeline = forwardRef(function Timeline({
           draggable={canReorder}
           onDragStart={canReorder ? (e) => handlePersonDragStart(e, rowId) : undefined}
         >
-          <div
-            className="timeline__avatar"
-            style={{
-              background: avatarBg,
-              cursor: isPerson && onPersonClick && entity ? 'pointer' : 'default',
-            }}
-            onClick={() => isPerson && onPersonClick && entity && onPersonClick(entity)}
-          >
-            {isPerson && entity?.photo
-              ? <img src={entity.photo} alt="" />
-              : <span>{isUnassigned ? '?' : (rowLabel?.charAt(0).toUpperCase() || '?')}</span>
-            }
-          </div>
+          {isPerson ? (
+            <div
+              className="timeline__avatar"
+              style={{
+                background: avatarBg,
+                cursor: onPersonClick && entity ? 'pointer' : 'default',
+              }}
+              onClick={() => onPersonClick && entity && onPersonClick(entity)}
+            >
+              {entity?.photo
+                ? <img src={entity.photo} alt="" />
+                : <span>{isUnassigned ? '?' : (rowLabel?.charAt(0).toUpperCase() || '?')}</span>
+              }
+            </div>
+          ) : (
+            <div className="timeline__project-dot" style={{ background: isUnassigned ? '#d1d5db' : entity.color }} />
+          )}
           <div className="timeline__person-info">
             <div className="timeline__person-name">{rowLabel}</div>
             {isPerson && entity?.role && <div className="timeline__person-team">{entity.role}</div>}
@@ -952,7 +991,11 @@ const Timeline = forwardRef(function Timeline({
 
   return (
     <>
-      <div className="timeline" ref={containerRef}>
+      <div
+        className={`timeline${snapshot ? ' timeline--snapshot' : ''}`}
+        ref={containerRef}
+        style={snapshot ? { width: personColW + totalW } : undefined}
+      >
         <div
           className="timeline__scroll"
           ref={scrollRef}
@@ -969,11 +1012,16 @@ const Timeline = forwardRef(function Timeline({
               <div className="timeline__header-grid">
                 <div className="timeline__month-row">
                   {monthGroups.map((mg, i) => {
-                    const label = viewMode === 'year'
+                    const cellW = mg.days.length * dayWidth
+                    const fullLabel = viewMode === 'year' && !snapshot
                       ? (mg.month === 0 ? `${MONTHS_SHORT[mg.month]} ${mg.year}` : MONTHS_SHORT[mg.month])
                       : `${MONTHS_SHORT[mg.month]} ${mg.year}`
+                    // A partial month at the edge of a tightly-fitted range
+                    // (e.g. a screenshot starting June 27) can be too narrow
+                    // for the full label — shorten or drop it, don't clip it.
+                    const label = cellW >= 64 ? fullLabel : cellW >= 34 ? MONTHS_SHORT[mg.month] : ''
                     return (
-                      <div key={i} className="timeline__month-cell" style={{ width: mg.days.length * dayWidth }}>
+                      <div key={i} className="timeline__month-cell" style={{ width: cellW }}>
                         {label}
                       </div>
                     )
@@ -989,6 +1037,15 @@ const Timeline = forwardRef(function Timeline({
                   handleGridDoubleClick(null, e)
               }}
             >
+              {/* TODAY badge — a zero-height sticky strip, so the badge pins
+                  directly under the month header while scrolling down
+                  instead of scrolling away or covering the month titles. */}
+              {todayX !== null && (
+                <div className="timeline__today-sticky">
+                  <div className="timeline__today-label" style={{ left: todayX }}>TODAY</div>
+                </div>
+              )}
+
               {/* Weekend shading */}
               {allDays.map((d, i) => isWeekend(d) ? (
                 <div key={`we-${i}`} className="timeline__weekend-col"
@@ -1008,9 +1065,7 @@ const Timeline = forwardRef(function Timeline({
 
               {/* Today line */}
               {todayX !== null && (
-                <div className="timeline__today-line" style={{ left: todayX }}>
-                  <div className="timeline__today-label">TODAY</div>
-                </div>
+                <div className="timeline__today-line" style={{ left: todayX }} />
               )}
 
               {/* ── No-grouping: flat task rows ─────────────── */}
@@ -1036,16 +1091,17 @@ const Timeline = forwardRef(function Timeline({
 
                   {groupBy === 'assignee' && (() => {
                     // A person with nothing assigned to them doesn't get a
-                    // row — only people who actually have at least one task
-                    // (as assignee or PM) show up.
+                    // row — only people who are the assignee on at least one
+                    // task show up (so a PM only appears if also an assignee).
                     const rows = groupedPeople
                       .map((person) => ({ person, rowTasks: filteredTasks.filter((t) => taskMatchesPerson(t, person.id)) }))
                       .filter((r) => r.rowTasks.length > 0)
                     return (
                       <>
                         {rows.map((r) => renderGroupRow('person', r.person, r.rowTasks))}
-                        {unassignedTasks.length > 0 && renderGroupRow('person', null, unassignedTasks, true)}
-                        {rows.length === 0 && unassignedTasks.length === 0 && (
+                        {/* Screenshots grouped by assignee leave out Unassigned. */}
+                        {unassignedTasks.length > 0 && !snapshot && renderGroupRow('person', null, unassignedTasks, true)}
+                        {rows.length === 0 && (snapshot || unassignedTasks.length === 0) && (
                           <div className="timeline__empty">
                             No people added yet. Go to Settings to add people.
                           </div>

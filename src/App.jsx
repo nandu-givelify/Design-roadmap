@@ -328,6 +328,11 @@ function AuthenticatedApp({ user }) {
   const [filterPersonIds, setFilterPersonIds] = useState([])
   const [filterProjectIds, setFilterProjectIds] = useState([])
 
+  // Screenshot: while true, an offscreen full-size copy of the timeline is
+  // rendered (see the snapshot-stage at the bottom), captured, and removed.
+  const [snapshotting, setSnapshotting] = useState(false)
+  const snapshotRef = useRef(null)
+
   // Board ordering + favourites
   const [boardOrder,      setBoardOrder]      = useState([])
   const [favoriteBoardIds,setFavoriteBoardIds]= useState([])
@@ -1027,6 +1032,81 @@ function AuthenticatedApp({ user }) {
     await updateBoard(activeBoardId, { boardProjects: newProjects })
   }, [activeBoardId])
 
+  // Dragging a project row in the timeline (group by project) reorders the
+  // board's project list itself, so Settings and pickers show the same order.
+  const handleReorderProjects = useCallback(async (orderIds) => {
+    const byId = Object.fromEntries(boardProjects.map((p) => [p.id, p]))
+    const next = orderIds.map((id) => byId[id]).filter(Boolean)
+    boardProjects.forEach((p) => { if (!orderIds.includes(p.id)) next.push(p) })
+    await handleUpdateBoardProjects(next)
+  }, [boardProjects, handleUpdateBoardProjects])
+
+  // ── Screenshot ───────────────────────────────────────────────────────────
+  // Captures the offscreen snapshot copy of the timeline (every task, full
+  // date span, every row — not just what's scrolled into view) to a PNG.
+  useEffect(() => {
+    if (!snapshotting) return
+    let done = false
+    ;(async () => {
+      try {
+        // Let the snapshot mount, lay out, and run the task bars' text-fit
+        // measurements before capturing.
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+        await document.fonts?.ready
+        const node = snapshotRef.current
+        if (!node) return
+        // The date range is fitted tightly to the tasks, so a title drawn
+        // beside a narrow bar near the right edge can run past the timeline
+        // and get clipped. Widen this throwaway copy only by what's needed.
+        const tl    = node.querySelector('.timeline')
+        const inner = node.querySelector('.timeline__inner')
+        if (tl && inner) {
+          const tlRight = tl.getBoundingClientRect().right
+          let overflow = 0
+          node.querySelectorAll('.task-bar__outside-content').forEach((el) => {
+            overflow = Math.max(overflow, el.getBoundingClientRect().right - tlRight)
+          })
+          if (overflow > 0) {
+            const extra = Math.ceil(overflow) + 16
+            tl.style.width    = `${tl.offsetWidth + extra}px`
+            inner.style.width = `${inner.offsetWidth + extra}px`
+          }
+        }
+        const { toPng } = await import('html-to-image')
+        const width  = node.scrollWidth
+        const height = node.scrollHeight
+        // Browsers cap canvas size (~16k px per side), so scale down only when
+        // a very long timeline would exceed it; otherwise render at 2x.
+        const pixelRatio = Math.max(1, Math.min(2, 16000 / Math.max(width, height)))
+        const opts = {
+          width, height, pixelRatio, backgroundColor: '#f2f3f5',
+          // A photo that can't be fetched shouldn't fail the whole capture.
+          imagePlaceholder: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+        }
+        let dataUrl
+        try {
+          dataUrl = await toPng(node, opts)
+        } catch {
+          // Embedding the web font is the usual failure point — retry without it.
+          dataUrl = await toPng(node, { ...opts, skipFonts: true })
+        }
+        const a = document.createElement('a')
+        a.href = dataUrl
+        a.download = `${(activeBoard?.name || 'Timeline').replace(/[\\/:*?"<>|]+/g, '-')} ${toDateString(new Date())}.png`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        showToast('Screenshot downloaded')
+      } catch (e) {
+        console.error('Screenshot failed:', e)
+        showToast("Couldn't capture the screenshot")
+      } finally {
+        if (!done) setSnapshotting(false)
+      }
+    })()
+    return () => { done = true }
+  }, [snapshotting]) // eslint-disable-line
+
   // Inline "+ Add new project…" from the task dialog — appends to the
   // board's project list and hands back the new id so it can be selected
   // into the task being edited without closing that dialog.
@@ -1213,6 +1293,8 @@ function AuthenticatedApp({ user }) {
           setGroupBy={handleGroupByChange}
           roles={boardRoles}
           readOnly={readOnly}
+          onScreenshot={activeBoard ? () => setSnapshotting(true) : undefined}
+          screenshotBusy={snapshotting}
           navCollapsed={isNavHidden}
           onOpenNav={() => { setNavOpen(true); setNavDocked(false) }}
         />
@@ -1243,7 +1325,41 @@ function AuthenticatedApp({ user }) {
           onPersonClick={(person) => { setSelectedPersonId(person.id); setPersonDetailsOpen(true) }}
           personOrder={personOrder}
           onReorderPeople={canEdit ? handleReorderPeople : undefined}
+          onReorderProjects={canEdit ? handleReorderProjects : undefined}
         />
+
+        {/* Offscreen, full-size, read-only copy of the timeline — only exists
+            while a screenshot is being captured (see the Screenshot effect). */}
+        {snapshotting && (
+          <div className="snapshot-stage" aria-hidden="true">
+            <div ref={snapshotRef} className="snapshot-root">
+              <div className="snapshot-title">
+                <span className="snapshot-title__name">{activeBoard?.name}</span>
+                <span className="snapshot-title__meta">
+                  {{ none: 'All tasks', assignee: 'By assignee', project: 'By project' }[groupBy] || 'All tasks'}
+                  {(filterPersonIds.length + filterProjectIds.length) > 0 ? ' · filtered' : ''}
+                  {' · '}{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+              <Timeline
+                snapshot
+                readOnly
+                viewMode={viewMode}
+                year={year} quarter={quarter}
+                people={enrichedPeople}
+                tasks={tasks}
+                groupBy={groupBy}
+                filterPersonIds={filterPersonIds}
+                filterProjectIds={filterProjectIds}
+                onUpdateTask={() => {}}
+                onDeleteTask={() => {}}
+                boardPhases={boardPhases}
+                projects={boardProjects}
+                personOrder={personOrder}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Add Task modal */}
         {taskModalMounted && (

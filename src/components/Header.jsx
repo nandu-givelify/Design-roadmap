@@ -11,6 +11,8 @@ import TodayIcon from '@mui/icons-material/Today'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
+import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined'
+import CircularProgress from '@mui/material/CircularProgress'
 import { getAvatarColor } from '../utils/dateUtils'
 
 export default function Header({
@@ -29,6 +31,8 @@ export default function Header({
   groupBy, setGroupBy,
   roles,
   readOnly,
+  onScreenshot,
+  screenshotBusy,
   navCollapsed,
   onOpenNav,
 }) {
@@ -177,6 +181,19 @@ export default function Header({
             <ChevronRightIcon fontSize="small" />
           </IconButton>
         </Box>
+
+        {/* Screenshot */}
+        {onScreenshot && (
+          <Tooltip title={screenshotBusy ? 'Capturing…' : 'Download screenshot'} placement="bottom">
+            <span>
+              <IconButton className="header__filter-btn" onClick={onScreenshot} disabled={screenshotBusy} size="small">
+                {screenshotBusy
+                  ? <CircularProgress size={16} sx={{ color: 'text.secondary' }} />
+                  : <PhotoCameraOutlinedIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
 
         {/* Filter */}
         <Box sx={{ position: 'relative' }}>
